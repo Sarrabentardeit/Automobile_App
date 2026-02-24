@@ -1,0 +1,503 @@
+// ==================== ROLES ====================
+export type Role = 'admin' | 'responsable' | 'technicien' | 'financier'
+
+export const ROLE_CONFIG: Record<Role, { label: string; color: string; bg: string }> = {
+  admin: { label: 'Admin', color: 'text-red-700', bg: 'bg-red-50' },
+  responsable: { label: 'Responsable', color: 'text-blue-700', bg: 'bg-blue-50' },
+  technicien: { label: 'Technicien', color: 'text-purple-700', bg: 'bg-purple-50' },
+  financier: { label: 'Financier', color: 'text-emerald-700', bg: 'bg-emerald-50' },
+}
+
+export const ALL_ROLES: Role[] = ['admin', 'responsable', 'technicien', 'financier']
+
+// ==================== PERMISSIONS ====================
+export type VehiculeVisibility = 'all' | 'own' | 'none'
+
+export interface Permissions {
+  vehiculeVisibility: VehiculeVisibility
+  canAddVehicule: boolean
+  canEditVehicule: boolean
+  canChangeEtat: boolean
+  canAssignTechnicien: boolean
+  canManageUsers: boolean
+  canViewDashboard: boolean
+  canViewFinance: boolean
+}
+
+export type TogglePermissionKey = 'canAddVehicule' | 'canEditVehicule' | 'canChangeEtat' | 'canAssignTechnicien' | 'canManageUsers' | 'canViewDashboard' | 'canViewFinance'
+
+export const TOGGLE_PERMISSION_LABELS: Record<TogglePermissionKey, { label: string; description: string; icon: string }> = {
+  canViewDashboard: { label: 'Voir le dashboard', description: 'Accès au tableau de bord et statistiques', icon: '📊' },
+  canAddVehicule: { label: 'Ajouter un véhicule', description: 'Créer de nouvelles fiches véhicule', icon: '➕' },
+  canEditVehicule: { label: 'Modifier un véhicule', description: 'Modifier les informations des véhicules', icon: '✏️' },
+  canChangeEtat: { label: 'Changer l\'état', description: 'Modifier l\'état d\'avancement des véhicules', icon: '🔄' },
+  canAssignTechnicien: { label: 'Assigner technicien', description: 'Affecter un technicien à un véhicule', icon: '👤' },
+  canManageUsers: { label: 'Gérer les utilisateurs', description: 'Créer, modifier et désactiver des comptes', icon: '🔑' },
+  canViewFinance: { label: 'Accès finance', description: 'Consulter les données financières', icon: '💰' },
+}
+
+export const ALL_TOGGLE_KEYS: TogglePermissionKey[] = [
+  'canViewDashboard', 'canAddVehicule', 'canEditVehicule',
+  'canChangeEtat', 'canAssignTechnicien', 'canManageUsers', 'canViewFinance',
+]
+
+export const VISIBILITY_OPTIONS: { value: VehiculeVisibility; label: string; description: string; icon: string }[] = [
+  { value: 'all', label: 'Tous les véhicules', description: 'Voir la liste complète des véhicules du garage', icon: '🏢' },
+  { value: 'own', label: 'Ses véhicules seulement', description: 'Voir uniquement les véhicules qui lui sont assignés', icon: '👤' },
+  { value: 'none', label: 'Aucun accès véhicules', description: 'Pas d\'accès à la liste des véhicules', icon: '🚫' },
+]
+
+export const ROLE_PRESETS: Record<Role, Permissions> = {
+  admin: {
+    vehiculeVisibility: 'all', canAddVehicule: true, canEditVehicule: true, canChangeEtat: true,
+    canAssignTechnicien: true, canManageUsers: true, canViewDashboard: true, canViewFinance: true,
+  },
+  responsable: {
+    vehiculeVisibility: 'all', canAddVehicule: true, canEditVehicule: true, canChangeEtat: true,
+    canAssignTechnicien: true, canManageUsers: false, canViewDashboard: true, canViewFinance: false,
+  },
+  technicien: {
+    vehiculeVisibility: 'own', canAddVehicule: false, canEditVehicule: false, canChangeEtat: true,
+    canAssignTechnicien: false, canManageUsers: false, canViewDashboard: true, canViewFinance: false,
+  },
+  financier: {
+    vehiculeVisibility: 'all', canAddVehicule: false, canEditVehicule: false, canChangeEtat: false,
+    canAssignTechnicien: false, canManageUsers: false, canViewDashboard: true, canViewFinance: true,
+  },
+}
+
+export const DEFAULT_PERMISSIONS: Permissions = { ...ROLE_PRESETS.technicien }
+
+// ==================== USERS ====================
+export interface User {
+  id: number
+  email: string
+  nom_complet: string
+  telephone: string
+  role: Role
+  permissions: Permissions
+  statut: 'actif' | 'inactif'
+  date_creation: string
+  derniere_connexion: string | null
+}
+
+// ==================== ETATS / WORKFLOW ====================
+export type EtatVehicule = 'orange' | 'mauve' | 'bleu' | 'rouge' | 'vert'
+export type VehiculeType = 'voiture' | 'moto'
+
+export interface EtatConfig {
+  label: string
+  description: string
+  color: string
+  bg: string
+  bgLight: string
+  border: string
+}
+
+export const ETAT_CONFIG: Record<EtatVehicule, EtatConfig> = {
+  orange: {
+    label: 'EN COURS',
+    description: 'Réparation en cours',
+    color: '#f97316',
+    bg: 'bg-orange-500',
+    bgLight: 'bg-orange-50',
+    border: 'border-orange-400',
+  },
+  mauve: {
+    label: 'ATT PIÈCES',
+    description: 'En attente d\'une pièce / tourneur',
+    color: '#a855f7',
+    bg: 'bg-purple-500',
+    bgLight: 'bg-purple-50',
+    border: 'border-purple-400',
+  },
+  bleu: {
+    label: 'TEST',
+    description: 'Test driver / essai routier',
+    color: '#06b6d4',
+    bg: 'bg-cyan-500',
+    bgLight: 'bg-cyan-50',
+    border: 'border-cyan-400',
+  },
+  rouge: {
+    label: 'PROBLÈME',
+    description: 'Problème technique détecté',
+    color: '#ef4444',
+    bg: 'bg-red-500',
+    bgLight: 'bg-red-50',
+    border: 'border-red-400',
+  },
+  vert: {
+    label: 'VALIDÉ',
+    description: 'Prêt pour remise des clés',
+    color: '#22c55e',
+    bg: 'bg-green-500',
+    bgLight: 'bg-green-50',
+    border: 'border-green-400',
+  },
+}
+
+export const TRANSITIONS_AUTORISEES: Record<EtatVehicule, EtatVehicule[]> = {
+  orange: ['bleu', 'mauve', 'rouge', 'vert'],
+  mauve: ['orange'],
+  bleu: ['vert', 'orange'],
+  rouge: ['orange', 'mauve'],
+  vert: [],
+}
+
+// ==================== VEHICULES ====================
+export interface Vehicule {
+  id: number
+  immatriculation: string
+  modele: string
+  type: VehiculeType
+  etat_actuel: EtatVehicule
+  technicien_id: number | null
+  responsable_id: number | null
+  defaut: string
+  client_telephone: string
+  date_entree: string
+  date_sortie: string | null
+  notes: string
+  derniere_mise_a_jour: string
+}
+
+export interface VehiculeFormData {
+  immatriculation: string
+  modele: string
+  type: VehiculeType
+  etat_initial: EtatVehicule
+  date_entree: string
+  defaut: string
+  technicien_id: number | null
+  responsable_id: number | null
+  client_telephone: string
+  notes: string
+}
+
+// ==================== HISTORIQUE ====================
+export interface HistoriqueEtat {
+  id: number
+  vehicule_id: number
+  etat_precedent: EtatVehicule | null
+  etat_nouveau: EtatVehicule
+  date_changement: string
+  utilisateur_id: number
+  utilisateur_nom: string
+  commentaire: string
+  duree_etat_precedent_minutes: number | null
+  pieces_utilisees: string
+}
+
+// ==================== CAISSE / TEAM MONEY TRACK ====================
+/** Membre équipe : nom + numéro de téléphone (pour écran Équipe / Membres et Caisse) */
+export interface TeamMember {
+  name: string
+  phone: string
+}
+
+/** Noms des membres de l'équipe (colonnés In Hand / Taken / Note dans l'Excel) — valeur par défaut, sans téléphone */
+export const TEAM_MONEY_MEMBERS: string[] = [
+  'Souhail', 'Khalil BK', 'ZAK', 'MEHER', 'YASSIN', 'MELEK', 'YASSER', 'AZIZ',
+  'MELEK SID', 'BELGACEM', 'YOUSSEF', 'MOHAMED HADDAD', 'AHMED GHAZOUANI',
+  'NAMROUD', 'MOHAMED RADHOUENE', 'MOHAMED MAHMOUDI', 'MED ALI', 'ADEM',
+]
+
+/** Code couleurs présence (CONGÉ, À TEMPS, ABSENT, etc.) */
+export type PresenceStatut =
+  | 'conges'
+  | 'a_temps'
+  | 'absent'
+  | 'retard'
+  | 'autorisation'
+  | 'conges_maladie'
+  | 'heures_sup'
+
+export const PRESENCE_CONFIG: Record<PresenceStatut, { label: string; color: string; bg: string }> = {
+  conges: { label: 'CONGÉ', color: '#0ea5e9', bg: 'bg-sky-100' },
+  a_temps: { label: 'À TEMPS', color: '#22c55e', bg: 'bg-green-100' },
+  absent: { label: 'ABSENT', color: '#ef4444', bg: 'bg-red-100' },
+  retard: { label: 'RETARD', color: '#f97316', bg: 'bg-orange-100' },
+  autorisation: { label: 'AUTORISATION', color: '#a855f7', bg: 'bg-purple-100' },
+  conges_maladie: { label: 'CONGÉ DE MALADIE', color: '#ec4899', bg: 'bg-pink-100' },
+  heures_sup: { label: 'HEURES SUPP.', color: '#06b6d4', bg: 'bg-cyan-100' },
+}
+
+export const ALL_PRESENCE_STATUTS: PresenceStatut[] = [
+  'a_temps', 'retard', 'absent', 'conges', 'conges_maladie', 'autorisation', 'heures_sup',
+]
+
+/** Pour un membre et une date : en caisse (In Hand), pris (Taken), note, présence */
+export interface TeamMemberSlots {
+  inHand: number | null
+  taken: number | null
+  note: string
+  presence: PresenceStatut | null
+}
+
+/** Une ligne "jour" du suivi Team Money : date + valeurs par membre */
+export interface TeamMoneyDayEntry {
+  id: number
+  date: string // YYYY-MM-DD
+  members: Record<string, TeamMemberSlots> // key = member name from TEAM_MONEY_MEMBERS
+}
+
+/** Mouvement caisse (section DATE / MONTANT / RABI3-YASSINE / NOTES de l'Excel) */
+export interface MouvementCaisse {
+  id: number
+  date: string
+  montant: number
+  category: string // ex. RABI3, YASSINE, COMPTE, etc.
+  notes: string
+}
+
+/** Catégories suggérées pour les mouvements (ex. Excel) */
+export const MOUVEMENT_CATEGORIES = ['RABI3', 'YASSINE', 'COMPTE', 'CHOKRI', 'SALIHA', 'GARAGE', 'AUTRE'] as const
+
+// ==================== FEUILLE MONEY (IN / OUT) ====================
+/** Entrée (IN) : Date, Montant, Type espèce, Description, Moyen de paiement */
+export interface MoneyIn {
+  id: number
+  date: string // YYYY-MM-DD
+  amount: number
+  type: string // PIECES, MECA, DIAG, etc.
+  description: string
+  paymentMethod?: string // ESPECE, CHEQUE, VIREMENT
+}
+
+/** Sortie (OUT) : Date, Montant, Catégorie, Description / Bénéficiaire, Nom (équipe) */
+export interface MoneyOut {
+  id: number
+  date: string
+  amount: number
+  category: string // GARAGE, DEPENSE VOITURE, FOURNISSEUR, etc.
+  description: string
+  beneficiary?: string // nom (membre équipe ou autre)
+}
+
+/** Catégories type ESPECE pour les entrées (IN) — comme la liste déroulante Excel */
+export const MONEY_IN_TYPES = [
+  'DIAG',
+  'MECA',
+  'PROG',
+  'PIECES',
+  'PRODUIT',
+  'AVANCE',
+  'pieces garage',
+  'cours',
+  'consultation',
+  'TVA ET TIMBRE',
+  'DIAG ACHAT',
+  'YASSINE',
+  'BENEFICE PIECES',
+  'AUTRE',
+] as const
+export const MONEY_OUT_CATEGORIES = ['GARAGE', 'DEPENSE VOITURE', 'FOURNISSEUR', 'AUTRE'] as const
+export const MONEY_PAYMENT_METHODS = ['ESPECE', 'CHEQUE', 'VIREMENT'] as const
+
+// ==================== NOTIFICATIONS ====================
+/** Notification reçue par un technicien (ex. assignation véhicule / calendrier) */
+export interface Notification {
+  id: number
+  userId: number
+  message: string
+  date: string
+  read: boolean
+}
+
+// ==================== CALENDRIER / AFFECTATIONS ====================
+/** Affectation travail : qui (membre équipe) fait quoi (véhicule + description) à quelle date */
+export interface CalendarAssignment {
+  id: number
+  date: string // YYYY-MM-DD
+  memberName: string // nom du technicien / membre équipe
+  vehicleId: number | null // lien vers Vehicule si connu
+  vehicleLabel: string // modele ou immat ou "Véhicule client"
+  description: string // travail à faire (ex. JOINT CULASSE, DIAG, 4 AMORTISSEURS)
+}
+
+// ==================== RÉCLAMATIONS ====================
+export type ReclamationStatut = 'ouverte' | 'en_cours' | 'traitee' | 'cloturee'
+
+export interface Reclamation {
+  id: number
+  date: string // YYYY-MM-DD
+  clientName: string
+  clientTelephone?: string
+  vehicleRef: string // immat ou modèle
+  sujet: string
+  description: string
+  statut: ReclamationStatut
+  assigneA?: string // nom du responsable
+  priorite?: 'basse' | 'normale' | 'haute'
+}
+
+export const RECLAMATION_STATUTS: ReclamationStatut[] = ['ouverte', 'en_cours', 'traitee', 'cloturee']
+export const RECLAMATION_STATUT_LABELS: Record<ReclamationStatut, string> = {
+  ouverte: 'Ouverte',
+  en_cours: 'En cours',
+  traitee: 'Traitée',
+  cloturee: 'Clôturée',
+}
+
+// ==================== DEVIS / PRIX MAIN D'OEUVRE ====================
+export type PrixMainOeuvreGroupe = 'transmission' | 'entretien' | 'train_av_ar' | 'autre'
+
+export interface PrixMainOeuvreItem {
+  id: number
+  designation: string
+  prixLux: string // ex. "300" ou "à partir de 80 et selon type"
+  prixLegeres: string
+  groupe: PrixMainOeuvreGroupe
+}
+
+export const PRIX_MAIN_OEUVRE_GROUPES: Record<PrixMainOeuvreGroupe, { label: string; color: string }> = {
+  transmission: { label: 'Transmission', color: 'bg-amber-100 border-amber-200 text-amber-800' },
+  entretien: { label: 'Entretien', color: 'bg-emerald-100 border-emerald-200 text-emerald-800' },
+  train_av_ar: { label: 'Train av. / ar.', color: 'bg-pink-100 border-pink-200 text-pink-800' },
+  autre: { label: 'Autre', color: 'bg-gray-100 border-gray-200 text-gray-700' },
+}
+
+// ==================== HUILE (STOCK) ====================
+export type HuileType = 'moteur' | 'boite' | 'liquide_refroidissement' | 'hydraulique' | 'autre'
+
+export interface HuileProduct {
+  id: number
+  designation: string
+  reference: string
+  type: HuileType
+  quantite: number
+  unite: string // L, bidon, unité
+  seuilAlerte?: number // alerte si quantite < seuil
+}
+
+export const HUILE_TYPES: Record<HuileType, { label: string; color: string }> = {
+  moteur: { label: 'Huile moteur', color: 'bg-amber-100 text-amber-800 border-amber-200' },
+  boite: { label: 'Huile boîte', color: 'bg-blue-100 text-blue-800 border-blue-200' },
+  liquide_refroidissement: { label: 'Liquide refroidissement', color: 'bg-cyan-100 text-cyan-800 border-cyan-200' },
+  hydraulique: { label: 'Hydraulique', color: 'bg-violet-100 text-violet-800 border-violet-200' },
+  autre: { label: 'Autre', color: 'bg-gray-100 text-gray-700 border-gray-200' },
+}
+
+// ==================== CLIENTS ====================
+export interface Client {
+  id: number
+  nom: string
+  telephone: string
+  email?: string
+  adresse?: string
+  notes?: string
+}
+
+// ==================== CLIENTS AVEC DETTES ====================
+export interface ClientAvecDette {
+  id: number
+  clientName: string // NOM DU CLIENT
+  telephoneClient: string // TELEPHONE CLIENT (tél. ou véhicule)
+  designation: string // DESIGNATION (ex. PIECES, MO, RESTE PIECES ET MO)
+  reste: number // RESTE (montant dû)
+  notes?: string // NOTES
+}
+
+// ==================== CONTACTS IMPORTANTS (AUTRES) ====================
+export interface ContactImportant {
+  id: number
+  nom: string
+  numero: string
+  categorie?: string // ex. Fournisseur, Assurance, Dépanneur
+  notes?: string
+}
+
+// ==================== DEMANDES DEVIS ====================
+export type DemandeDevisStatut = 'en_attente' | 'envoye' | 'accepte' | 'refuse'
+
+export interface DemandeDevis {
+  id: number
+  date: string // YYYY-MM-DD
+  clientName: string
+  clientTelephone?: string
+  vehicleRef: string
+  description: string // travaux demandés
+  statut: DemandeDevisStatut
+  montantEstime?: number
+  dateLimite?: string // YYYY-MM-DD
+  notes?: string
+}
+
+export const DEMANDE_DEVIS_STATUTS: DemandeDevisStatut[] = ['en_attente', 'envoye', 'accepte', 'refuse']
+export const DEMANDE_DEVIS_STATUT_LABELS: Record<DemandeDevisStatut, string> = {
+  en_attente: 'En attente',
+  envoye: 'Envoyé',
+  accepte: 'Accepté',
+  refuse: 'Refusé',
+}
+
+// ==================== FOURNISSEURS ====================
+export interface Fournisseur {
+  id: number
+  nom: string
+  telephone: string
+  email?: string
+  adresse?: string
+  contact?: string // personne de contact
+  notes?: string
+}
+
+// ==================== STOCK GÉNÉRAL (PRODUITS) ====================
+export type MouvementProduitNeufUtilise = 'neuf' | 'occasion'
+export type MouvementProduitStatut = 'fini' | 'en_cours'
+
+export interface MouvementProduit {
+  id: number
+  date: string // YYYY-MM-DD
+  produit: string
+  vehicule: string
+  technicien: string
+  neufUtilise: MouvementProduitNeufUtilise
+  statut: MouvementProduitStatut
+  prix: number
+  fournisseur: string
+}
+
+export interface ProduitStock {
+  id: number
+  nom: string
+  quantite: number
+  valeurAchatTTC: number
+}
+
+// ==================== OUTILS MOHAMED ====================
+/** Feuille MOHAMED OUTILS : Date, Voiture, Outillage, Prix Garage, Prix Mohamed (11%) */
+export interface OutilMohamed {
+  id: number
+  date: string // YYYY-MM-DD
+  vehicule: string
+  outillage: string // ex. ARRACHE ROTULES, OUTILLAGE CHAINE
+  prixGarage: number
+  prixMohamed?: number // 11% du prix garage (calculé ou saisi)
+}
+
+// ==================== OUTILS AHMED ====================
+/** Feuille AHMED : Date, Voiture, Type de travaux, Prix Garage, Prix Ahmed */
+export interface OutilAhmed {
+  id: number
+  date: string // YYYY-MM-DD
+  vehicule: string // ex. CHERRY, PAIEMENT, AVANCE
+  typeTravaux: string // ex. CHAINE ET SOUPAPES, JCS/DURITE EAU
+  prixGarage?: number
+  prixAhmed: number // positif = revenu, négatif = paiement/avance
+}
+
+// ==================== TRANSACTIONS FOURNISSEURS ====================
+export type TransactionFournisseurType = 'achat' | 'revenue' | 'paiement'
+
+export interface TransactionFournisseur {
+  id: number
+  type: TransactionFournisseurType
+  date: string // YYYY-MM-DD
+  montant: number
+  fournisseur: string
+  vehicule?: string
+  pieces?: string // description des pièces (achat)
+  numFacture?: string // n° facture ou bon de livraison (achat)
+}
