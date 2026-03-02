@@ -154,10 +154,16 @@ export default function FacturationPage() {
     }))
   }
 
-  const setLigne = (index: number, patch: Partial<FormLigne>) => {
+  const setLigne = (index: number, patch: { designation?: string; qte?: number; mtHT?: number; montant?: number }) => {
     setForm(prev => ({
       ...prev,
-      lignes: prev.lignes.map((l, i) => (i === index ? { ...l, ...patch } : l)),
+      lignes: prev.lignes.map((l, i) => {
+        if (i !== index) return l
+        if (l.type === 'main_oeuvre') {
+          return { type: 'main_oeuvre' as const, designation: patch.designation ?? l.designation, qte: patch.qte ?? l.qte, mtHT: patch.mtHT ?? l.mtHT }
+        }
+        return { type: 'depense' as const, designation: patch.designation ?? l.designation, montant: patch.montant ?? l.montant }
+      }),
     }))
   }
 
