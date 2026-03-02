@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import type { Permissions, TogglePermissionKey } from '@/types'
 import { ROLE_CONFIG } from '@/types'
 import { useState, useRef, useEffect } from 'react'
-import { LayoutDashboard, Car, Users, Wallet, X, LogOut, Package, DollarSign, Wrench, UsersRound, CalendarDays, AlertCircle, UserCircle, CreditCard, ClipboardList, Droplets, Phone, BarChart2, Truck, Receipt, Bell } from 'lucide-react'
+import { LayoutDashboard, Car, Users, Wallet, X, LogOut, Package, DollarSign, Wrench, UsersRound, CalendarDays, AlertCircle, UserCircle, CreditCard, ClipboardList, Droplets, Phone, BarChart2, Truck, Receipt, Bell, Shield, FileText } from 'lucide-react'
 import { useNotifications } from '@/contexts/NotificationsContext'
 import { cn } from '@/lib/utils'
 
@@ -26,6 +26,7 @@ const NAV_STRUCTURE: NavCategory[] = [
     label: null,
     items: [
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, requiredPermission: 'canViewDashboard' },
+      { name: 'Statistiques', href: '/admin', icon: Shield, requiredPermission: 'canManageUsers' },
       { name: 'Calendrier', href: '/calendar', icon: CalendarDays },
       { name: 'Véhicules', href: '/vehicules', icon: Car, requireVehiculeAccess: true },
     ],
@@ -49,6 +50,7 @@ const NAV_STRUCTURE: NavCategory[] = [
   {
     label: 'FINANCES',
     items: [
+      { name: 'Facturation', href: '/facturation', icon: FileText, requiredPermission: 'canViewFinance' },
       { name: 'Suivi Argent Équipe', href: '/caisse', icon: Wallet, requiredPermission: 'canViewFinance' },
       { name: 'Transactions Fournisseurs', href: '/fournisseurs/transactions', icon: Receipt },
       { name: 'Fournisseurs', href: '/fournisseurs', icon: Truck },
@@ -96,6 +98,7 @@ function SidebarNavItem({ item, onClose }: { item: NavItemConfig; onClose: () =>
   return (
     <NavLink
       to={item.href}
+      end
       onClick={onClose}
       className={({ isActive }) =>
         cn(

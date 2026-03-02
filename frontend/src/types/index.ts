@@ -314,6 +314,8 @@ export interface CalendarAssignment {
   vehicleId: number | null // lien vers Vehicule si connu
   vehicleLabel: string // modele ou immat ou "Véhicule client"
   description: string // travail à faire (ex. JOINT CULASSE, DIAG, 4 AMORTISSEURS)
+  clientName?: string // nom client (enregistré automatiquement dans la page Clients)
+  clientTelephone?: string
 }
 
 // ==================== RÉCLAMATIONS ====================
@@ -500,4 +502,64 @@ export interface TransactionFournisseur {
   vehicule?: string
   pieces?: string // description des pièces (achat)
   numFacture?: string // n° facture ou bon de livraison (achat)
+}
+
+// ==================== FACTURATION ====================
+export type FactureStatut = 'brouillon' | 'envoyee' | 'payee' | 'annulee'
+
+export type LigneFacture =
+  | { type: 'main_oeuvre'; designation: string; qte: number; mtHT: number }
+  | { type: 'depense'; designation: string; montant: number }
+
+export interface Facture {
+  id: number
+  numero: string // ex. 26-0001
+  date: string // YYYY-MM-DD
+  statut: FactureStatut
+  clientId?: number
+  clientNom: string
+  clientTelephone: string
+  clientAdresse?: string
+  clientMatriculeFiscale?: string
+  lignes: LigneFacture[]
+  timbre: number // ex. 1 DT
+  createdAt: string
+}
+
+export const FACTURE_STATUT_LABELS: Record<FactureStatut, string> = {
+  brouillon: 'Brouillon',
+  envoyee: 'Validée',
+  payee: 'Payée',
+  annulee: 'Annulée',
+}
+
+/** Style et libellé pour affichage pro du statut (badge, workflow) */
+export const FACTURE_STATUT_CONFIG: Record<
+  FactureStatut,
+  { label: string; badge: string; dot: string; order: number }
+> = {
+  brouillon: {
+    label: 'Brouillon',
+    badge: 'bg-slate-100 text-slate-700 border border-slate-200',
+    dot: 'bg-slate-500',
+    order: 1,
+  },
+  envoyee: {
+    label: 'Validée',
+    badge: 'bg-blue-100 text-blue-800 border border-blue-200',
+    dot: 'bg-blue-500',
+    order: 2,
+  },
+  payee: {
+    label: 'Payée',
+    badge: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
+    dot: 'bg-emerald-500',
+    order: 3,
+  },
+  annulee: {
+    label: 'Annulée',
+    badge: 'bg-red-50 text-red-700 border border-red-200',
+    dot: 'bg-red-500',
+    order: 0,
+  },
 }

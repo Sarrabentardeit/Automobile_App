@@ -6,6 +6,7 @@ import { useTeamMembers } from '@/contexts/TeamMembersContext'
 import { useVehiculesContext } from '@/contexts/VehiculesContext'
 import type { CalendarAssignment } from '@/types'
 import { useCalendar } from '@/contexts/CalendarContext'
+import { useClients } from '@/contexts/ClientsContext'
 import { mockUsers } from '@/data/mock'
 import { formatDate, findUserIdByName } from '@/lib/utils'
 import Card from '@/components/ui/Card'
@@ -83,6 +84,7 @@ export default function CalendarPage() {
   const [viewDate, setViewDate] = useState({ year: today.getFullYear(), month: today.getMonth() + 1 })
   const { assignments, addAssignment, removeAssignment } = useCalendar()
   const { addNotification } = useNotifications()
+  const { clients, addClient } = useClients()
   const toast = useToast()
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -92,6 +94,8 @@ export default function CalendarPage() {
     vehicleId: null as number | null,
     vehicleLabel: '',
     description: '',
+    clientName: '',
+    clientTelephone: '',
   })
 
   const memberNames = useMemo(() => members.map(m => m.name), [members])
@@ -139,6 +143,8 @@ export default function CalendarPage() {
       vehicleId: vehicules[0]?.id ?? null,
       vehicleLabel: vehicules[0] ? `${vehicules[0].modele} (${vehicules[0].immatriculation})` : '',
       description: '',
+      clientName: '',
+      clientTelephone: '',
     })
     setShowAddModal(true)
   }
@@ -146,18 +152,34 @@ export default function CalendarPage() {
   const handleAddAssignment = () => {
     if (!newAssign.date || !newAssign.memberName.trim()) return
     const memberName = newAssign.memberName.trim()
+    const clientName = newAssign.clientName?.trim()
+    const clientTelephone = newAssign.clientTelephone?.trim()
+
+    if (clientName && clientTelephone) {
+      const exists = clients.some(c => c.telephone === clientTelephone || c.nom.toLowerCase() === clientName.toLowerCase())
+      if (!exists) {
+        addClient({ nom: clientName, telephone: clientTelephone })
+        toast.success('Client enregistré dans la liste et affectation ajoutée')
+      } else {
+        toast.success('Affectation ajoutée (client déjà dans la liste)')
+      }
+    } else {
+      toast.success('Affectation ajoutée avec succès')
+    }
+
     addAssignment({
       date: newAssign.date,
       memberName,
       vehicleId: newAssign.vehicleId ?? null,
       vehicleLabel: newAssign.vehicleLabel.trim() || 'Véhicule',
       description: newAssign.description.trim(),
+      clientName: clientName || undefined,
+      clientTelephone: clientTelephone || undefined,
     })
     const techId = findUserIdByName(mockUsers, memberName)
     if (techId) {
       addNotification(techId, `Vous avez été assigné au calendrier le ${new Date(newAssign.date).toLocaleDateString('fr-FR')} : ${newAssign.vehicleLabel.trim() || 'Véhicule'} - ${newAssign.description.trim() || 'Travail'}`)
     }
-    toast.success('Affectation ajoutée avec succès')
     setShowAddModal(false)
     setSelectedDate(newAssign.date)
   }
@@ -339,6 +361,21 @@ export default function CalendarPage() {
                 <option key={n} value={n}>{n}</option>
               ))}
             </select>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Nom client"
+              placeholder="Ex. M. Ben Salem"
+              value={newAssign.clientName}
+              onChange={e => setNewAssign(prev => ({ ...prev, clientName: e.target.value }))}
+            />
+            <Input
+              label="Numéro téléphone client"
+              type="tel"
+              placeholder="Ex. 58118291"
+              value={newAssign.clientTelephone}
+              onChange={e => setNewAssign(prev => ({ ...prev, clientTelephone: e.target.value }))}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Véhicule</label>

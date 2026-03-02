@@ -15,6 +15,7 @@ import { HuileProvider } from '@/contexts/HuileContext'
 import { CalendarProvider } from '@/contexts/CalendarContext'
 import { MoneyProvider } from '@/contexts/MoneyContext'
 import { CaisseProvider } from '@/contexts/CaisseContext'
+import { FacturationProvider } from '@/contexts/FacturationContext'
 import { ToastProvider } from '@/contexts/ToastContext'
 import { NotificationsProvider } from '@/contexts/NotificationsContext'
 import AppLayout from '@/components/layout/AppLayout'
@@ -38,6 +39,8 @@ import TransactionsFournisseursPage from '@/pages/TransactionsFournisseursPage'
 import StockGeneralPage from '@/pages/StockGeneralPage'
 import OutilsMohamedPage from '@/pages/OutilsMohamedPage'
 import OutilsAhmedPage from '@/pages/OutilsAhmedPage'
+import AdminEspacePage from '@/pages/AdminEspacePage'
+import FacturationPage from '@/pages/FacturationPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 
 export default function App() {
@@ -61,10 +64,13 @@ export default function App() {
               <CalendarProvider>
               <MoneyProvider>
               <CaisseProvider>
+              <FacturationProvider>
             <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route element={<AppLayout />}>
               <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/admin" element={<AdminEspacePage />} />
+              <Route path="/facturation" element={<FacturationPage />} />
               <Route path="/vehicules" element={<VehiculesPage />} />
               <Route path="/vehicules/:id" element={<VehiculeDetailPage />} />
               <Route path="/utilisateurs" element={<UtilisateursPage />} />
@@ -87,6 +93,7 @@ export default function App() {
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
+              </FacturationProvider>
               </CaisseProvider>
               </MoneyProvider>
               </CalendarProvider>
