@@ -23,6 +23,8 @@ export default function VehiculesPage() {
     (searchParams.get('etat') as EtatVehicule) || 'tous'
   )
   const [recherche, setRecherche] = useState('')
+  const [dateFilterMode, setDateFilterMode] = useState<'toutes' | 'aujourdhui' | 'hier' | 'semaine' | 'date'>('toutes')
+  const [dateFilter, setDateFilter] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingVehicule, setEditingVehicule] = useState<Vehicule | null>(null)
   const [changeEtatVehicule, setChangeEtatVehicule] = useState<Vehicule | null>(null)
@@ -35,8 +37,30 @@ export default function VehiculesPage() {
       ? vehicules.filter(v => v.technicien_id === user.id)
       : []
 
-  const filtered = useMemo(() =>
-    myVehicules
+  const filtered = useMemo(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const yesterday = new Date(today)
+    yesterday.setDate(today.getDate() - 1)
+
+    const weekStart = new Date(today)
+    const day = today.getDay() === 0 ? 7 : today.getDay()
+    weekStart.setDate(today.getDate() - (day - 1))
+    weekStart.setHours(0, 0, 0, 0)
+    const weekEnd = new Date(weekStart)
+    weekEnd.setDate(weekStart.getDate() + 6)
+    weekEnd.setHours(23, 59, 59, 999)
+
+    const selectedDate = dateFilterMode === 'date' && dateFilter
+      ? (() => {
+          const d = new Date(dateFilter)
+          d.setHours(0, 0, 0, 0)
+          return d
+        })()
+      : null
+
+    return myVehicules
       .filter(v => v.type === tab)
       .filter(v => filtreEtat === 'tous' || v.etat_actuel === filtreEtat)
       .filter(v => {
@@ -46,11 +70,23 @@ export default function VehiculesPage() {
           || v.immatriculation.toLowerCase().includes(q)
           || v.defaut.toLowerCase().includes(q)
       })
+      .filter(v => {
+        if (dateFilterMode === 'toutes') return true
+        const d = new Date(v.date_entree)
+        if (Number.isNaN(d.getTime())) return true
+        d.setHours(0, 0, 0, 0)
+
+        if (dateFilterMode === 'aujourdhui') return d.getTime() === today.getTime()
+        if (dateFilterMode === 'hier') return d.getTime() === yesterday.getTime()
+        if (dateFilterMode === 'semaine') return d >= weekStart && d <= weekEnd
+        if (dateFilterMode === 'date' && selectedDate) return d.getTime() === selectedDate.getTime()
+        return true
+      })
       .sort((a, b) => {
         const order: Record<EtatVehicule, number> = { rouge: 0, mauve: 1, orange: 2, bleu: 3, vert: 4 }
         return order[a.etat_actuel] - order[b.etat_actuel]
       })
-  , [myVehicules, tab, filtreEtat, recherche])
+  }, [myVehicules, tab, filtreEtat, recherche, dateFilterMode, dateFilter])
 
   const etats: EtatVehicule[] = ['orange', 'mauve', 'bleu', 'rouge', 'vert']
   const countByEtat = (etat: EtatVehicule) => myVehicules.filter(v => v.type === tab && v.etat_actuel === etat).length
@@ -127,13 +163,57 @@ export default function VehiculesPage() {
         })}
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <input type="text" value={recherche} onChange={e => setRecherche(e.target.value)}
-          placeholder="Rechercher modèle, immatriculation..."
-          className="w-full pl-10 pr-4 py-2.5 sm:py-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
-        />
+      {/* Search + Date filters */}
+      <div className="space-y-2">
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            value={recherche}
+            onChange={e => setRecherche(e.target.value)}
+            placeholder="Rechercher modèle, immatriculation..."
+            className="w-full pl-10 pr-4 py-2.5 sm:py-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
+          />
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              ['toutes', 'Toutes dates'],
+              ['aujourdhui', "Aujourd'hui"],
+              ['hier', 'Hier'],
+              ['semaine', 'Cette semaine'],
+            ].map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => {
+                  setDateFilterMode(mode as typeof dateFilterMode)
+                  if (mode === 'toutes') setDateFilter('')
+                }}
+                className={cn(
+                  'px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs font-medium border transition-all',
+                  dateFilterMode === mode
+                    ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] sm:text-xs text-gray-500 whitespace-nowrap">Jour précis</span>
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={e => {
+                setDateFilter(e.target.value)
+                setDateFilterMode(e.target.value ? 'date' : 'toutes')
+              }}
+              className="px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px] sm:text-xs text-gray-700 bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Vehicle list */}

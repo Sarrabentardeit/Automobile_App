@@ -1,9 +1,13 @@
 import type { Facture, LigneFacture } from '@/types'
 
 export function computeFactureTotals(lignes: LigneFacture[], timbre: number) {
-  const totalHT = lignes
+  const htMainOeuvre = lignes
     .filter((l): l is LigneFacture & { type: 'main_oeuvre' } => l.type === 'main_oeuvre')
     .reduce((s, l) => s + l.qte * l.mtHT, 0)
+  const htProduits = lignes
+    .filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
+    .reduce((s, l) => s + l.qte * l.prixUnitaireHT, 0)
+  const totalHT = htMainOeuvre + htProduits
   const depenses = lignes
     .filter((l): l is LigneFacture & { type: 'depense' } => l.type === 'depense')
     .reduce((s, l) => s + l.montant, 0)
@@ -58,12 +62,19 @@ export function getFacturePrintHtml(facture: Facture): string {
   })
 
   const lignesMainOeuvre = facture.lignes.filter((l): l is LigneFacture & { type: 'main_oeuvre' } => l.type === 'main_oeuvre')
+  const lignesProduits = facture.lignes.filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
   const lignesDepenses = facture.lignes.filter((l): l is LigneFacture & { type: 'depense' } => l.type === 'depense')
 
   const rowsMain = lignesMainOeuvre
     .map(
       l =>
         `<tr><td>${l.qte}</td><td>${escapeHtml(l.designation)}</td><td></td><td class="text-right">${l.mtHT.toFixed(2)}</td><td class="text-right">${(l.qte * l.mtHT).toFixed(2)}</td></tr>`
+    )
+    .join('')
+  const rowsProduits = lignesProduits
+    .map(
+      l =>
+        `<tr><td>${l.qte}</td><td>${escapeHtml(l.designation)}</td><td></td><td class="text-right">${l.prixUnitaireHT.toFixed(2)}</td><td class="text-right">${(l.qte * l.prixUnitaireHT).toFixed(2)}</td></tr>`
     )
     .join('')
   const rowsDepenses = lignesDepenses
@@ -136,6 +147,7 @@ export function getFacturePrintHtml(facture: Facture): string {
     <tbody>
       <tr><td colspan="5" style="font-weight: 600; background: #f9fafb;">MAIN D'ŒUVRE</td></tr>
       ${rowsMain || '<tr><td colspan="5" style="color: #9ca3af;">—</td></tr>'}
+      ${rowsProduits ? `<tr><td colspan="5" style="font-weight: 600; background: #f9fafb;">PRODUITS</td></tr>${rowsProduits}` : ''}
       ${rowsDepenses ? `<tr><td colspan="5" style="font-weight: 600; background: #f9fafb;">DEPENSES</td></tr>${rowsDepenses}` : ''}
     </tbody>
   </table>

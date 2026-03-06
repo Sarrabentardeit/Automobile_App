@@ -2,8 +2,10 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFacturation } from '@/contexts/FacturationContext'
 import { useClients } from '@/contexts/ClientsContext'
+import { useStockGeneral } from '@/contexts/StockGeneralContext'
 import { useToast } from '@/contexts/ToastContext'
 import type { Facture, LigneFacture, FactureStatut } from '@/types'
+import type { ProduitStock } from '@/types'
 import { FACTURE_STATUT_CONFIG } from '@/types'
 import { computeFactureTotals, formatMontantEnLettres, printFacture } from '@/lib/factureUtils'
 import { formatDate } from '@/lib/utils'
@@ -36,15 +38,19 @@ type FormLigne = LigneFacture
 
 const emptyLigneMainOeuvre = (): FormLigne => ({ type: 'main_oeuvre', designation: '', qte: 1, mtHT: 0 })
 const emptyLigneDepense = (): FormLigne => ({ type: 'depense', designation: '', montant: 0 })
+function ligneFromProduit(p: ProduitStock): FormLigne {
+  return { type: 'produit', productId: p.id, designation: p.nom, qte: 1, prixUnitaireHT: p.prixVente ?? p.valeurAchatTTC }
+}
 
 export default function FacturationPage() {
   const { user, permissions } = useAuth()
   const { factures, addFacture, updateFacture, removeFacture, getNextNumero } = useFacturation()
   const { clients } = useClients()
+  const { produits, decrementerStock, incrementerStock } = useStockGeneral()
   const toast = useToast()
 
   const [search, setSearch] = useState('')
-  const [filterStatut, setFilterStatut] = useState<FactureStatut | ''>('')
+  const [filterStatut, setFilterStatut] = useState<FactureStatut | 'a_encaisser' | ''>('')
   const [filterMonth, setFilterMonth] = useState<number | ''>('')
   const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear())
   const [showModal, setShowModal] = useState(false)
@@ -53,6 +59,7 @@ export default function FacturationPage() {
   const [annulerId, setAnnulerId] = useState<number | null>(null)
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
   const [openActionsId, setOpenActionsId] = useState<number | null>(null)
+  const [pendingValidation, setPendingValidation] = useState<{ facture: Facture; newStatut: FactureStatut } | null>(null)
   const actionsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -89,7 +96,8 @@ export default function FacturationPage() {
           f.clientTelephone.includes(q)
       )
     }
-    if (filterStatut) list = list.filter(f => f.statut === filterStatut)
+    if (filterStatut === 'a_encaisser') list = list.filter(f => f.statut === 'envoyee')
+    else if (filterStatut) list = list.filter(f => f.statut === filterStatut)
     if (filterMonth !== '') {
       list = list.filter(f => {
         const [y, m] = f.date.split('-').map(Number)
@@ -154,7 +162,7 @@ export default function FacturationPage() {
     }))
   }
 
-  const setLigne = (index: number, patch: { designation?: string; qte?: number; mtHT?: number; montant?: number }) => {
+  const setLigne = (index: number, patch: { designation?: string; qte?: number; mtHT?: number; montant?: number; prixUnitaireHT?: number }) => {
     setForm(prev => ({
       ...prev,
       lignes: prev.lignes.map((l, i) => {
@@ -162,12 +170,19 @@ export default function FacturationPage() {
         if (l.type === 'main_oeuvre') {
           return { type: 'main_oeuvre' as const, designation: patch.designation ?? l.designation, qte: patch.qte ?? l.qte, mtHT: patch.mtHT ?? l.mtHT }
         }
+        if (l.type === 'produit') {
+          return { type: 'produit' as const, productId: l.productId, designation: patch.designation ?? l.designation, qte: patch.qte ?? l.qte, prixUnitaireHT: patch.prixUnitaireHT ?? l.prixUnitaireHT }
+        }
         return { type: 'depense' as const, designation: patch.designation ?? l.designation, montant: patch.montant ?? l.montant }
       }),
     }))
   }
 
-  const addLigne = (type: 'main_oeuvre' | 'depense') => {
+  const addLigne = (type: 'main_oeuvre' | 'depense' | 'produit', product?: ProduitStock) => {
+    if (type === 'produit' && product) {
+      setForm(prev => ({ ...prev, lignes: [...prev.lignes, ligneFromProduit(product)] }))
+      return
+    }
     setForm(prev => ({
       ...prev,
       lignes: [...prev.lignes, type === 'main_oeuvre' ? emptyLigneMainOeuvre() : emptyLigneDepense()],
@@ -192,12 +207,35 @@ export default function FacturationPage() {
       clientTelephone: form.clientTelephone.trim(),
       clientAdresse: form.clientAdresse.trim() || undefined,
       clientMatriculeFiscale: form.clientMatriculeFiscale.trim() || undefined,
-      lignes: form.lignes.filter(
-        l => (l.type === 'main_oeuvre' ? l.designation.trim() || l.mtHT !== 0 : l.designation.trim() || l.montant !== 0)
-      ),
+      lignes: form.lignes.filter(l => {
+        if (l.type === 'main_oeuvre') return l.designation.trim() || l.mtHT !== 0
+        if (l.type === 'depense') return l.designation.trim() || l.montant !== 0
+        if (l.type === 'produit') return l.qte > 0
+        return false
+      }),
       timbre: form.timbre,
     }
     if (payload.lignes.length === 0) payload.lignes = [emptyLigneMainOeuvre()]
+
+    const prevFacture = editingId ? factures.find(f => f.id === editingId) : null
+    const devientValidee = payload.statut === 'envoyee' || payload.statut === 'payee'
+    const etaitValidee = prevFacture && (prevFacture.statut === 'envoyee' || prevFacture.statut === 'payee')
+    const devientAnnulee = payload.statut === 'annulee'
+
+    if (devientValidee && (!prevFacture || prevFacture.statut === 'brouillon')) {
+      const lignesProduit = payload.lignes.filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
+      for (const l of lignesProduit) {
+        if (!decrementerStock(l.productId, l.qte, { origine: 'facture', reference: payload.numero })) {
+          const nom = produits.find(p => p.id === l.productId)?.nom ?? 'Produit'
+          toast.error(`Stock insuffisant pour "${nom}" (demandé: ${l.qte})`)
+          return
+        }
+      }
+    }
+    if (editingId && devientAnnulee && etaitValidee) {
+      const lignesProduit = prevFacture!.lignes.filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
+      for (const l of lignesProduit) incrementerStock(l.productId, l.qte)
+    }
 
     if (editingId) {
       updateFacture(editingId, payload)
@@ -218,11 +256,15 @@ export default function FacturationPage() {
   }
 
   const confirmAnnuler = () => {
-    if (annulerId !== null) {
-      updateFacture(annulerId, { statut: 'annulee' })
-      toast.success('Facture annulée')
-      setAnnulerId(null)
+    if (annulerId === null) return
+    const f = factures.find(x => x.id === annulerId)
+    if (f && (f.statut === 'envoyee' || f.statut === 'payee')) {
+      const lignesProduit = f.lignes.filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
+      for (const l of lignesProduit) incrementerStock(l.productId, l.qte)
     }
+    updateFacture(annulerId, { statut: 'annulee' })
+    toast.success('Facture annulée')
+    setAnnulerId(null)
   }
 
   const runWorkflowAction = (f: Facture, newStatut: FactureStatut) => {
@@ -230,6 +272,39 @@ export default function FacturationPage() {
     if (newStatut === 'annulee') {
       setAnnulerId(f.id)
       return
+    }
+    // Passage à Validée ou Payée depuis Brouillon → afficher récap si lignes produit, sinon exécuter
+    if ((newStatut === 'envoyee' || newStatut === 'payee') && f.statut === 'brouillon') {
+      const lignesProduit = f.lignes.filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
+      if (lignesProduit.length > 0) {
+        setPendingValidation({ facture: f, newStatut })
+        return
+      }
+    }
+    executeWorkflowAction(f, newStatut)
+  }
+
+  const executeWorkflowAction = (f: Facture, newStatut: FactureStatut) => {
+    setPendingValidation(null)
+    if (newStatut === 'annulee') {
+      setAnnulerId(f.id)
+      return
+    }
+    // Passage à Validée ou Payée depuis Brouillon → décrémenter le stock des lignes produit
+    if ((newStatut === 'envoyee' || newStatut === 'payee') && f.statut === 'brouillon') {
+      const lignesProduit = f.lignes.filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
+      for (const l of lignesProduit) {
+        if (!decrementerStock(l.productId, l.qte, { origine: 'facture', reference: f.numero })) {
+          const nom = produits.find(p => p.id === l.productId)?.nom ?? 'Produit'
+          toast.error(`Stock insuffisant pour "${nom}" (demandé: ${l.qte})`)
+          return
+        }
+      }
+    }
+    // Réouverture (remise en brouillon) depuis Validée/Payée → réintégrer le stock
+    if (newStatut === 'brouillon' && (f.statut === 'envoyee' || f.statut === 'payee')) {
+      const lignesProduit = f.lignes.filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
+      for (const l of lignesProduit) incrementerStock(l.productId, l.qte)
     }
     updateFacture(f.id, { statut: newStatut })
     toast.success(`Facture ${FACTURE_STATUT_CONFIG[newStatut].label.toLowerCase()}`)
@@ -312,10 +387,11 @@ export default function FacturationPage() {
           <div className="flex flex-wrap items-center gap-2 min-w-0">
               <select
                 value={filterStatut}
-                onChange={e => setFilterStatut(e.target.value as FactureStatut | '')}
+                onChange={e => setFilterStatut(e.target.value as FactureStatut | 'a_encaisser' | '')}
                 className="px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white font-medium"
               >
                 <option value="">Tous les statuts</option>
+                <option value="a_encaisser">À encaisser</option>
                 {(Object.keys(FACTURE_STATUT_CONFIG) as FactureStatut[]).sort((a, b) => FACTURE_STATUT_CONFIG[a].order - FACTURE_STATUT_CONFIG[b].order).map(s => (
                   <option key={s} value={s}>{FACTURE_STATUT_CONFIG[s].label}</option>
                 ))}
@@ -630,13 +706,31 @@ export default function FacturationPage() {
           <div className="min-w-0">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
               <h3 className="text-sm font-semibold text-gray-800">Lignes de facture</h3>
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button size="sm" variant="outline" onClick={() => addLigne('main_oeuvre')}>
                   + Main d'œuvre
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => addLigne('depense')}>
                   + Dépense
                 </Button>
+                <div className="flex items-center gap-1.5">
+                  <select
+                    value=""
+                    onChange={e => {
+                      const id = Number(e.target.value)
+                      if (!id) return
+                      const p = produits.find(x => x.id === id)
+                      if (p) addLigne('produit', p)
+                      e.target.value = ''
+                    }}
+                    className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm bg-white"
+                  >
+                    <option value="">+ Produit (stock)</option>
+                    {produits.map(p => (
+                      <option key={p.id} value={p.id}>{p.nom} (stock: {p.quantite})</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
             <div className="border border-gray-200 rounded-xl overflow-x-auto overflow-y-visible">
@@ -653,30 +747,32 @@ export default function FacturationPage() {
                 <tbody>
                   {form.lignes.map((l, i) => (
                     <tr key={i} className="border-t border-gray-100">
-                      <td className="px-3 py-2 text-gray-500">{l.type === 'main_oeuvre' ? 'Main d\'œuvre' : 'Dépense'}</td>
+                      <td className="px-3 py-2 text-gray-500">
+                        {l.type === 'main_oeuvre' ? 'Main d\'œuvre' : l.type === 'depense' ? 'Dépense' : 'Produit'}
+                      </td>
                       <td className="px-3 py-2">
                         <input
                           type="text"
-                          value={l.type === 'main_oeuvre' ? l.designation : l.designation}
+                          value={l.designation}
                           onChange={e => setLigne(i, { designation: e.target.value })}
                           placeholder="Désignation"
                           className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm"
                         />
                       </td>
                       <td className="px-3 py-2 text-right">
-                        {l.type === 'main_oeuvre' ? (
+                        {l.type === 'depense' ? '—' : (
                           <input
                             type="number"
                             min={0}
-                            step={1}
-                            value={l.qte}
+                            step={l.type === 'produit' ? 0.01 : 1}
+                            value={l.type === 'main_oeuvre' ? l.qte : l.type === 'produit' ? l.qte : 0}
                             onChange={e => setLigne(i, { qte: Number(e.target.value) || 0 })}
                             className="w-16 px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-right"
                           />
-                        ) : '—'}
+                        )}
                       </td>
                       <td className="px-3 py-2 text-right">
-                        {l.type === 'main_oeuvre' ? (
+                        {l.type === 'main_oeuvre' && (
                           <input
                             type="number"
                             min={0}
@@ -685,7 +781,8 @@ export default function FacturationPage() {
                             onChange={e => setLigne(i, { mtHT: Number(e.target.value) || 0 })}
                             className="w-20 px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-right"
                           />
-                        ) : (
+                        )}
+                        {l.type === 'depense' && (
                           <input
                             type="number"
                             min={0}
@@ -693,6 +790,21 @@ export default function FacturationPage() {
                             value={l.montant}
                             onChange={e => setLigne(i, { montant: Number(e.target.value) || 0 })}
                             className="w-20 px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-right"
+                          />
+                        )}
+                        {l.type === 'produit' && (
+                          <input
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            value={l.qte > 0 ? (l.qte * l.prixUnitaireHT) : l.prixUnitaireHT}
+                            onChange={e => {
+                              const newTotal = Number(e.target.value) || 0
+                              const newPrixUnitaire = l.qte > 0 ? newTotal / l.qte : newTotal
+                              setLigne(i, { prixUnitaireHT: Math.round(newPrixUnitaire * 100) / 100 })
+                            }}
+                            className="w-20 px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-right"
+                            title="Total de la ligne (Qté × prix unitaire)"
                           />
                         )}
                       </td>
@@ -793,6 +905,44 @@ export default function FacturationPage() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Modal récap avant validation (Envoyée/Payée) */}
+      <Modal
+        open={pendingValidation !== null}
+        onClose={() => setPendingValidation(null)}
+        title="Récapitulatif avant validation"
+        subtitle={pendingValidation?.facture.numero}
+        maxWidth="sm"
+      >
+        {pendingValidation && (
+          <div className="space-y-4">
+            <p className="text-gray-600 text-sm">
+              Les produits suivants seront retirés du stock :
+            </p>
+            <ul className="border border-gray-200 rounded-xl divide-y divide-gray-100 overflow-hidden">
+              {pendingValidation.facture.lignes
+                .filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
+                .map((l, i) => (
+                  <li key={i} className="flex justify-between items-center px-4 py-3 bg-gray-50/50">
+                    <span className="font-medium text-gray-800">{l.designation}</span>
+                    <span className="tabular-nums text-amber-700 font-semibold">{l.qte} × {l.prixUnitaireHT.toFixed(2)} DT</span>
+                  </li>
+                ))}
+            </ul>
+            <p className="text-xs text-gray-500">
+              Statut : {FACTURE_STATUT_CONFIG[pendingValidation.newStatut].label}
+            </p>
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => setPendingValidation(null)} className="flex-1">
+                Annuler
+              </Button>
+              <Button onClick={() => executeWorkflowAction(pendingValidation.facture, pendingValidation.newStatut)} className="flex-1">
+                Confirmer
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )

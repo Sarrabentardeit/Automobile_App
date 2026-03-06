@@ -466,6 +466,19 @@ export interface ProduitStock {
   nom: string
   quantite: number
   valeurAchatTTC: number
+  prixVente?: number // prix de vente conseillé (HT ou TTC selon usage)
+}
+
+/** Mouvement simple entrée/sortie stock (achat ou facture) */
+export interface MouvementStock {
+  id: number
+  date: string // YYYY-MM-DD
+  productId: number
+  produitNom: string
+  quantite: number
+  type: 'entree' | 'sortie'
+  origine: 'achat' | 'facture'
+  reference?: string // n° facture ou achat
 }
 
 // ==================== OUTILS MOHAMED ====================
@@ -510,6 +523,7 @@ export type FactureStatut = 'brouillon' | 'envoyee' | 'payee' | 'annulee'
 export type LigneFacture =
   | { type: 'main_oeuvre'; designation: string; qte: number; mtHT: number }
   | { type: 'depense'; designation: string; montant: number }
+  | { type: 'produit'; productId: number; designation: string; qte: number; prixUnitaireHT: number }
 
 export interface Facture {
   id: number
@@ -562,4 +576,35 @@ export const FACTURE_STATUT_CONFIG: Record<
     dot: 'bg-red-500',
     order: 0,
   },
+}
+
+// ==================== ACHATS (FACTURES FOURNISSEUR) ====================
+export type FactureFournisseurStatut = 'brouillon' | 'validee' | 'payee'
+
+export interface LigneAchat {
+  productId: number
+  designation: string
+  quantite: number
+  prixUnitaire: number
+}
+
+export interface FactureFournisseur {
+  id: number
+  numero: string
+  date: string // YYYY-MM-DD
+  fournisseurId: number | null
+  fournisseurNom: string
+  statut: FactureFournisseurStatut
+  lignes: LigneAchat[]
+  paye: boolean // suivi payé / non payé
+  createdAt: string
+}
+
+export const FACTURE_FOURNISSEUR_STATUT_CONFIG: Record<
+  FactureFournisseurStatut,
+  { label: string; badge: string }
+> = {
+  brouillon: { label: 'Brouillon', badge: 'bg-slate-100 text-slate-700 border border-slate-200' },
+  validee: { label: 'Validée', badge: 'bg-blue-100 text-blue-800 border border-blue-200' },
+  payee: { label: 'Payée', badge: 'bg-emerald-100 text-emerald-800 border border-emerald-200' },
 }

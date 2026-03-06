@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import type { Permissions, TogglePermissionKey } from '@/types'
 import { ROLE_CONFIG } from '@/types'
 import { useState, useRef, useEffect } from 'react'
-import { LayoutDashboard, Car, Users, Wallet, X, LogOut, Package, DollarSign, Wrench, UsersRound, CalendarDays, AlertCircle, UserCircle, CreditCard, ClipboardList, Droplets, Phone, BarChart2, Truck, Receipt, Bell, Shield, FileText } from 'lucide-react'
+import { LayoutDashboard, Car, Users, Wallet, X, LogOut, Package, DollarSign, Wrench, UsersRound, CalendarDays, AlertCircle, UserCircle, CreditCard, ClipboardList, Droplets, Phone, BarChart2, Truck, Receipt, Bell, Shield, FileText, ShoppingCart } from 'lucide-react'
 import { useNotifications } from '@/contexts/NotificationsContext'
 import { cn } from '@/lib/utils'
 
@@ -51,6 +51,7 @@ const NAV_STRUCTURE: NavCategory[] = [
     label: 'FINANCES',
     items: [
       { name: 'Facturation', href: '/facturation', icon: FileText, requiredPermission: 'canViewFinance' },
+      { name: 'Achats (entrée stock)', href: '/achats', icon: ShoppingCart, requiredPermission: 'canViewFinance' },
       { name: 'Suivi Argent Équipe', href: '/caisse', icon: Wallet, requiredPermission: 'canViewFinance' },
       { name: 'Transactions Fournisseurs', href: '/fournisseurs/transactions', icon: Receipt },
       { name: 'Fournisseurs', href: '/fournisseurs', icon: Truck },
