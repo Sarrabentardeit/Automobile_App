@@ -15,6 +15,7 @@ import { HuileProvider } from '@/contexts/HuileContext'
 import { CalendarProvider } from '@/contexts/CalendarContext'
 import { MoneyProvider } from '@/contexts/MoneyContext'
 import { CaisseProvider } from '@/contexts/CaisseContext'
+import { ChargesProvider } from '@/contexts/ChargesContext'
 import { FacturationProvider } from '@/contexts/FacturationContext'
 import { AchatsProvider } from '@/contexts/AchatsContext'
 import { ToastProvider } from '@/contexts/ToastContext'
@@ -65,6 +66,7 @@ export default function App() {
               <HuileProvider>
               <CalendarProvider>
               <MoneyProvider>
+              <ChargesProvider>
               <CaisseProvider>
               <FacturationProvider>
               <AchatsProvider>
@@ -100,6 +102,7 @@ export default function App() {
               </AchatsProvider>
               </FacturationProvider>
               </CaisseProvider>
+              </ChargesProvider>
               </MoneyProvider>
               </CalendarProvider>
               </HuileProvider>

@@ -4,6 +4,7 @@ import { useTeamMembers } from '@/contexts/TeamMembersContext'
 import type { MoneyIn, MoneyOut } from '@/types'
 import { MONEY_IN_TYPES, MONEY_OUT_CATEGORIES, MONEY_PAYMENT_METHODS } from '@/types'
 import { useMoney } from '@/contexts/MoneyContext'
+import { useCharges } from '@/contexts/ChargesContext'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
@@ -63,6 +64,7 @@ export default function MoneyPage() {
   const [period, setPeriod] = useState({ year: 2026, month: 2 })
   const [tab, setTab] = useState<Tab>('all')
   const { ins, outs, addIn, addOut } = useMoney()
+  const { charges, totalCharges } = useCharges()
   const [addingIn, setAddingIn] = useState(false)
   const [addingOut, setAddingOut] = useState(false)
   const [newIn, setNewIn] = useState<Omit<MoneyIn, 'id'>>({
@@ -173,7 +175,8 @@ export default function MoneyPage() {
     [outs, period]
   )
 
-  type ActivityItem = { id: string; date: string; type: 'in' | 'out'; label: string; sublabel: string; amount: number }
+  const monthStr = `${period.year}-${period.month.toString().padStart(2, '0')}`
+  type ActivityItem = { id: string; date: string; type: 'in' | 'out'; label: string; sublabel: string; amount: number; isCharge?: boolean }
   const activity = useMemo<ActivityItem[]>(() => {
     const inItems: ActivityItem[] = filteredIns.map(r => ({
       id: `in-${r.id}`,
@@ -191,11 +194,21 @@ export default function MoneyPage() {
       sublabel: `${r.category}${r.beneficiary ? ` · ${r.beneficiary}` : ''}`,
       amount: r.amount,
     }))
-    return [...inItems, ...outItems].sort((a, b) => b.date.localeCompare(a.date))
-  }, [filteredIns, filteredOuts])
+    const chargeItems: ActivityItem[] = charges.map(c => ({
+      id: `charge-${c.id}`,
+      date: `${monthStr}-01`,
+      type: 'out' as const,
+      label: c.name,
+      sublabel: 'Charge fixe mensuelle',
+      amount: c.amount,
+      isCharge: true,
+    }))
+    return [...inItems, ...outItems, ...chargeItems].sort((a, b) => b.date.localeCompare(a.date))
+  }, [filteredIns, filteredOuts, charges, monthStr])
 
   const totalIn = useMemo(() => roundMoney(filteredIns.reduce((s, r) => s + r.amount, 0)), [filteredIns])
-  const totalOut = useMemo(() => roundMoney(filteredOuts.reduce((s, r) => s + r.amount, 0)), [filteredOuts])
+  const totalOutVariable = useMemo(() => roundMoney(filteredOuts.reduce((s, r) => s + r.amount, 0)), [filteredOuts])
+  const totalOut = roundMoney(totalOutVariable + totalCharges)
   const balance = roundMoney(totalIn - totalOut)
   const countIn = filteredIns.length
   const countOut = filteredOuts.length
@@ -224,10 +237,14 @@ export default function MoneyPage() {
       cur.count += 1
       map.set(r.category, cur)
     })
+    if (totalCharges > 0) {
+      map.set('Charges fixes', { total: totalCharges, count: charges.length })
+    }
     return Array.from(map.entries())
       .map(([label, v]) => ({ label, total: roundMoney(v.total), count: v.count }))
       .sort((a, b) => b.total - a.total)
-  }, [filteredOuts])
+  }, [filteredOuts, totalCharges, charges])
+
 
   const openAddIn = () => {
     const today = new Date().toISOString().slice(0, 10)

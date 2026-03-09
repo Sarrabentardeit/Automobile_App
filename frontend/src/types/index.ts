@@ -254,6 +254,13 @@ export interface MouvementCaisse {
 /** Catégories suggérées pour les mouvements (ex. Excel) */
 export const MOUVEMENT_CATEGORIES = ['RABI3', 'YASSINE', 'COMPTE', 'CHOKRI', 'SALIHA', 'GARAGE', 'AUTRE'] as const
 
+/** Charge mensuelle fixe (loyer, cnss, etc.) */
+export interface ChargeMensuelle {
+  id: number
+  name: string
+  amount: number
+}
+
 // ==================== FEUILLE MONEY (IN / OUT) ====================
 /** Entrée (IN) : Date, Montant, Type espèce, Description, Moyen de paiement */
 export interface MoneyIn {
@@ -273,6 +280,8 @@ export interface MoneyOut {
   category: string // GARAGE, DEPENSE VOITURE, FOURNISSEUR, etc.
   description: string
   beneficiary?: string // nom (membre équipe ou autre)
+  /** Référence pour sync Caisse (ex: "caisse:dayId:memberName") */
+  sourceRef?: string
 }
 
 /** Catégories type ESPECE pour les entrées (IN) — comme la liste déroulante Excel */
@@ -467,6 +476,7 @@ export interface ProduitStock {
   quantite: number
   valeurAchatTTC: number
   prixVente?: number // prix de vente conseillé (HT ou TTC selon usage)
+  categorie?: string // ex: Huiles, Pièces, Consommables
 }
 
 /** Mouvement simple entrée/sortie stock (achat ou facture) */

@@ -9,7 +9,7 @@ import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
-import { Package, Plus, Search, Trash2, Layers, ShoppingCart, Pencil, AlertTriangle, ArrowUpDown, ArrowDown, ArrowUp, History, TrendingUp } from 'lucide-react'
+import { Package, Plus, Search, Trash2, Layers, ShoppingCart, Pencil, AlertTriangle, ArrowUpDown, ArrowDown, ArrowUp, History, TrendingUp, AlertCircle } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 
@@ -23,6 +23,7 @@ export default function StockGeneralPage() {
   const { factures } = useFacturation()
   const toast = useToast()
   const [search, setSearch] = useState('')
+  const [filterCategorie, setFilterCategorie] = useState<string>('')
   const [sortQte, setSortQte] = useState<'none' | 'asc' | 'desc'>('none')
   const SEUIL_STOCK_FAIBLE = 3
   const [showFormProduit, setShowFormProduit] = useState(false)
@@ -32,20 +33,28 @@ export default function StockGeneralPage() {
     nom: '',
     quantite: 0,
     valeurAchatTTC: 0,
+    categorie: '',
   })
   // Mémorise le dernier prix unitaire pour recalculer la valeur totale quand la qté repasse de 0 à > 0
   const lastUnitPriceRef = useRef<number>(0)
+
+  const categories = useMemo(() => {
+    const set = new Set<string>()
+    for (const p of produits) if (p.categorie?.trim()) set.add(p.categorie!.trim())
+    return [...set].sort()
+  }, [produits])
 
   const filteredProduits = useMemo(() => {
     let list = produits
     if (search.trim()) {
       const q = search.toLowerCase()
-      list = list.filter(p => p.nom.toLowerCase().includes(q))
+      list = list.filter(p => p.nom.toLowerCase().includes(q) || (p.categorie ?? '').toLowerCase().includes(q))
     }
+    if (filterCategorie) list = list.filter(p => (p.categorie ?? '') === filterCategorie)
     if (sortQte === 'asc') list = [...list].sort((a, b) => (a.quantite ?? 0) - (b.quantite ?? 0))
     else if (sortQte === 'desc') list = [...list].sort((a, b) => (b.quantite ?? 0) - (a.quantite ?? 0))
     return list
-  }, [produits, search, sortQte])
+  }, [produits, search, filterCategorie, sortQte])
 
   const totalValeurStock = useMemo(() => produits.reduce((s, p) => s + p.valeurAchatTTC, 0), [produits])
 
@@ -53,6 +62,10 @@ export default function StockGeneralPage() {
 
   const now = new Date()
   const ceMois = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const aCommander = useMemo(() =>
+    produits.filter(p => (p.quantite ?? 0) > 0 && (p.quantite ?? 0) <= SEUIL_STOCK_FAIBLE).sort((a, b) => (a.quantite ?? 0) - (b.quantite ?? 0)),
+  [produits, SEUIL_STOCK_FAIBLE])
+
   const produitsPlusVendus = useMemo(() => {
     const map = new Map<number, { nom: string; qte: number }>()
     for (const f of factures ?? []) {
@@ -72,7 +85,7 @@ export default function StockGeneralPage() {
 
   const openNewProduit = () => {
     lastUnitPriceRef.current = 0
-    setFormProduit({ nom: '', quantite: 0, valeurAchatTTC: 0 })
+    setFormProduit({ nom: '', quantite: 0, valeurAchatTTC: 0, categorie: '' })
     setEditingProduitId(null)
     setShowFormProduit(true)
   }
@@ -84,7 +97,7 @@ export default function StockGeneralPage() {
     const val = typeof produit.valeurAchatTTC === 'number' ? produit.valeurAchatTTC : 0
     if (qte > 0 && val > 0) lastUnitPriceRef.current = val / qte
     else lastUnitPriceRef.current = 0
-    setFormProduit({ nom: produit.nom, quantite: qte, valeurAchatTTC: val })
+    setFormProduit({ nom: produit.nom, quantite: qte, valeurAchatTTC: val, categorie: produit.categorie ?? '' })
     setEditingProduitId(produit.id)
     setShowFormProduit(true)
   }
@@ -136,6 +149,34 @@ export default function StockGeneralPage() {
         </div>
       </header>
 
+      {/* Alerte À commander */}
+      {aCommander.length > 0 && (
+        <Card padding="sm" className="mb-4 border-amber-200 bg-amber-50">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
+              <AlertCircle className="w-5 h-5 text-amber-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-amber-800">À commander ({aCommander.length})</h3>
+              <p className="text-sm text-amber-700/90 mt-0.5">Produits en stock faible — à réapprovisionner</p>
+              <div className="flex flex-wrap gap-2 mt-3">
+                {aCommander.map(p => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => openEditProduit(p)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-amber-200 text-sm font-medium text-amber-800 hover:bg-amber-100 transition-colors"
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    {p.nom} <span className="text-amber-600 tabular-nums">({p.quantite})</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Valeur totale — compact */}
       <Card padding="sm" className="mb-4 bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100">
         <div className="flex items-center justify-between">
@@ -152,17 +193,31 @@ export default function StockGeneralPage() {
         </div>
       </Card>
 
-      {/* Recherche + Tri */}
-      <div className="mb-4 flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="search"
-            placeholder="Rechercher un produit…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm"
-          />
+      {/* Recherche + Catégorie + Tri */}
+      <div className="mb-4 flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="search"
+              placeholder="Rechercher un produit…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm"
+            />
+          </div>
+          {categories.length > 0 && (
+            <select
+              value={filterCategorie}
+              onChange={e => setFilterCategorie(e.target.value)}
+              className="px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white max-w-[180px]"
+            >
+              <option value="">Toutes catégories</option>
+              {categories.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500">Tri qté :</span>
@@ -186,6 +241,7 @@ export default function StockGeneralPage() {
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
                   <th className="px-4 py-3 text-left font-semibold text-gray-700">Produit</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700 w-24 hidden sm:table-cell">Catégorie</th>
                   <th className="px-4 py-3 text-right font-semibold text-gray-700 w-28">Quantité</th>
                   <th className="px-4 py-3 text-right font-semibold text-gray-700 w-32">Valeur totale</th>
                   <th className="w-24 px-2 py-3" />
@@ -194,7 +250,7 @@ export default function StockGeneralPage() {
               <tbody>
                 {filteredProduits.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-12 text-center text-gray-500">
+                    <td colSpan={5} className="px-4 py-12 text-center text-gray-500">
                       {produits.length === 0 ? 'Aucun produit. Cliquez sur « Nouveau produit » ou enregistrez un achat.' : 'Aucun résultat.'}
                     </td>
                   </tr>
@@ -206,6 +262,7 @@ export default function StockGeneralPage() {
                       className="border-b border-gray-50 hover:bg-amber-50/30 cursor-pointer transition-colors"
                     >
                       <td className="px-4 py-3 font-medium text-gray-900">{p.nom}</td>
+                      <td className="px-4 py-3 text-gray-500 text-xs hidden sm:table-cell">{p.categorie || '—'}</td>
                       <td className="px-4 py-3 text-right">
                         <span className={cn(
                           'tabular-nums inline-flex items-center gap-1',
@@ -300,6 +357,22 @@ export default function StockGeneralPage() {
       <Modal open={showFormProduit} onClose={() => setShowFormProduit(false)} title={editingProduitId ? 'Modifier le produit' : 'Nouveau produit'} maxWidth="sm">
         <div className="space-y-4">
           <Input label="Nom du produit" value={formProduit.nom} onChange={e => setFormProduit(f => ({ ...f, nom: e.target.value }))} placeholder="Ex: HUILE 5W30" />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Catégorie</label>
+            <input
+              type="text"
+              value={formProduit.categorie ?? ''}
+              onChange={e => setFormProduit(f => ({ ...f, categorie: e.target.value }))}
+              placeholder="Ex: Huiles, Pièces, Consommables"
+              list="categories-list"
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm"
+            />
+            <datalist id="categories-list">
+              {['Huiles', 'Pièces', 'Consommables', 'Liquides', 'Filtres'].map(c => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <Input
               label="Quantité"

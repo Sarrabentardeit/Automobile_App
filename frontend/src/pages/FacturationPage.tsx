@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useFacturation } from '@/contexts/FacturationContext'
 import { useClients } from '@/contexts/ClientsContext'
 import { useStockGeneral } from '@/contexts/StockGeneralContext'
+import { useMoney } from '@/contexts/MoneyContext'
 import { useToast } from '@/contexts/ToastContext'
 import type { Facture, LigneFacture, FactureStatut } from '@/types'
 import type { ProduitStock } from '@/types'
@@ -19,6 +20,7 @@ import {
   Search,
   Pencil,
   Trash2,
+  Copy,
   Receipt,
   Printer,
   TrendingUp,
@@ -47,6 +49,7 @@ export default function FacturationPage() {
   const { factures, addFacture, updateFacture, removeFacture, getNextNumero } = useFacturation()
   const { clients } = useClients()
   const { produits, decrementerStock, incrementerStock } = useStockGeneral()
+  const { addIn } = useMoney()
   const toast = useToast()
 
   const [search, setSearch] = useState('')
@@ -152,6 +155,23 @@ export default function FacturationPage() {
     setShowModal(true)
   }
 
+  const openDuplicate = (f: Facture) => {
+    setForm({
+      numero: getNextNumero(),
+      date: new Date().toISOString().slice(0, 10),
+      statut: 'brouillon',
+      clientId: f.clientId ?? null,
+      clientNom: f.clientNom,
+      clientTelephone: f.clientTelephone,
+      clientAdresse: f.clientAdresse ?? '',
+      clientMatriculeFiscale: f.clientMatriculeFiscale ?? '',
+      lignes: f.lignes.length ? f.lignes.map(l => ({ ...l })) : [emptyLigneMainOeuvre()],
+      timbre: f.timbre,
+    })
+    setEditingId(null)
+    setShowModal(true)
+  }
+
   const selectClient = (client: { id: number; nom: string; telephone: string; adresse?: string }) => {
     setForm(prev => ({
       ...prev,
@@ -231,6 +251,13 @@ export default function FacturationPage() {
           return
         }
       }
+      const { totalTTC } = computeFactureTotals(payload.lignes, payload.timbre)
+      addIn({
+        date: payload.date,
+        amount: totalTTC,
+        type: 'MECA',
+        description: `Facture ${payload.numero}`,
+      })
     }
     if (editingId && devientAnnulee && etaitValidee) {
       const lignesProduit = prevFacture!.lignes.filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
@@ -290,7 +317,7 @@ export default function FacturationPage() {
       setAnnulerId(f.id)
       return
     }
-    // Passage à Validée ou Payée depuis Brouillon → décrémenter le stock des lignes produit
+    // Passage à Validée ou Payée depuis Brouillon → décrémenter le stock + sync MoneyIn
     if ((newStatut === 'envoyee' || newStatut === 'payee') && f.statut === 'brouillon') {
       const lignesProduit = f.lignes.filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
       for (const l of lignesProduit) {
@@ -300,6 +327,13 @@ export default function FacturationPage() {
           return
         }
       }
+      const { totalTTC } = computeFactureTotals(f.lignes, f.timbre)
+      addIn({
+        date: f.date,
+        amount: totalTTC,
+        type: 'MECA',
+        description: `Facture ${f.numero}`,
+      })
     }
     // Réouverture (remise en brouillon) depuis Validée/Payée → réintégrer le stock
     if (newStatut === 'brouillon' && (f.statut === 'envoyee' || f.statut === 'payee')) {
@@ -537,6 +571,7 @@ export default function FacturationPage() {
                     <div className="flex gap-1">
                       <button type="button" onClick={() => printFacture(f)} className="p-2 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600" title="Imprimer"><Printer className="w-4 h-4" /></button>
                       <button type="button" onClick={() => openEdit(f)} className="p-2 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600" title="Modifier"><Pencil className="w-4 h-4" /></button>
+                          <button type="button" onClick={() => openDuplicate(f)} className="p-2 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600" title="Dupliquer"><Copy className="w-4 h-4" /></button>
                       <button type="button" onClick={() => setDeleteId(f.id)} className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </div>
@@ -637,6 +672,7 @@ export default function FacturationPage() {
                         <div className="flex items-center gap-0.5 sm:gap-1">
                           <button type="button" onClick={() => printFacture(f)} className="p-2.5 sm:p-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center" title="Imprimer"><Printer className="w-4 h-4" /></button>
                           <button type="button" onClick={() => openEdit(f)} className="p-2.5 sm:p-2 rounded-lg text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center" title="Modifier"><Pencil className="w-4 h-4" /></button>
+                          <button type="button" onClick={() => openDuplicate(f)} className="p-2.5 sm:p-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center" title="Dupliquer"><Copy className="w-4 h-4" /></button>
                           <button type="button" onClick={() => setDeleteId(f.id)} className="p-2.5 sm:p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
                         </div>
                       </td>

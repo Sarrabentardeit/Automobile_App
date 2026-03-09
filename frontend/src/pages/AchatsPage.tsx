@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useAchats } from '@/contexts/AchatsContext'
 import { useFournisseurs } from '@/contexts/FournisseursContext'
 import { useStockGeneral } from '@/contexts/StockGeneralContext'
+import { useMoney } from '@/contexts/MoneyContext'
 import { useToast } from '@/contexts/ToastContext'
 import type { FactureFournisseur, LigneAchat, FactureFournisseurStatut } from '@/types'
 import { FACTURE_FOURNISSEUR_STATUT_CONFIG } from '@/types'
@@ -11,7 +12,7 @@ import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
-import { Package, Plus, Search, Pencil, Trash2, Truck, CheckCircle } from 'lucide-react'
+import { Package, Plus, Search, Pencil, Trash2, Truck, CheckCircle, Copy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function AchatsPage() {
@@ -19,6 +20,7 @@ export default function AchatsPage() {
   const { factures, addFacture, updateFacture, removeFacture, getNextNumero } = useAchats()
   const { fournisseurs } = useFournisseurs()
   const { produits, incrementerStock } = useStockGeneral()
+  const { addOut } = useMoney()
   const toast = useToast()
 
   const [search, setSearch] = useState('')
@@ -74,6 +76,20 @@ export default function AchatsPage() {
     setShowModal(true)
   }
 
+  const openDuplicate = (f: FactureFournisseur) => {
+    setForm({
+      numero: getNextNumero(),
+      date: new Date().toISOString().slice(0, 10),
+      fournisseurId: f.fournisseurId,
+      fournisseurNom: f.fournisseurNom,
+      statut: 'brouillon',
+      lignes: f.lignes.length ? f.lignes.map(l => ({ ...l })) : [],
+      paye: false,
+    })
+    setEditingId(null)
+    setShowModal(true)
+  }
+
   const addLigne = (productId: number) => {
     const p = produits.find(x => x.id === productId)
     if (!p) return
@@ -119,6 +135,15 @@ export default function AchatsPage() {
     if (doitIncrementerStock) {
       for (const l of lignesValides) incrementerStock(l.productId, l.quantite, { origine: 'achat', reference: payload.numero })
     }
+    if (doitIncrementerStock) {
+      const totalAchat = totalLignes(lignesValides)
+      addOut({
+        date: payload.date,
+        amount: totalAchat,
+        category: 'FOURNISSEUR',
+        description: `Achat ${payload.numero} — ${payload.fournisseurNom}`,
+      })
+    }
 
     if (editingId) {
       updateFacture(editingId, payload)
@@ -133,6 +158,13 @@ export default function AchatsPage() {
   const marquerPayee = (f: FactureFournisseur) => {
     if (f.statut === 'brouillon') {
       for (const l of f.lignes) incrementerStock(l.productId, l.quantite, { origine: 'achat', reference: f.numero })
+      const totalAchat = totalLignes(f.lignes)
+      addOut({
+        date: f.date,
+        amount: totalAchat,
+        category: 'FOURNISSEUR',
+        description: `Achat ${f.numero} — ${f.fournisseurNom}`,
+      })
     }
     updateFacture(f.id, { statut: 'payee', paye: true })
     toast.success('Facture marquée payée')
@@ -232,6 +264,7 @@ export default function AchatsPage() {
                     <td className="px-4 py-2">
                       <div className="flex items-center gap-1">
                         <button type="button" onClick={() => openEdit(f)} className="p-2 rounded-lg text-gray-400 hover:bg-orange-50 hover:text-orange-600" title="Modifier"><Pencil className="w-4 h-4" /></button>
+                        <button type="button" onClick={() => openDuplicate(f)} className="p-2 rounded-lg text-gray-400 hover:bg-blue-50 hover:text-blue-600" title="Dupliquer"><Copy className="w-4 h-4" /></button>
                         {f.statut !== 'payee' && <button type="button" onClick={() => marquerPayee(f)} className="p-2 rounded-lg text-gray-400 hover:bg-emerald-50 hover:text-emerald-600" title="Marquer payée"><CheckCircle className="w-4 h-4" /></button>}
                         <button type="button" onClick={() => setDeleteId(f.id)} className="p-2 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
                       </div>
