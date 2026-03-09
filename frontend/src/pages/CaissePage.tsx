@@ -272,9 +272,9 @@ export default function CaissePage() {
   }
 
   const handleSaveCell = () => {
-    if (!editingCell) return
+    if (!editingCell || !editingCellSlot) return
     const { day, memberName } = editingCell
-    const slot = editingCellSlot
+    const slot: TeamMemberSlots = editingCellSlot!
     const updatedDay: TeamMoneyDayEntry = {
       ...day,
       members: { ...day.members, [memberName]: slot },
