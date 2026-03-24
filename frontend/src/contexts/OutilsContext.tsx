@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import type { OutilMohamed, OutilAhmed } from '@/types'
-import { mockOutilsMohamed, mockOutilsAhmed } from '@/data/mock'
 
 const MOHAMED_KEY = 'elmecano-outils-mohamed'
 const AHMED_KEY = 'elmecano-outils-ahmed'
@@ -8,22 +7,22 @@ const AHMED_KEY = 'elmecano-outils-ahmed'
 function loadMohamed(): OutilMohamed[] {
   try {
     const raw = localStorage.getItem(MOHAMED_KEY)
-    if (!raw) return mockOutilsMohamed
+    if (!raw) return []
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : mockOutilsMohamed
+    return Array.isArray(parsed) ? parsed : []
   } catch {
-    return mockOutilsMohamed
+    return []
   }
 }
 
 function loadAhmed(): OutilAhmed[] {
   try {
     const raw = localStorage.getItem(AHMED_KEY)
-    if (!raw) return mockOutilsAhmed
+    if (!raw) return []
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : mockOutilsAhmed
+    return Array.isArray(parsed) ? parsed : []
   } catch {
-    return mockOutilsAhmed
+    return []
   }
 }
 

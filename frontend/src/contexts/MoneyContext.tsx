@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import type { MoneyIn, MoneyOut } from '@/types'
-import { mockMoneyIn, mockMoneyOut } from '@/data/mock'
 
 const IN_KEY = 'elmecano-money-in'
 const OUT_KEY = 'elmecano-money-out'
@@ -8,22 +7,22 @@ const OUT_KEY = 'elmecano-money-out'
 function loadIns(): MoneyIn[] {
   try {
     const raw = localStorage.getItem(IN_KEY)
-    if (!raw) return mockMoneyIn
+    if (!raw) return []
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : mockMoneyIn
+    return Array.isArray(parsed) ? parsed : []
   } catch {
-    return mockMoneyIn
+    return []
   }
 }
 
 function loadOuts(): MoneyOut[] {
   try {
     const raw = localStorage.getItem(OUT_KEY)
-    if (!raw) return mockMoneyOut
+    if (!raw) return []
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : mockMoneyOut
+    return Array.isArray(parsed) ? parsed : []
   } catch {
-    return mockMoneyOut
+    return []
   }
 }
 

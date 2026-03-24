@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from '@/contexts/AuthContext'
+import { UsersProvider } from '@/contexts/UsersContext'
 import { VehiculesProvider } from '@/contexts/VehiculesContext'
 import { TeamMembersProvider } from '@/contexts/TeamMembersContext'
 import { FournisseursProvider } from '@/contexts/FournisseursContext'
@@ -22,6 +23,7 @@ import { ToastProvider } from '@/contexts/ToastContext'
 import { NotificationsProvider } from '@/contexts/NotificationsContext'
 import AppLayout from '@/components/layout/AppLayout'
 import LoginPage from '@/pages/LoginPage'
+import RegisterPage from '@/pages/RegisterPage'
 import DashboardPage from '@/pages/DashboardPage'
 import VehiculesPage from '@/pages/VehiculesPage'
 import VehiculeDetailPage from '@/pages/VehiculeDetailPage'
@@ -44,6 +46,8 @@ import OutilsAhmedPage from '@/pages/OutilsAhmedPage'
 import AdminEspacePage from '@/pages/AdminEspacePage'
 import FacturationPage from '@/pages/FacturationPage'
 import AchatsPage from '@/pages/AchatsPage'
+import ChecklistsPage from '@/pages/ChecklistsPage'
+import ChecklistsHistoryPage from '@/pages/ChecklistsHistoryPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 
 export default function App() {
@@ -51,6 +55,7 @@ export default function App() {
     <BrowserRouter>
       <ToastProvider>
       <AuthProvider>
+      <UsersProvider>
       <NotificationsProvider>
         <VehiculesProvider>
           <TeamMembersProvider>
@@ -72,6 +77,7 @@ export default function App() {
               <AchatsProvider>
             <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
             <Route element={<AppLayout />}>
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/admin" element={<AdminEspacePage />} />
@@ -95,6 +101,8 @@ export default function App() {
               <Route path="/stock-general" element={<StockGeneralPage />} />
               <Route path="/outils/mohamed" element={<OutilsMohamedPage />} />
               <Route path="/outils/ahmed" element={<OutilsAhmedPage />} />
+              <Route path="/checklists" element={<ChecklistsPage />} />
+              <Route path="/checklists/history" element={<ChecklistsHistoryPage />} />
             </Route>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<NotFoundPage />} />
@@ -118,6 +126,7 @@ export default function App() {
           </TeamMembersProvider>
         </VehiculesProvider>
       </NotificationsProvider>
+      </UsersProvider>
       </AuthProvider>
       </ToastProvider>
     </BrowserRouter>

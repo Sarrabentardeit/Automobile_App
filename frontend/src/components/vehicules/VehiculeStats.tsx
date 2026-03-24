@@ -1,12 +1,19 @@
 import { ETAT_CONFIG, type EtatVehicule, type HistoriqueEtat } from '@/types'
-import { formatDuree } from '@/lib/utils'
+import { formatDuree, parseDateOnly } from '@/lib/utils'
 import Card from '@/components/ui/Card'
 import { Clock, ArrowRightLeft, Timer } from 'lucide-react'
 
 interface Props { historique: HistoriqueEtat[]; dateEntree: string }
 
 export default function VehiculeStats({ historique, dateEntree }: Props) {
-  const totalMinutes = Math.round((Date.now() - new Date(dateEntree).getTime()) / 60000)
+  const sorted = [...historique].sort(
+    (a, b) => new Date(a.date_changement).getTime() - new Date(b.date_changement).getTime()
+  )
+  const startTime =
+    sorted.length > 0
+      ? new Date(sorted[0].date_changement).getTime()
+      : parseDateOnly(dateEntree).getTime()
+  const totalMinutes = Math.max(0, Math.round((Date.now() - startTime) / 60000))
 
   const timeByEtat: Partial<Record<EtatVehicule, number>> = {}
   historique.forEach(h => {

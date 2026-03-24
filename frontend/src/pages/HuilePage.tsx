@@ -15,10 +15,11 @@ const TYPE_KEYS: HuileType[] = ['moteur', 'boite', 'liquide_refroidissement', 'h
 
 export default function HuilePage() {
   const { user } = useAuth()
-  const { products, addProduct, updateProduct } = useHuile()
+  const { products, loading, addProduct, updateProduct } = useHuile()
   const toast = useToast()
   const [filterType, setFilterType] = useState<HuileType | 'tous'>('tous')
   const [search, setSearch] = useState('')
+  const [showAlertsOnly, setShowAlertsOnly] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState<Omit<HuileProduct, 'id'>>({
@@ -28,10 +29,16 @@ export default function HuilePage() {
     quantite: 0,
     unite: 'L',
     seuilAlerte: undefined,
+    prix: undefined,
   })
+
+  function isAlert(p: HuileProduct) {
+    return p.seuilAlerte != null && p.quantite < p.seuilAlerte
+  }
 
   const filtered = useMemo(() => {
     let list = products
+    if (showAlertsOnly) list = list.filter(p => isAlert(p))
     if (filterType !== 'tous') list = list.filter(p => p.type === filterType)
     if (search.trim()) {
       const q = search.toLowerCase()
@@ -42,9 +49,9 @@ export default function HuilePage() {
       )
     }
     return list.sort((a, b) => a.designation.localeCompare(b.designation))
-  }, [products, filterType, search])
+  }, [products, filterType, search, showAlertsOnly])
 
-  const alertCount = useMemo(() => products.filter(p => p.seuilAlerte != null && p.quantite < p.seuilAlerte).length, [products])
+  const alertCount = useMemo(() => products.filter(p => isAlert(p)).length, [products])
 
   const openEdit = (p: HuileProduct) => {
     setForm({
@@ -54,6 +61,7 @@ export default function HuilePage() {
       quantite: p.quantite,
       unite: p.unite,
       seuilAlerte: p.seuilAlerte,
+      prix: p.prix,
     })
     setEditingId(p.id)
   }
@@ -66,28 +74,56 @@ export default function HuilePage() {
       quantite: 0,
       unite: 'L',
       seuilAlerte: undefined,
+      prix: undefined,
     })
     setEditingId(null)
     setShowAdd(true)
   }
 
-  const save = () => {
+  const save = async () => {
     if (!form.designation.trim()) return
-    const payload = { ...form, seuilAlerte: form.seuilAlerte ?? undefined }
-    if (editingId) {
-      updateProduct(editingId, payload)
-      toast.success('Produit huile modifié avec succès')
-      setEditingId(null)
-    } else {
-      addProduct(payload)
-      toast.success('Produit huile ajouté avec succès')
-      setShowAdd(false)
+    const payload = {
+      ...form,
+      seuilAlerte: form.seuilAlerte ?? undefined,
+      prix: form.prix === undefined || Number.isNaN(form.prix) ? undefined : form.prix,
+    }
+    try {
+      if (editingId) {
+        await updateProduct(editingId, payload)
+        toast.success('Produit huile modifié avec succès')
+        setEditingId(null)
+      } else {
+        await addProduct(payload)
+        toast.success('Produit huile ajouté avec succès')
+        setShowAdd(false)
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement')
     }
   }
 
-  const isAlert = (p: HuileProduct) => p.seuilAlerte != null && p.quantite < p.seuilAlerte
-
   if (!user) return null
+
+  if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto pb-12">
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900 tracking-tight flex items-center gap-2">
+              <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500 text-white">
+                <Droplets className="w-5 h-5" />
+              </span>
+              Huile
+            </h1>
+            <p className="text-sm text-gray-500 mt-1">Stock huiles et liquides</p>
+          </div>
+        </header>
+        <div className="flex items-center justify-center py-16">
+          <p className="text-gray-500 font-medium">Chargement des produits huile...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-4xl mx-auto pb-12">
@@ -103,10 +139,25 @@ export default function HuilePage() {
         </div>
         <div className="flex items-center gap-3">
           {alertCount > 0 && (
-            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-100 text-amber-800 text-sm font-medium">
+            <button
+              type="button"
+              onClick={() => {
+                setShowAlertsOnly(prev => !prev)
+                if (!showAlertsOnly) {
+                  setFilterType('tous')
+                  setSearch('')
+                }
+              }}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors',
+                showAlertsOnly
+                  ? 'bg-amber-500 text-white border-amber-600'
+                  : 'bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200'
+              )}
+            >
               <AlertTriangle className="w-4 h-4" />
-              {alertCount} alerte{alertCount > 1 ? 's' : ''}
-            </span>
+              {alertCount} alerte{alertCount > 1 ? 's' : ''}{showAlertsOnly ? ' · en cours' : ''}
+            </button>
           )}
           <Button onClick={openNew} icon={<Plus className="w-4 h-4" />}>
             Ajouter
@@ -193,6 +244,9 @@ export default function HuilePage() {
                       {p.seuilAlerte != null && (
                         <p className="text-xs text-gray-400">Seuil {p.seuilAlerte} {p.unite}</p>
                       )}
+                      {p.prix != null && (
+                        <p className="text-xs text-gray-600 mt-1">Prix: {p.prix.toFixed(2)} DT / {p.unite}</p>
+                      )}
                     </div>
                     <button
                       type="button"
@@ -258,6 +312,20 @@ export default function HuilePage() {
               placeholder="L, bidon, unité"
             />
           </div>
+          <Input
+            label="Prix (optionnel)"
+            type="number"
+            min={0}
+            step={0.1}
+            placeholder="Prix par unité (DT)"
+            value={form.prix ?? ''}
+            onChange={e =>
+              setForm(prev => ({
+                ...prev,
+                prix: e.target.value === '' ? undefined : Number(e.target.value) || 0,
+              }))
+            }
+          />
           <Input
             label="Seuil alerte (optionnel)"
             type="number"

@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
-import { mockUsers } from '@/data/mock'
+import { useUsers } from '@/contexts/UsersContext'
+import { useToast } from '@/contexts/ToastContext'
 import { ALL_TOGGLE_KEYS, TOGGLE_PERMISSION_LABELS, VISIBILITY_OPTIONS, ROLE_PRESETS, ROLE_CONFIG, ALL_ROLES,
   type User, type Permissions, type TogglePermissionKey, type VehiculeVisibility, type Role } from '@/types'
 import Card from '@/components/ui/Card'
@@ -25,12 +26,14 @@ function isCustomized(role: Role, perms: Permissions): boolean {
 const TOTAL_PERMS = ALL_TOGGLE_KEYS.length + 1
 
 export default function UtilisateursPage() {
-  const [users, setUsers] = useState<User[]>(mockUsers)
+  const { users, loading, error, createUser, updateUser } = useUsers()
+  const toast = useToast()
   const [filtreRole, setFiltreRole] = useState<Role | 'tous'>('tous')
   const [recherche, setRecherche] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [showPermsView, setShowPermsView] = useState<User | null>(null)
   const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
   const [formData, setFormData] = useState({
     nom_complet: '', email: '', telephone: '', password: '',
@@ -97,32 +100,53 @@ export default function UtilisateursPage() {
     }))
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (editingUser) {
-      setUsers(prev => prev.map(u => u.id === editingUser.id
-        ? { ...u, nom_complet: formData.nom_complet, email: formData.email, telephone: formData.telephone, role: formData.role, permissions: { ...formData.permissions } }
-        : u
-      ))
-    } else {
-      const newUser: User = {
-        id: Math.max(...users.map(u => u.id)) + 1,
-        nom_complet: formData.nom_complet,
-        email: formData.email,
-        telephone: formData.telephone,
-        role: formData.role,
-        permissions: { ...formData.permissions },
-        statut: 'actif',
-        date_creation: new Date().toISOString().split('T')[0],
-        derniere_connexion: null,
+    setSubmitting(true)
+    try {
+      if (editingUser) {
+        await updateUser(editingUser.id, {
+          nom_complet: formData.nom_complet,
+          telephone: formData.telephone,
+          role: formData.role,
+          permissions: formData.permissions,
+          ...(formData.password && formData.password.length >= 6 ? { password: formData.password } : {}),
+        })
+        toast.success('Compte mis à jour')
+      } else {
+        if (!formData.password || formData.password.length < 6) {
+          toast.error('Le mot de passe doit contenir au moins 6 caractères')
+          setSubmitting(false)
+          return
+        }
+        await createUser({
+          nom_complet: formData.nom_complet,
+          email: formData.email,
+          telephone: formData.telephone,
+          password: formData.password,
+          role: formData.role,
+          permissions: formData.permissions,
+        })
+        toast.success('Compte créé')
       }
-      setUsers(prev => [...prev, newUser])
+      setShowForm(false)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur')
+    } finally {
+      setSubmitting(false)
     }
-    setShowForm(false)
   }
 
-  const toggleStatut = (userId: number) => {
-    setUsers(prev => prev.map(u => u.id === userId ? { ...u, statut: u.statut === 'actif' ? 'inactif' : 'actif' } : u))
+  const toggleStatut = async (userId: number) => {
+    const u = users.find(x => x.id === userId)
+    if (!u) return
+    const newStatut = u.statut === 'actif' ? 'inactif' : 'actif'
+    try {
+      await updateUser(userId, { statut: newStatut })
+      toast.success(newStatut === 'actif' ? 'Compte réactivé' : 'Compte désactivé')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur')
+    }
   }
 
   const hasCustom = isCustomized(formData.role, formData.permissions)
@@ -133,7 +157,9 @@ export default function UtilisateursPage() {
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Utilisateurs</h1>
-          <p className="text-gray-500 text-xs sm:text-sm mt-0.5">{users.filter(u => u.statut === 'actif').length} membres actifs</p>
+          <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
+            {loading ? 'Chargement...' : error ? error : `${users.filter(u => u.statut === 'actif').length} membres actifs`}
+          </p>
         </div>
         <Button onClick={openCreate} icon={<UserPlus className="w-4 h-4" />} className="text-xs sm:text-sm flex-shrink-0">
           <span className="hidden sm:inline">Nouveau compte</span>
@@ -335,13 +361,17 @@ export default function UtilisateursPage() {
             <Input id="nom" label="Nom complet" required value={formData.nom_complet}
               onChange={e => setFormData(p => ({ ...p, nom_complet: e.target.value }))} placeholder="Nom et prénom" />
             <Input id="email" label="Email" type="email" required value={formData.email}
-              onChange={e => setFormData(p => ({ ...p, email: e.target.value }))} placeholder="exemple@elmecano.tn" />
+              onChange={e => setFormData(p => ({ ...p, email: e.target.value }))} placeholder="exemple@elmecano.tn"
+              disabled={!!editingUser} />
           </div>
           <Input id="tel" label="Téléphone" value={formData.telephone}
             onChange={e => setFormData(p => ({ ...p, telephone: e.target.value }))} placeholder="Ex: 22130470" />
-          {!editingUser && (
+          {!editingUser ? (
             <Input id="pw" label="Mot de passe" type="password" required value={formData.password}
-              onChange={e => setFormData(p => ({ ...p, password: e.target.value }))} placeholder="Minimum 8 caractères" />
+              onChange={e => setFormData(p => ({ ...p, password: e.target.value }))} placeholder="Minimum 6 caractères" />
+          ) : (
+            <Input id="pw-edit" label="Nouveau mot de passe" type="password" value={formData.password}
+              onChange={e => setFormData(p => ({ ...p, password: e.target.value }))} placeholder="Laisser vide pour ne pas changer" />
           )}
 
           {/* Role selector */}
@@ -444,8 +474,8 @@ export default function UtilisateursPage() {
           </div>
 
           <div className="flex gap-2 sm:gap-3 pt-3 border-t border-gray-100 sticky bottom-0 bg-white">
-            <Button type="button" variant="outline" onClick={() => setShowForm(false)} className="flex-1 text-xs sm:text-sm">Annuler</Button>
-            <Button type="submit" className="flex-1 text-xs sm:text-sm">{editingUser ? 'Enregistrer' : 'Créer le compte'}</Button>
+            <Button type="button" variant="outline" onClick={() => setShowForm(false)} disabled={submitting} className="flex-1 text-xs sm:text-sm">Annuler</Button>
+            <Button type="submit" disabled={submitting} className="flex-1 text-xs sm:text-sm">{submitting ? 'En cours...' : editingUser ? 'Enregistrer' : 'Créer le compte'}</Button>
           </div>
         </form>
       </Modal>

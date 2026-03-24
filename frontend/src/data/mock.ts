@@ -400,15 +400,15 @@ export const mockPrixMainOeuvre: PrixMainOeuvreItem[] = [
 
 // ==================== HUILE (STOCK) ====================
 export const mockHuileProducts: HuileProduct[] = [
-  { id: 1, designation: '5W30 Synthétique', reference: 'MOT-5W30', type: 'moteur', quantite: 24, unite: 'L', seuilAlerte: 10 },
-  { id: 2, designation: '10W40 Semi-synthétique', reference: 'MOT-10W40', type: 'moteur', quantite: 48, unite: 'L', seuilAlerte: 20 },
-  { id: 3, designation: '15W40 Mineral', reference: 'MOT-15W40', type: 'moteur', quantite: 8, unite: 'L', seuilAlerte: 10 },
-  { id: 4, designation: 'Huile boîte manuelle 75W90', reference: 'BOX-75W90', type: 'boite', quantite: 12, unite: 'L', seuilAlerte: 5 },
-  { id: 5, designation: 'Huile boîte auto ATF', reference: 'BOX-ATF', type: 'boite', quantite: 6, unite: 'L', seuilAlerte: 3 },
-  { id: 6, designation: 'Liquide refroidissement vert', reference: 'REF-VERT', type: 'liquide_refroidissement', quantite: 20, unite: 'L', seuilAlerte: 5 },
-  { id: 7, designation: 'Liquide refroidissement rose', reference: 'REF-ROSE', type: 'liquide_refroidissement', quantite: 15, unite: 'L', seuilAlerte: 5 },
-  { id: 8, designation: 'Huile hydraulique direction', reference: 'HYD-DIR', type: 'hydraulique', quantite: 4, unite: 'L', seuilAlerte: 2 },
-  { id: 9, designation: 'Dégrippant / Nettoyant freins', reference: 'AUT-DEG', type: 'autre', quantite: 12, unite: 'unité', seuilAlerte: 3 },
+  { id: 1, designation: '5W30 Synthétique', reference: 'MOT-5W30', type: 'moteur', quantite: 24, unite: 'L', seuilAlerte: 10, prix: 35 },
+  { id: 2, designation: '10W40 Semi-synthétique', reference: 'MOT-10W40', type: 'moteur', quantite: 48, unite: 'L', seuilAlerte: 20, prix: 28 },
+  { id: 3, designation: '15W40 Mineral', reference: 'MOT-15W40', type: 'moteur', quantite: 8, unite: 'L', seuilAlerte: 10, prix: 22 },
+  { id: 4, designation: 'Huile boîte manuelle 75W90', reference: 'BOX-75W90', type: 'boite', quantite: 12, unite: 'L', seuilAlerte: 5, prix: 40 },
+  { id: 5, designation: 'Huile boîte auto ATF', reference: 'BOX-ATF', type: 'boite', quantite: 6, unite: 'L', seuilAlerte: 3, prix: 38 },
+  { id: 6, designation: 'Liquide refroidissement vert', reference: 'REF-VERT', type: 'liquide_refroidissement', quantite: 20, unite: 'L', seuilAlerte: 5, prix: 12 },
+  { id: 7, designation: 'Liquide refroidissement rose', reference: 'REF-ROSE', type: 'liquide_refroidissement', quantite: 15, unite: 'L', seuilAlerte: 5, prix: 14 },
+  { id: 8, designation: 'Huile hydraulique direction', reference: 'HYD-DIR', type: 'hydraulique', quantite: 4, unite: 'L', seuilAlerte: 2, prix: 30 },
+  { id: 9, designation: 'Dégrippant / Nettoyant freins', reference: 'AUT-DEG', type: 'autre', quantite: 12, unite: 'unité', seuilAlerte: 3, prix: 8 },
 ]
 
 // ==================== CLIENTS ====================

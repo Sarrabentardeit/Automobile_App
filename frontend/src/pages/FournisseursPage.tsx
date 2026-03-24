@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
 
 export default function FournisseursPage() {
   const { user } = useAuth()
-  const { fournisseurs, addFournisseur, updateFournisseur, removeFournisseur } = useFournisseurs()
+  const { fournisseurs, loading, addFournisseur, updateFournisseur, removeFournisseur } = useFournisseurs()
   const toast = useToast()
   const [search, setSearch] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -59,28 +59,45 @@ export default function FournisseursPage() {
     setShowAdd(true)
   }
 
-  const save = () => {
+  const save = async () => {
     if (!form.nom.trim() || !form.telephone.trim()) return
-    if (editingId) {
-      updateFournisseur(editingId, { ...form, email: form.email || undefined, adresse: form.adresse || undefined, contact: form.contact || undefined, notes: form.notes || undefined })
-      toast.success('Fournisseur modifié avec succès')
-      setEditingId(null)
-    } else {
-      addFournisseur({ ...form, email: form.email || undefined, adresse: form.adresse || undefined, contact: form.contact || undefined, notes: form.notes || undefined })
-      toast.success('Fournisseur ajouté avec succès')
-      setShowAdd(false)
+    const payload = { ...form, email: form.email || undefined, adresse: form.adresse || undefined, contact: form.contact || undefined, notes: form.notes || undefined }
+    try {
+      if (editingId) {
+        await updateFournisseur(editingId, payload)
+        toast.success('Fournisseur modifié avec succès')
+        setEditingId(null)
+      } else {
+        await addFournisseur(payload)
+        toast.success('Fournisseur ajouté avec succès')
+        setShowAdd(false)
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement')
     }
   }
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (deleteId !== null) {
-      removeFournisseur(deleteId)
-      toast.success('Fournisseur supprimé')
-      setDeleteId(null)
+      const ok = await removeFournisseur(deleteId)
+      if (ok) {
+        toast.success('Fournisseur supprimé')
+        setDeleteId(null)
+      } else {
+        toast.error('Erreur lors de la suppression')
+      }
     }
   }
 
   if (!user) return null
+
+  if (loading) {
+    return (
+      <div className="max-w-5xl mx-auto pb-12 flex items-center justify-center py-16">
+        <p className="text-gray-500 font-medium">Chargement des fournisseurs...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-5xl mx-auto pb-12">

@@ -19,7 +19,7 @@ function formatMontant(n: number): string {
 
 export default function StockGeneralPage() {
   const { user } = useAuth()
-  const { produits, mouvementsStock, addProduit, updateProduit, removeProduit } = useStockGeneral()
+  const { produits, mouvementsStock, loading, addProduit, updateProduit, removeProduit } = useStockGeneral()
   const { factures } = useFacturation()
   const toast = useToast()
   const [search, setSearch] = useState('')
@@ -66,6 +66,8 @@ export default function StockGeneralPage() {
     produits.filter(p => (p.quantite ?? 0) > 0 && (p.quantite ?? 0) <= SEUIL_STOCK_FAIBLE).sort((a, b) => (a.quantite ?? 0) - (b.quantite ?? 0)),
   [produits, SEUIL_STOCK_FAIBLE])
 
+  const stockEpuise = useMemo(() => produits.filter(p => (p.quantite ?? 0) === 0), [produits])
+
   const produitsPlusVendus = useMemo(() => {
     const map = new Map<number, { nom: string; qte: number }>()
     for (const f of factures ?? []) {
@@ -102,27 +104,43 @@ export default function StockGeneralPage() {
     setShowFormProduit(true)
   }
 
-  const saveProduit = () => {
+  const saveProduit = async () => {
     if (!formProduit.nom.trim()) return
-    if (editingProduitId) {
-      updateProduit(editingProduitId, formProduit)
-      toast.success('Produit modifié')
-    } else {
-      addProduit(formProduit)
-      toast.success('Produit ajouté')
+    try {
+      if (editingProduitId) {
+        await updateProduit(editingProduitId, formProduit)
+        toast.success('Produit modifié')
+      } else {
+        await addProduit(formProduit)
+        toast.success('Produit ajouté')
+      }
+      setShowFormProduit(false)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur')
     }
-    setShowFormProduit(false)
   }
 
-  const confirmDeleteProduit = () => {
+  const confirmDeleteProduit = async () => {
     if (deleteProduitId !== null) {
-      removeProduit(deleteProduitId)
-      toast.success('Produit supprimé')
-      setDeleteProduitId(null)
+      try {
+        await removeProduit(deleteProduitId)
+        toast.success('Produit supprimé')
+        setDeleteProduitId(null)
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Erreur')
+      }
     }
   }
 
   if (!user) return null
+
+  if (loading) {
+    return (
+      <div className="max-w-5xl mx-auto pb-10 px-3 sm:px-4 flex items-center justify-center min-h-[200px]">
+        <p className="text-gray-500 font-medium">Chargement du stock...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-5xl mx-auto pb-10 px-3 sm:px-4">
@@ -148,6 +166,34 @@ export default function StockGeneralPage() {
           </Button>
         </div>
       </header>
+
+      {/* Alerte Stock épuisé */}
+      {stockEpuise.length > 0 && (
+        <Card padding="sm" className="mb-4 border-red-200 bg-red-50">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center shrink-0">
+              <AlertCircle className="w-5 h-5 text-red-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-red-800">Stock épuisé ({stockEpuise.length})</h3>
+              <p className="text-sm text-red-700/90 mt-0.5">Produits en rupture — à réapprovisionner en priorité</p>
+              <div className="flex flex-wrap gap-2 mt-3">
+                {stockEpuise.map(p => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => openEditProduit(p)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-red-200 text-sm font-medium text-red-800 hover:bg-red-100 transition-colors"
+                  >
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    {p.nom}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Alerte À commander */}
       {aCommander.length > 0 && (
@@ -255,26 +301,32 @@ export default function StockGeneralPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredProduits.map(p => (
+                  filteredProduits.map(p => {
+                    const qte = p.quantite ?? 0
+                    const isEpuise = qte === 0
+                    const isFaible = qte > 0 && qte <= SEUIL_STOCK_FAIBLE
+                    return (
                     <tr
                       key={p.id}
                       onClick={() => openEditProduit(p)}
-                      className="border-b border-gray-50 hover:bg-amber-50/30 cursor-pointer transition-colors"
+                      className={cn(
+                        'border-b border-gray-50 cursor-pointer transition-colors',
+                        isEpuise ? 'bg-red-50/80 hover:bg-red-100/80 border-l-4 border-l-red-500' : 'hover:bg-amber-50/30'
+                      )}
                     >
-                      <td className="px-4 py-3 font-medium text-gray-900">{p.nom}</td>
-                      <td className="px-4 py-3 text-gray-500 text-xs hidden sm:table-cell">{p.categorie || '—'}</td>
+                      <td className={cn('px-4 py-3 font-medium', isEpuise ? 'text-red-900' : 'text-gray-900')}>{p.nom}</td>
+                      <td className={cn('px-4 py-3 text-xs hidden sm:table-cell', isEpuise ? 'text-red-700/80' : 'text-gray-500')}>{p.categorie || '—'}</td>
                       <td className="px-4 py-3 text-right">
                         <span className={cn(
                           'tabular-nums inline-flex items-center gap-1',
-                          (p.quantite ?? 0) <= SEUIL_STOCK_FAIBLE && (p.quantite ?? 0) > 0
-                            ? 'text-amber-600 font-semibold'
-                            : 'text-gray-700'
+                          isEpuise ? 'text-red-600 font-bold' : isFaible ? 'text-amber-600 font-semibold' : 'text-gray-700'
                         )}>
-                          {(p.quantite ?? 0) <= SEUIL_STOCK_FAIBLE && (p.quantite ?? 0) > 0 && <AlertTriangle className="w-4 h-4 shrink-0" />}
+                          {isEpuise && <AlertCircle className="w-4 h-4 shrink-0" />}
+                          {isFaible && !isEpuise && <AlertTriangle className="w-4 h-4 shrink-0" />}
                           {p.quantite}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right font-medium tabular-nums text-amber-700">{formatMontant(p.valeurAchatTTC)}</td>
+                      <td className={cn('px-4 py-3 text-right font-medium tabular-nums', isEpuise ? 'text-red-600' : 'text-amber-700')}>{formatMontant(p.valeurAchatTTC)}</td>
                       <td className="px-2 py-3">
                         <div className="flex items-center gap-0.5">
                           <button onClick={e => openEditProduit(p, e)} className="p-2 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-amber-600" title="Modifier"><Pencil className="w-4 h-4" /></button>
@@ -288,7 +340,7 @@ export default function StockGeneralPage() {
                         </div>
                       </td>
                     </tr>
-                  ))
+                  )})
                 )}
               </tbody>
             </table>

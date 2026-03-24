@@ -75,6 +75,13 @@
   from { transform: translateY(100%); }
   to { transform: translateY(0); }
 }
+@keyframes slide-in-from-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.slide-in-from-right {
+  animation: slide-in-from-right 250ms ease-out;
+}
 .animate-in {
   animation: fade-in 200ms ease-out, zoom-in-95 200ms ease-out;
 }

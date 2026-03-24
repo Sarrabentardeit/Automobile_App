@@ -14,7 +14,7 @@ const CATEGORIES = ['Fournisseur', 'Assurance', 'Dépannage', 'Prestataire', 'Cl
 
 export default function ContactsImportantsPage() {
   const { user } = useAuth()
-  const { contacts, addContact, updateContact, removeContact } = useContactsImportants()
+  const { contacts, loading, addContact, updateContact, removeContact } = useContactsImportants()
   const toast = useToast()
   const [search, setSearch] = useState('')
   const [filterCat, setFilterCat] = useState<string>('')
@@ -59,29 +59,45 @@ export default function ContactsImportantsPage() {
     setShowAdd(true)
   }
 
-  const save = () => {
+  const save = async () => {
     if (!form.nom.trim() || !form.numero.trim()) return
     const payload = { ...form, categorie: form.categorie || undefined, notes: form.notes || undefined }
-    if (editingId) {
-      updateContact(editingId, payload)
-      toast.success('Contact modifié avec succès')
-      setEditingId(null)
-    } else {
-      addContact(payload)
-      toast.success('Contact ajouté avec succès')
-      setShowAdd(false)
+    try {
+      if (editingId) {
+        await updateContact(editingId, payload)
+        toast.success('Contact modifié avec succès')
+        setEditingId(null)
+      } else {
+        await addContact(payload)
+        toast.success('Contact ajouté avec succès')
+        setShowAdd(false)
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement')
     }
   }
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (deleteId !== null) {
-      removeContact(deleteId)
-      toast.success('Contact supprimé')
-      setDeleteId(null)
+      const ok = await removeContact(deleteId)
+      if (ok) {
+        toast.success('Contact supprimé')
+        setDeleteId(null)
+      } else {
+        toast.error('Erreur lors de la suppression')
+      }
     }
   }
 
   if (!user) return null
+
+  if (loading) {
+    return (
+      <div className="max-w-5xl mx-auto pb-12 flex flex-col items-center justify-center py-16">
+        <p className="text-gray-500 font-medium">Chargement des contacts...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-5xl mx-auto pb-12">

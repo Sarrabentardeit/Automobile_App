@@ -28,21 +28,29 @@ export default function EquipeMembresPage() {
     )
   }
 
-  const handleAdd = (e: React.FormEvent) => {
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
-    addMember(newName, newPhone)
-    toast.success('Membre ajouté avec succès')
-    setNewName('')
-    setNewPhone('')
+    try {
+      await addMember(newName, newPhone)
+      toast.success('Membre ajouté avec succès')
+      setNewName('')
+      setNewPhone('')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'ajout')
+    }
   }
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (editingIndex === null) return
-    updateMember(editingIndex, { name: editingName, phone: editingPhone })
-    toast.success('Membre modifié avec succès')
-    setEditingIndex(null)
-    setEditingName('')
-    setEditingPhone('')
+    try {
+      await updateMember(editingIndex, { name: editingName, phone: editingPhone })
+      toast.success('Membre modifié avec succès')
+      setEditingIndex(null)
+      setEditingName('')
+      setEditingPhone('')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la mise à jour')
+    }
   }
 
   const openEdit = (index: number) => {
@@ -51,11 +59,14 @@ export default function EquipeMembresPage() {
     setEditingPhone(members[index].phone ?? '')
   }
 
-  const handleConfirmDelete = () => {
-    if (deleteIndex !== null) {
-      removeMember(deleteIndex)
+  const handleConfirmDelete = async () => {
+    if (deleteIndex === null) return
+    try {
+      await removeMember(deleteIndex)
       toast.success('Membre supprimé')
       setDeleteIndex(null)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la suppression')
     }
   }
 

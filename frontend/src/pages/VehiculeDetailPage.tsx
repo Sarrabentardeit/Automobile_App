@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useVehiculesContext } from '@/contexts/VehiculesContext'
+import { useUsers } from '@/contexts/UsersContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useNotifications } from '@/contexts/NotificationsContext'
-import { mockUsers } from '@/data/mock'
 import { ETAT_CONFIG } from '@/types'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -13,24 +13,62 @@ import VehiculeTimeline from '@/components/vehicules/VehiculeTimeline'
 import VehiculeStats from '@/components/vehicules/VehiculeStats'
 import ChangeEtatModal from '@/components/vehicules/ChangeEtatModal'
 import VehiculeForm from '@/components/vehicules/VehiculeForm'
-import { ArrowLeft, ArrowRightLeft, Pencil, Phone, Calendar, User, Clock, Car, Bike } from 'lucide-react'
-import { daysSince, getUserDisplayName, formatDuree } from '@/lib/utils'
+import { ArrowLeft, ArrowRightLeft, Pencil, Phone, Calendar, User, Clock, Car, Bike, Image as ImageIcon, Trash2 } from 'lucide-react'
+import { daysSince, getUserDisplayName, formatDuree, formatDate } from '@/lib/utils'
 
 export default function VehiculeDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { user, permissions } = useAuth()
-  const { getVehicule, getHistorique, changeEtat, editVehicule } = useVehiculesContext()
+  const { user, permissions, getAccessToken } = useAuth()
+  const { users } = useUsers()
+  const {
+    getVehicule,
+    getHistorique,
+    changeEtat,
+    editVehicule,
+    fetchVehiculeById,
+    fetchVehiculeImages,
+    getVehiculeImages,
+    uploadVehiculeImage,
+    deleteVehiculeImage,
+  } = useVehiculesContext()
   const toast = useToast()
   const { addNotification } = useNotifications()
 
   const [showChangeEtat, setShowChangeEtat] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
+  const [loadingDetail, setLoadingDetail] = useState(false)
 
-  const vehicule = getVehicule(Number(id))
-  const historique = getHistorique(Number(id))
+  const vehiculeId = Number(id)
+  let vehicule = getVehicule(vehiculeId)
+  const historique = getHistorique(vehiculeId)
+  const vehiculeImages = getVehiculeImages(vehiculeId)
+  const accessToken = getAccessToken()
 
-  if (!vehicule || !user || !permissions) {
+  useEffect(() => {
+    if (isNaN(vehiculeId)) return
+    if (!vehicule && fetchVehiculeById) {
+      setLoadingDetail(true)
+      fetchVehiculeById(vehiculeId).then(() => setLoadingDetail(false))
+    }
+  }, [vehiculeId, vehicule, fetchVehiculeById])
+
+  useEffect(() => {
+    if (isNaN(vehiculeId)) return
+    void fetchVehiculeImages(vehiculeId)
+  }, [vehiculeId, fetchVehiculeImages])
+
+  vehicule = getVehicule(vehiculeId)
+
+  if (!user || !permissions) return null
+  if (loadingDetail) {
+    return (
+      <div className="text-center py-16">
+        <p className="text-gray-500 font-medium">Chargement...</p>
+      </div>
+    )
+  }
+  if (!vehicule) {
     return (
       <div className="text-center py-16">
         <p className="text-gray-500 font-medium">Véhicule non trouvé</p>
@@ -41,8 +79,8 @@ export default function VehiculeDetailPage() {
 
   const cfg = ETAT_CONFIG[vehicule.etat_actuel]
   const jours = daysSince(vehicule.date_entree)
-  const techName = getUserDisplayName(vehicule.technicien_id, mockUsers)
-  const respName = getUserDisplayName(vehicule.responsable_id, mockUsers)
+  const techName = getUserDisplayName(vehicule.technicien_id, users)
+  const respName = getUserDisplayName(vehicule.responsable_id, users)
 
   const canChangeEtat = permissions.canChangeEtat && vehicule.etat_actuel !== 'vert'
     && (permissions.vehiculeVisibility === 'all' || vehicule.technicien_id === user.id)
@@ -107,7 +145,7 @@ export default function VehiculeDetailPage() {
           </div>
           <div>
             <p className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 flex items-center gap-1"><Calendar className="w-3 h-3" />Date entrée</p>
-            <p className="text-xs sm:text-sm font-semibold text-gray-800">{vehicule.date_entree}</p>
+            <p className="text-xs sm:text-sm font-semibold text-gray-800">{formatDate(vehicule.date_entree)}</p>
           </div>
         </div>
 
@@ -141,26 +179,91 @@ export default function VehiculeDetailPage() {
         </div>
       </div>
 
+      <div>
+        <h2 className="text-sm sm:text-base font-bold text-gray-900 mb-2 sm:mb-3 flex items-center gap-2">
+          <ImageIcon className="w-4 h-4 text-orange-500" />
+          Photos du véhicule
+        </h2>
+        <Card padding="sm">
+          {vehiculeImages.length === 0 ? (
+            <p className="text-sm text-gray-500">Aucune photo enregistrée pour ce véhicule.</p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+              {vehiculeImages.map(img => (
+                <div key={img.id} className="rounded-lg border border-gray-100 overflow-hidden bg-white">
+                  <img
+                    src={`${import.meta.env.VITE_API_URL ?? 'http://localhost:4000'}${img.url_path}${accessToken ? `?accessToken=${encodeURIComponent(accessToken)}` : ''}`}
+                    alt={img.note || img.original_name || `Photo ${img.id}`}
+                    className="w-full h-28 object-cover"
+                  />
+                  <div className="p-2 space-y-1">
+                    <p className="text-[11px] text-gray-700 truncate" title={img.note || img.original_name}>
+                      {img.note || img.original_name || 'Photo véhicule'}
+                    </p>
+                    <p className="text-[10px] text-gray-400">{new Date(img.created_at).toLocaleDateString('fr-FR')}</p>
+                    {permissions.canEditVehicule && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const ok = await deleteVehiculeImage(vehiculeId, img.id)
+                          if (ok) toast.success('Photo supprimée')
+                          else toast.error('Suppression impossible')
+                        }}
+                        className="inline-flex items-center gap-1 text-[10px] text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        Supprimer
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+
       {/* Modals */}
       {showChangeEtat && (
         <ChangeEtatModal vehicule={vehicule}
           onClose={() => setShowChangeEtat(false)}
-          onConfirm={(etat, comm, pcs) => {
-            changeEtat(vehicule.id, etat, user.id, user.nom_complet, comm, pcs)
-            toast.success('État mis à jour avec succès')
-            setShowChangeEtat(false)
+          onConfirm={async (etat, comm, pcs) => {
+            const ok = await changeEtat(vehicule.id, etat, user.id, user.nom_complet, comm, pcs)
+            if (ok) {
+              toast.success('État mis à jour avec succès')
+              setShowChangeEtat(false)
+            } else {
+              toast.error('Transition non autorisée')
+            }
           }}
         />
       )}
       {showEdit && (
         <VehiculeForm vehicule={vehicule}
           onClose={() => setShowEdit(false)}
-          onSubmit={(data) => {
-            editVehicule(vehicule.id, data)
-            const techId = data.technicien_id
-            if (techId) addNotification(techId, `Vous avez été assigné au véhicule ${data.modele ?? vehicule.modele} ${(data.immatriculation ?? vehicule.immatriculation) ? `(${data.immatriculation ?? vehicule.immatriculation})` : ''} - ${data.defaut ?? vehicule.defaut}`)
-            toast.success('Véhicule modifié avec succès')
-            setShowEdit(false)
+          onSubmit={async (data, images) => {
+            try {
+              await editVehicule(vehicule.id, data)
+              if (images.length > 0) {
+                let failed = 0
+                for (const image of images) {
+                  try {
+                    await uploadVehiculeImage(vehicule.id, image)
+                  } catch {
+                    failed += 1
+                  }
+                }
+                await fetchVehiculeImages(vehicule.id)
+                if (failed > 0) toast.error(`${failed} photo(s) n'ont pas pu être envoyées.`)
+                else toast.success(`${images.length} photo(s) ajoutée(s).`)
+              }
+              const techId = data.technicien_id
+              if (techId) addNotification(techId, `Vous avez été assigné au véhicule ${data.modele ?? vehicule.modele} ${(data.immatriculation ?? vehicule.immatriculation) ? `(${data.immatriculation ?? vehicule.immatriculation})` : ''} - ${data.defaut ?? vehicule.defaut}`)
+              toast.success('Véhicule modifié avec succès')
+              setShowEdit(false)
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : 'Erreur')
+            }
           }}
         />
       )}

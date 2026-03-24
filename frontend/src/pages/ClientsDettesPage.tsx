@@ -15,7 +15,7 @@ function formatMontant(n: number): string {
 
 export default function ClientsDettesPage() {
   const { user } = useAuth()
-  const { clients, addClient, updateClient } = useClientsDettes()
+  const { clients, loading, addClient, updateClient } = useClientsDettes()
   const toast = useToast()
   const [search, setSearch] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -66,21 +66,46 @@ export default function ClientsDettesPage() {
     setShowAdd(true)
   }
 
-  const save = () => {
+  const save = async () => {
     if (!form.clientName.trim()) return
     const payload = { ...form, notes: form.notes || undefined }
-    if (editingId) {
-      updateClient(editingId, payload)
-      toast.success('Client avec dette modifié avec succès')
-      setEditingId(null)
-    } else {
-      addClient(payload)
-      toast.success('Client avec dette ajouté avec succès')
-      setShowAdd(false)
+    try {
+      if (editingId) {
+        await updateClient(editingId, payload)
+        toast.success('Client avec dette modifié avec succès')
+        setEditingId(null)
+      } else {
+        await addClient(payload)
+        toast.success('Client avec dette ajouté avec succès')
+        setShowAdd(false)
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement')
     }
   }
 
   if (!user) return null
+
+  if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto pb-12">
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900 tracking-tight flex items-center gap-2">
+              <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500 text-white">
+                <CreditCard className="w-5 h-5" />
+              </span>
+              Clients avec Dettes
+            </h1>
+            <p className="text-sm text-gray-500 mt-1">Suivi des créances clients</p>
+          </div>
+        </header>
+        <div className="flex items-center justify-center py-16">
+          <p className="text-gray-500 font-medium">Chargement des clients avec dettes...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-4xl mx-auto pb-12">

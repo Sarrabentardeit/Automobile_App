@@ -2,13 +2,12 @@ import { useState, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useNotifications } from '@/contexts/NotificationsContext'
 import { useToast } from '@/contexts/ToastContext'
-import { useTeamMembers } from '@/contexts/TeamMembersContext'
 import { useVehiculesContext } from '@/contexts/VehiculesContext'
 import type { CalendarAssignment } from '@/types'
 import { useCalendar } from '@/contexts/CalendarContext'
 import { useClients } from '@/contexts/ClientsContext'
-import { mockUsers } from '@/data/mock'
-import { formatDate, findUserIdByName } from '@/lib/utils'
+import { useUsers } from '@/contexts/UsersContext'
+import { formatDate } from '@/lib/utils'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
@@ -78,16 +77,17 @@ function getCalendarGrid(year: number, month: number): DayCell[] {
 
 export default function CalendarPage() {
   const { user } = useAuth()
-  const { members } = useTeamMembers()
+  const { users } = useUsers()
   const { vehicules } = useVehiculesContext()
   const today = new Date()
   const [viewDate, setViewDate] = useState({ year: today.getFullYear(), month: today.getMonth() + 1 })
-  const { assignments, addAssignment, removeAssignment } = useCalendar()
+  const { assignments, addAssignment, updateAssignment, removeAssignment } = useCalendar()
   const { addNotification } = useNotifications()
   const { clients, addClient } = useClients()
   const toast = useToast()
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
   const [newAssign, setNewAssign] = useState({
     date: '',
     memberName: '',
@@ -96,9 +96,16 @@ export default function CalendarPage() {
     description: '',
     clientName: '',
     clientTelephone: '',
+    members: [] as string[],
   })
 
-  const memberNames = useMemo(() => members.map(m => m.name), [members])
+  const memberNames = useMemo(
+    () =>
+      users
+        .filter(u => u.statut === 'actif' && (u.role === 'technicien' || u.role === 'responsable'))
+        .map(u => u.nom_complet),
+    [users]
+  )
   const grid = useMemo(() => getCalendarGrid(viewDate.year, viewDate.month), [viewDate.year, viewDate.month])
   const title = `${MONTH_NAMES[viewDate.month - 1]} ${viewDate.year}`
 
@@ -137,6 +144,7 @@ export default function CalendarPage() {
 
   const openAddForDate = (date: string) => {
     setSelectedDate(date)
+    setEditingId(null)
     setNewAssign({
       date,
       memberName: memberNames[0] ?? '',
@@ -145,11 +153,28 @@ export default function CalendarPage() {
       description: '',
       clientName: '',
       clientTelephone: '',
+      members: [],
     })
     setShowAddModal(true)
   }
 
-  const handleAddAssignment = () => {
+  const openEditAssignment = (a: CalendarAssignment) => {
+    setSelectedDate(a.date)
+    setEditingId(a.id)
+    setNewAssign({
+      date: a.date,
+      memberName: a.memberName,
+      vehicleId: a.vehicleId,
+      vehicleLabel: a.vehicleLabel,
+      description: a.description,
+      clientName: a.clientName ?? '',
+      clientTelephone: a.clientTelephone ?? '',
+      members: [],
+    })
+    setShowAddModal(true)
+  }
+
+  const handleAddAssignment = async () => {
     if (!newAssign.date || !newAssign.memberName.trim()) return
     const memberName = newAssign.memberName.trim()
     const clientName = newAssign.clientName?.trim()
@@ -158,8 +183,12 @@ export default function CalendarPage() {
     if (clientName && clientTelephone) {
       const exists = clients.some(c => c.telephone === clientTelephone || c.nom.toLowerCase() === clientName.toLowerCase())
       if (!exists) {
-        addClient({ nom: clientName, telephone: clientTelephone })
-        toast.success('Client enregistré dans la liste et affectation ajoutée')
+        try {
+          await addClient({ nom: clientName, telephone: clientTelephone })
+          toast.success('Client enregistré dans la liste et affectation ajoutée')
+        } catch {
+          toast.error('Erreur lors de l\'ajout du client')
+        }
       } else {
         toast.success('Affectation ajoutée (client déjà dans la liste)')
       }
@@ -167,21 +196,55 @@ export default function CalendarPage() {
       toast.success('Affectation ajoutée avec succès')
     }
 
-    addAssignment({
-      date: newAssign.date,
+    const allMembers = [
       memberName,
-      vehicleId: newAssign.vehicleId ?? null,
-      vehicleLabel: newAssign.vehicleLabel.trim() || 'Véhicule',
-      description: newAssign.description.trim(),
-      clientName: clientName || undefined,
-      clientTelephone: clientTelephone || undefined,
-    })
-    const techId = findUserIdByName(mockUsers, memberName)
-    if (techId) {
-      addNotification(techId, `Vous avez été assigné au calendrier le ${new Date(newAssign.date).toLocaleDateString('fr-FR')} : ${newAssign.vehicleLabel.trim() || 'Véhicule'} - ${newAssign.description.trim() || 'Travail'}`)
+      ...(newAssign.members ?? []),
+    ]
+      .map(n => n.trim())
+      .filter(Boolean)
+
+    const uniqueMembers = Array.from(new Set(allMembers.map(n => n.toLowerCase()))).map(lower =>
+      allMembers.find(n => n.toLowerCase() === lower)!
+    )
+
+    if (editingId) {
+      // mode édition : on met à jour uniquement cette affectation
+      await updateAssignment(editingId, {
+        date: newAssign.date,
+        memberName,
+        vehicleId: newAssign.vehicleId ?? null,
+        vehicleLabel: newAssign.vehicleLabel.trim() || 'Véhicule',
+        description: newAssign.description.trim(),
+        clientName: clientName || undefined,
+        clientTelephone: clientTelephone || undefined,
+      })
+    } else {
+      // mode création : une affectation par membre sélectionné
+      for (const name of uniqueMembers) {
+        await addAssignment({
+          date: newAssign.date,
+          memberName: name,
+          vehicleId: newAssign.vehicleId ?? null,
+          vehicleLabel: newAssign.vehicleLabel.trim() || 'Véhicule',
+          description: newAssign.description.trim(),
+          clientName: clientName || undefined,
+          clientTelephone: clientTelephone || undefined,
+        })
+
+        const tech = users.find(u => u.nom_complet.toLowerCase() === name.toLowerCase())
+        if (tech) {
+          addNotification(
+            tech.id,
+            `Vous avez été assigné au calendrier le ${new Date(newAssign.date).toLocaleDateString('fr-FR')} : ${
+              newAssign.vehicleLabel.trim() || 'Véhicule'
+            } - ${newAssign.description.trim() || 'Travail'}`
+          )
+        }
+      }
     }
     setShowAddModal(false)
     setSelectedDate(newAssign.date)
+    setEditingId(null)
   }
 
   const handleVehicleSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -265,13 +328,18 @@ export default function CalendarPage() {
                     </span>
                     <div className="mt-0.5 space-y-0.5 overflow-hidden flex-1">
                       {dayAssignments.slice(0, 3).map(a => (
-                        <div
+                        <button
                           key={a.id}
-                          className="text-[10px] sm:text-xs truncate px-1 py-0.5 rounded bg-indigo-50 text-indigo-800 font-medium"
+                          type="button"
+                          onClick={e => {
+                            e.stopPropagation()
+                            openEditAssignment(a)
+                          }}
+                          className="w-full text-left text-[10px] sm:text-xs truncate px-1 py-0.5 rounded bg-indigo-50 text-indigo-800 font-medium hover:bg-indigo-100"
                           title={`${a.memberName} · ${a.vehicleLabel} · ${a.description}`}
                         >
                           {a.memberName} – {a.vehicleLabel}
-                        </div>
+                        </button>
                       ))}
                       {dayAssignments.length > 3 && (
                         <div className="text-[10px] text-gray-500 px-1">+{dayAssignments.length - 3}</div>
@@ -322,7 +390,11 @@ export default function CalendarPage() {
                         </div>
                         <button
                           type="button"
-                          onClick={() => { removeAssignment(a.id); toast.success('Affectation supprimée') }}
+                          onClick={async () => {
+                            const ok = await removeAssignment(a.id)
+                            if (ok) toast.success('Affectation supprimée')
+                            else toast.error('Erreur lors de la suppression')
+                          }}
                           className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
                           title="Supprimer"
                         >
@@ -361,6 +433,39 @@ export default function CalendarPage() {
                 <option key={n} value={n}>{n}</option>
               ))}
             </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Autres membres</label>
+            <div className="flex flex-wrap gap-2">
+              {memberNames.map(n => {
+                const selected = newAssign.members.includes(n)
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() =>
+                      setNewAssign(prev => {
+                        const exists = prev.members.includes(n)
+                        return {
+                          ...prev,
+                          members: exists
+                            ? prev.members.filter(m => m !== n)
+                            : [...prev.members, n],
+                        }
+                      })
+                    }
+                    className={cn(
+                      'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
+                      selected
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                        : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                    )}
+                  >
+                    {n}
+                  </button>
+                )
+              })}
+            </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input

@@ -16,21 +16,29 @@ export function formatDuree(minutes: number | null): string {
   return rh > 0 ? `${j}j ${rh}h` : `${j}j`
 }
 
+/** Parse une date YYYY-MM-DD (ou ISO avec T) sans décalage fuseau (évite jour précédent/suivant) */
+export function parseDateOnly(dateStr: string): Date {
+  const datePart = dateStr.split('T')[0]
+  const [y, m, d] = datePart.split('-').map(Number)
+  return new Date(y, (m ?? 1) - 1, d ?? 1)
+}
+
 export function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('fr-FR', {
+  return parseDateOnly(dateStr).toLocaleDateString('fr-FR', {
     day: '2-digit', month: '2-digit', year: 'numeric',
   })
 }
 
 export function formatDateTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('fr-FR', {
+  const d = dateStr.includes('T') ? new Date(dateStr) : parseDateOnly(dateStr)
+  return d.toLocaleDateString('fr-FR', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   })
 }
 
 export function daysSince(dateStr: string): number {
-  return Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24))
+  return Math.floor((Date.now() - parseDateOnly(dateStr).getTime()) / (1000 * 60 * 60 * 24))
 }
 
 export function getUserDisplayName(userId: number | null, users: { id: number; nom_complet: string }[]): string {

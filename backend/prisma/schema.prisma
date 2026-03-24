@@ -1,0 +1,344 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            Int            @id @default(autoincrement())
+  email         String         @unique
+  password      String         // hash bcrypt
+  fullName      String
+  telephone     String         @default("")
+  role          String         @default("technicien")
+  permissions   Json           @default("{}") // Permissions personnalisées (visibilité véhicules, accès)
+  statut        String         @default("actif") // actif | inactif
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  refreshTokens RefreshToken[]
+  notifications Notification[]
+  reclamationTechniciens ReclamationTechnicien[]
+  ownedChecklists DailyChecklist[] @relation("ChecklistOwner")
+  validatedChecklists DailyChecklist[] @relation("ChecklistValidator")
+}
+
+model Notification {
+  id             Int       @id @default(autoincrement())
+  userId         Int
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type           String    @default("reclamation_assigned") // reclamation_assigned | ...
+  reclamationId  Int?
+  title          String?   @default("")
+  message        String
+  read           Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+}
+
+model RefreshToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
+
+model Vehicule {
+  id                   Int       @id @default(autoincrement())
+  immatriculation      String    @default("")
+  modele               String
+  type                 String    @default("voiture") // voiture | moto
+  etat_actuel          String    @default("orange") // orange, mauve, bleu, rouge, vert
+  service_type         String    @default("autre") // diagnostic, diagnostic_approfondi, service_rapide, reprogrammation, autre
+  technicien_id        Int?
+  responsable_id       Int?
+  defaut               String    @default("")
+  client_telephone     String    @default("")
+  date_entree          String    // YYYY-MM-DD
+  date_sortie          String?   // YYYY-MM-DD ou null
+  notes                String    @default("")
+  derniere_mise_a_jour String    // ISO string
+  createdAt            DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  historique           VehiculeHistorique[]
+  images               VehiculeImage[]
+}
+
+model VehiculeHistorique {
+  id                        Int       @id @default(autoincrement())
+  vehicule                  Vehicule  @relation(fields: [vehiculeId], references: [id], onDelete: Cascade)
+  vehiculeId                Int
+  etat_precedent            String?   // orange, mauve, bleu, rouge, vert
+  etat_nouveau              String
+  date_changement           String   // ISO string
+  utilisateur_id            Int
+  utilisateur_nom           String
+  commentaire               String   @default("")
+  duree_etat_precedent_min  Int?
+  pieces_utilisees           String   @default("")
+}
+
+model VehiculeImage {
+  id            Int      @id @default(autoincrement())
+  vehicule      Vehicule @relation(fields: [vehiculeId], references: [id], onDelete: Cascade)
+  vehiculeId    Int
+  url_path      String
+  original_name String   @default("")
+  mime_type     String
+  size_bytes    Int
+  category      String   @default("etat_exterieur")
+  note          String   @default("")
+  created_by_id Int?
+  created_by    String   @default("")
+  createdAt     DateTime @default(now())
+}
+
+model ProduitStock {
+  id              Int       @id @default(autoincrement())
+  nom             String
+  quantite        Int       @default(0)
+  valeur_achat_ttc Float    @default(0)
+  categorie       String?   @default("")
+  prix_vente      Float?    // prix de vente conseillé
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  mouvements      MouvementStock[]
+}
+
+model MouvementStock {
+  id          Int          @id @default(autoincrement())
+  produit     ProduitStock @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId   Int
+  date        String       // YYYY-MM-DD
+  produit_nom String       // dénormalisé pour historique
+  quantite    Int
+  type        String       // entree | sortie
+  origine     String       // achat | facture
+  reference   String?       // n° facture ou achat
+  createdAt   DateTime     @default(now())
+}
+
+model TeamMember {
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Client {
+  id                 Int      @id @default(autoincrement())
+  nom                String
+  telephone          String
+  email              String?  @default("")
+  adresse            String?  @default("")
+  notes              String?  @default("")
+  matricule_fiscale  String?  @default("")
+  createdAt          DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Facture {
+  id                     Int             @id @default(autoincrement())
+  numero                 String
+  date                   String          // YYYY-MM-DD
+  statut                 String          @default("brouillon") // brouillon | envoyee | payee | annulee
+  clientId               Int?
+  client_nom             String
+  client_telephone       String
+  client_adresse         String?         @default("")
+  client_matricule_fiscale String?       @default("")
+  timbre                 Float           @default(1)
+  createdAt              DateTime        @default(now())
+  lignes                 FactureLigne[]
+}
+
+model FactureLigne {
+  id               Int      @id @default(autoincrement())
+  facture          Facture  @relation(fields: [factureId], references: [id], onDelete: Cascade)
+  factureId        Int
+  type             String   // main_oeuvre | depense | produit
+  designation      String
+  qte              Float?   // pour main_oeuvre et produit
+  mt_ht            Float?   // montant HT pour main_oeuvre
+  montant          Float?   // montant pour depense
+  productId        Int?     // pour produit
+  prix_unitaire_ht Float?   // pour produit
+}
+
+model Achat {
+  id                        Int          @id @default(autoincrement())
+  numero                    String       // ex. A26-0001
+  date                      String       // YYYY-MM-DD
+  fournisseur_id            Int?
+  fournisseur               Fournisseur? @relation(fields: [fournisseur_id], references: [id], onDelete: SetNull)
+  fournisseur_nom           String       // dénormalisé pour affichage
+  numero_facture_fournisseur String?    // n° facture du fournisseur
+  mode_paiement             String?    // especes | virement | cheque | autre
+  statut                    String     @default("brouillon") // brouillon | validee | payee
+  paye                      Boolean    @default(false)
+  commentaire               String?    // notes, pièces jointes (réf)
+  createdAt                 DateTime   @default(now())
+  lignes                    AchatLigne[]
+}
+
+model AchatLigne {
+  id               Int    @id @default(autoincrement())
+  achat            Achat  @relation(fields: [achatId], references: [id], onDelete: Cascade)
+  achatId          Int
+  productId        Int
+  designation      String
+  quantite         Float
+  prix_unitaire    Float
+}
+
+model ContactImportant {
+  id        Int      @id @default(autoincrement())
+  nom       String
+  numero   String
+  categorie String?  @default("")
+  notes     String?  @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Fournisseur {
+  id        Int      @id @default(autoincrement())
+  nom       String
+  telephone String
+  email     String?  @default("")
+  adresse   String?  @default("")
+  contact   String?  @default("")
+  notes     String?  @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  achats    Achat[]
+}
+
+model DemandeDevis {
+  id               Int      @id @default(autoincrement())
+  date             String   // YYYY-MM-DD
+  client_name      String
+  client_telephone String?   @default("")
+  vehicle_ref      String   @default("")
+  description      String   @default("")
+  statut           String   @default("en_attente") // en_attente | envoye | accepte | refuse
+  montant_estime   Float?
+  date_limite      String?   // YYYY-MM-DD
+  notes            String?   @default("")
+  createdAt        DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model ClientDette {
+  id                 Int      @id @default(autoincrement())
+  client_name        String
+  telephone_client   String   @default("")
+  designation        String   @default("")
+  reste              Float    @default(0)
+  notes              String?  @default("")
+  createdAt          DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Reclamation {
+  id                 Int      @id @default(autoincrement())
+  date               String   // YYYY-MM-DD
+  client_name        String
+  client_telephone   String?  @default("")
+  vehicle_ref        String   @default("")
+  sujet              String   @default("")
+  description        String   @default("")
+  statut             String   @default("ouverte") // ouverte | en_cours | traitee | cloturee
+  assigne_a          String?  @default("")
+  priorite           String?  @default("normale") // basse | normale | haute
+  createdAt          DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  techniciens        ReclamationTechnicien[]
+}
+
+model ReclamationTechnicien {
+  id               Int          @id @default(autoincrement())
+  reclamation      Reclamation  @relation(fields: [reclamationId], references: [id], onDelete: Cascade)
+  reclamationId    Int
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId           Int
+  user_full_name   String
+  createdAt        DateTime     @default(now())
+}
+
+model ProduitHuile {
+  id           Int     @id @default(autoincrement())
+  designation  String
+  reference    String  @default("")
+  type         String  @default("moteur") // moteur | boite | liquide_refroidissement | hydraulique | autre
+  quantite     Int     @default(0)
+  unite        String  @default("L")
+  seuil_alerte Int?
+  prix         Float?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model CalendarAssignment {
+  id               Int      @id @default(autoincrement())
+  date             String   // YYYY-MM-DD
+  member_name      String
+  vehicle_id       Int?
+  vehicle_label    String
+  description      String   @default("")
+  client_name      String?  @default("")
+  client_telephone String?  @default("")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model TeamMoneyState {
+  id        Int      @id @default(1)
+  data      Json
+  updatedAt DateTime @updatedAt
+}
+
+model MonthlyCharge {
+  id        Int      @id @default(autoincrement())
+  name      String
+  amount    Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DailyChecklist {
+  id               Int       @id @default(autoincrement())
+  userId           Int
+  user             User      @relation("ChecklistOwner", fields: [userId], references: [id], onDelete: Cascade)
+  role             String
+  date             String
+  status           String    @default("draft") // draft | submitted | validated | rejected
+  data             Json
+  submittedAt      DateTime?
+  validatedAt      DateTime?
+  validatorId      Int?
+  validator        User?     @relation("ChecklistValidator", fields: [validatorId], references: [id], onDelete: SetNull)
+  validatorComment String    @default("")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  auditLogs        ChecklistAuditLog[]
+
+  @@unique([userId, date])
+}
+
+model ChecklistAuditLog {
+  id          Int            @id @default(autoincrement())
+  checklist   DailyChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  checklistId Int
+  action      String
+  actorId     Int?
+  actorName   String         @default("")
+  actorRole   String         @default("")
+  summary     String         @default("")
+  snapshot    Json?
+  createdAt   DateTime       @default(now())
+}

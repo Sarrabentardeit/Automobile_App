@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useTeamMembers } from '@/contexts/TeamMembersContext'
+import { useUsers } from '@/contexts/UsersContext'
 import { useCaisse } from '@/contexts/CaisseContext'
 import { useMoney } from '@/contexts/MoneyContext'
 import { useCharges } from '@/contexts/ChargesContext'
@@ -70,7 +70,7 @@ type MemberSort = 'solde' | 'nom' | 'avances'
 
 export default function CaissePage() {
   const { permissions } = useAuth()
-  const { members } = useTeamMembers()
+  const { users } = useUsers()
   const { days, setDays } = useCaisse()
   const { ins, outs, addOut, updateOut, removeOut } = useMoney()
   const { charges, totalCharges, addCharge, updateCharge, removeCharge } = useCharges()
@@ -88,7 +88,13 @@ export default function CaissePage() {
   const [newChargeName, setNewChargeName] = useState('')
   const [newChargeAmount, setNewChargeAmount] = useState('')
 
-  const memberNames = useMemo(() => members.map(m => m.name), [members])
+  const memberNames = useMemo(
+    () =>
+      users
+        .filter(u => u.statut === 'actif' && (u.role === 'technicien' || u.role === 'responsable'))
+        .map(u => u.nom_complet),
+    [users]
+  )
 
   const openAddDay = () => {
     const date = `${period.year}-${period.month.toString().padStart(2, '0')}-01`
@@ -165,7 +171,7 @@ export default function CaissePage() {
         totals[name].inHand += ih
         totals[name].taken += tk
         totals[name].balance += ih - tk
-        if (slot.presence != null) totals[name].moisPresent += ih
+        if (slot.presence != null) totals[name].moisPresent += 1
       })
     })
     return totals
@@ -487,143 +493,211 @@ export default function CaissePage() {
           </div>
 
           {viewMode === 'table' && (
-            <Card padding="none" className="overflow-hidden shadow-sm border border-gray-100 rounded-2xl">
-              <div className="px-3 sm:px-5 py-3 sm:py-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100">
-                <h2 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center gap-2">
-                  <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
-                  Suivi argent équipe
-                </h2>
-                <p className="text-xs text-gray-500 mt-1">Cliquez sur la date pour modifier le jour, ou sur une cellule membre pour modifier ce membre</p>
-              </div>
-              {filteredDays.length === 0 ? (
-                <div className="text-center py-12 text-gray-500 px-4">
-                  <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                  <p className="font-medium">Aucun jour ce mois</p>
-                  <Button className="mt-4" size="sm" onClick={openAddDay} icon={<Plus className="w-4 h-4" />}>
-                    Nouveau jour
-                  </Button>
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4">
+              <Card padding="none" className="overflow-hidden shadow-sm border border-gray-100 rounded-2xl">
+                <div className="px-3 sm:px-5 py-3 sm:py-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100">
+                  <h2 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                    Suivi argent équipe
+                  </h2>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Cliquez sur la date pour modifier le jour, ou sur une cellule membre pour modifier ce membre
+                  </p>
                 </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[600px] text-sm border-collapse">
-                    <thead>
-                      <tr>
-                        <th className="text-left px-3 sm:px-4 py-3 text-[10px] font-semibold text-gray-500 uppercase sticky left-0 z-20 min-w-[90px] bg-gray-50 border-b border-gray-200">
-                          Date
-                        </th>
-                        {memberNames.map(name => (
-                          <th
-                            key={name}
-                            className="text-left px-2 sm:px-3 py-3 text-[10px] font-semibold text-gray-600 bg-gray-50 border-b border-l border-gray-100 min-w-[70px]"
-                          >
-                            <span className="truncate block max-w-[70px]" title={name}>{name}</span>
+                {filteredDays.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500 px-4">
+                    <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                    <p className="font-medium">Aucun jour ce mois</p>
+                    <Button className="mt-4" size="sm" onClick={openAddDay} icon={<Plus className="w-4 h-4" />}>
+                      Nouveau jour
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[600px] text-sm border-collapse">
+                      <thead>
+                        <tr>
+                          <th className="text-left px-3 sm:px-4 py-3 text-[10px] font-semibold text-gray-500 uppercase sticky left-0 z-20 min-w-[90px] bg-gray-50 border-b border-gray-200">
+                            Date
                           </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredDays.map((day, rowIndex) => (
-                        <tr
-                          key={day.id}
-                          className={cn(
-                            'border-b border-gray-50 transition-colors',
-                            rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
-                          )}
-                        >
-                          <td
-                            onClick={() => openFullDayEdit(day)}
-                            className="px-3 sm:px-4 py-2.5 font-medium text-gray-900 sticky left-0 z-10 bg-inherit border-r border-gray-100 text-xs sm:text-sm cursor-pointer hover:bg-emerald-50/70"
+                          {memberNames.map(name => (
+                            <th
+                              key={name}
+                              className="text-left px-2 sm:px-3 py-3 text-[10px] font-semibold text-gray-600 bg-gray-50 border-b border-l border-gray-100 min-w-[70px]"
+                            >
+                              <span className="truncate block max-w-[70px]" title={name}>
+                                {name}
+                              </span>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredDays.map((day, rowIndex) => (
+                          <tr
+                            key={day.id}
+                            className={cn(
+                              'border-b border-gray-50 transition-colors',
+                              rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50/30',
+                            )}
                           >
-                            {formatDate(day.date)}
-                          </td>
-                          {memberNames.map(memberName => {
-                            const slot = day.members[memberName] ?? emptySlots()
-                            const hasData =
-                              slot.inHand != null ||
-                              slot.taken != null ||
-                              (slot.note && slot.note.trim() !== '') ||
-                              slot.presence != null
-                            return (
-                              <td
-                                key={memberName}
-                                onClick={() => openCellEdit(day, memberName)}
-                                className="px-2 sm:px-3 py-2 border-l border-gray-50 align-top min-w-[60px] cursor-pointer hover:bg-emerald-50/70"
-                              >
-                                {!hasData ? (
-                                  <span className="text-gray-200 text-xs">—</span>
-                                ) : (
-                                  <div className="flex flex-col gap-1">
-                                    <div className="flex gap-2 flex-wrap">
-                                      {slot.inHand != null && (
-                                        <span className="inline-flex px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 font-semibold text-xs">
-                                          {slot.inHand}
+                            <td
+                              onClick={() => openFullDayEdit(day)}
+                              className="px-3 sm:px-4 py-2.5 font-medium text-gray-900 sticky left-0 z-10 bg-inherit border-r border-gray-100 text-xs sm:text-sm cursor-pointer hover:bg-emerald-50/70"
+                            >
+                              {formatDate(day.date)}
+                            </td>
+                            {memberNames.map(memberName => {
+                              const slot = day.members[memberName] ?? emptySlots()
+                              const hasData =
+                                slot.inHand != null ||
+                                slot.taken != null ||
+                                (slot.note && slot.note.trim() !== '') ||
+                                slot.presence != null
+                              return (
+                                <td
+                                  key={memberName}
+                                  onClick={() => openCellEdit(day, memberName)}
+                                  className="px-2 sm:px-3 py-2 border-l border-gray-50 align-top min-w-[60px] cursor-pointer hover:bg-emerald-50/70"
+                                >
+                                  {!hasData ? (
+                                    <span className="text-gray-200 text-xs">—</span>
+                                  ) : (
+                                    <div className="flex flex-col gap-1">
+                                      <div className="flex gap-2 flex-wrap">
+                                        {slot.inHand != null && (
+                                          <span className="inline-flex px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 font-semibold text-xs">
+                                            {slot.inHand}
+                                          </span>
+                                        )}
+                                        {slot.taken != null && (
+                                          <span className="inline-flex px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 font-semibold text-xs">
+                                            {slot.taken}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {slot.presence && (
+                                        <span
+                                          className="inline-flex w-fit px-2 py-0.5 rounded-full text-[10px] font-semibold text-white"
+                                          style={{ backgroundColor: PRESENCE_CONFIG[slot.presence].color }}
+                                        >
+                                          {PRESENCE_CONFIG[slot.presence].label}
                                         </span>
                                       )}
-                                      {slot.taken != null && (
-                                        <span className="inline-flex px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 font-semibold text-xs">
-                                          {slot.taken}
-                                        </span>
+                                      {slot.note && (
+                                        <p className="text-[10px] text-gray-500 truncate max-w-[80px]" title={slot.note}>
+                                          {slot.note}
+                                        </p>
                                       )}
                                     </div>
-                                    {slot.presence && (
+                                  )}
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                      {filteredDays.length > 0 && (
+                        <tfoot>
+                          <tr className="bg-emerald-50/80 border-t-2 border-emerald-200">
+                            <td className="px-3 sm:px-4 py-2.5 font-semibold text-gray-800 sticky left-0 z-10 bg-emerald-50/95 border-r border-emerald-100 text-sm">
+                              Total
+                            </td>
+                            {memberNames.map(memberName => {
+                              const t = memberTotals[memberName]
+                              const hasAny = t.inHand !== 0 || t.taken !== 0
+                              return (
+                                <td key={memberName} className="px-2 sm:px-3 py-2 border-l border-emerald-100 align-top">
+                                  {!hasAny ? (
+                                    <span className="text-gray-300 text-xs">—</span>
+                                  ) : (
+                                    <div className="flex flex-col gap-1">
+                                      <div className="flex gap-2">
+                                        {t.inHand !== 0 && (
+                                          <span className="font-bold text-xs text-emerald-800">{t.inHand}</span>
+                                        )}
+                                        {t.taken !== 0 && (
+                                          <span className="font-bold text-xs text-amber-800">{t.taken}</span>
+                                        )}
+                                      </div>
                                       <span
-                                        className="inline-flex w-fit px-2 py-0.5 rounded-full text-[10px] font-semibold text-white"
-                                        style={{ backgroundColor: PRESENCE_CONFIG[slot.presence].color }}
+                                        className={cn(
+                                          'font-bold text-xs',
+                                          t.balance >= 0 ? 'text-emerald-700' : 'text-red-600',
+                                        )}
                                       >
-                                        {PRESENCE_CONFIG[slot.presence].label}
+                                        Solde: {t.balance}
                                       </span>
-                                    )}
-                                    {slot.note && (
-                                      <p className="text-[10px] text-gray-500 truncate max-w-[80px]" title={slot.note}>
-                                        {slot.note}
-                                      </p>
-                                    )}
-                                  </div>
-                                )}
-                              </td>
-                            )
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                    {filteredDays.length > 0 && (
-                      <tfoot>
-                        <tr className="bg-emerald-50/80 border-t-2 border-emerald-200">
-                          <td className="px-3 sm:px-4 py-2.5 font-semibold text-gray-800 sticky left-0 z-10 bg-emerald-50/95 border-r border-emerald-100 text-sm">
-                            Total
-                          </td>
-                          {memberNames.map(memberName => {
-                            const t = memberTotals[memberName]
-                            const hasAny = t.inHand !== 0 || t.taken !== 0
-                            return (
-                              <td key={memberName} className="px-2 sm:px-3 py-2 border-l border-emerald-100 align-top">
-                                {!hasAny ? (
-                                  <span className="text-gray-300 text-xs">—</span>
-                                ) : (
-                                  <div className="flex flex-col gap-1">
-                                    <div className="flex gap-2">
-                                      {t.inHand !== 0 && (
-                                        <span className="font-bold text-xs text-emerald-800">{t.inHand}</span>
-                                      )}
-                                      {t.taken !== 0 && (
-                                        <span className="font-bold text-xs text-amber-800">{t.taken}</span>
-                                      )}
                                     </div>
-                                    <span className={cn('font-bold text-xs', t.balance >= 0 ? 'text-emerald-700' : 'text-red-600')}>
-                                      Solde: {t.balance}
-                                    </span>
-                                  </div>
-                                )}
-                              </td>
-                            )
-                          })}
-                        </tr>
-                      </tfoot>
-                    )}
-                  </table>
-                </div>
-              )}
-            </Card>
+                                  )}
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                )}
+              </Card>
+
+              {/* Colonne latérale: Charges + Code présence, comme dans Historique / Résumé */}
+              <div className="space-y-4">
+                <Card padding="sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <FileSpreadsheet className="w-5 h-5 text-amber-600" />
+                      <h3 className="font-semibold text-gray-900">Charges mensuelles</h3>
+                    </div>
+                    <button
+                      onClick={openChargesModal}
+                      className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-gray-500 hover:bg-gray-100 hover:text-emerald-600 transition-colors"
+                      title="Ajouter, modifier ou supprimer des charges"
+                    >
+                      <Settings2 className="w-4 h-4" />
+                      <span>Gérer</span>
+                    </button>
+                  </div>
+                  <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                    {charges.map(c => (
+                      <div
+                        key={c.id}
+                        className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0"
+                      >
+                        <span className="text-sm text-gray-700">{c.name}</span>
+                        <span className="text-sm font-semibold text-red-600">
+                          {c.amount.toLocaleString('fr-FR')} DT
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-between items-center pt-3 mt-2 border-t-2 border-gray-200">
+                    <span className="text-xs font-semibold text-gray-500 uppercase">Total</span>
+                    <span className="font-bold text-red-700">
+                      {totalCharges.toLocaleString('fr-FR')} DT
+                    </span>
+                  </div>
+                </Card>
+
+                <Card padding="sm">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Palette className="w-5 h-5 text-purple-600" />
+                    <h3 className="font-semibold text-gray-900">Code Présence</h3>
+                  </div>
+                  <div className="space-y-1.5">
+                    {ALL_PRESENCE_STATUTS.map(statut => (
+                      <div key={statut} className="flex items-center gap-2">
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: PRESENCE_CONFIG[statut].color }}
+                        />
+                        <span className="text-xs text-gray-600">{PRESENCE_CONFIG[statut].label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </div>
+            </div>
           )}
 
           {viewMode === 'cards' && (

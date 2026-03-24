@@ -1,38 +1,75 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import type { TeamMoneyDayEntry } from '@/types'
-import { mockTeamMoneyDays } from '@/data/mock'
-
-const STORAGE_KEY = 'elmecano-caisse'
-
-function loadFromStorage(): TeamMoneyDayEntry[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return mockTeamMoneyDays
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : mockTeamMoneyDays
-  } catch {
-    return mockTeamMoneyDays
-  }
-}
-
-function saveToStorage(data: TeamMoneyDayEntry[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-  } catch {}
-}
+import { apiFetch } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface CaisseContextValue {
   days: TeamMoneyDayEntry[]
+  loading: boolean
   setDays: React.Dispatch<React.SetStateAction<TeamMoneyDayEntry[]>>
 }
 
 const Context = createContext<CaisseContextValue | null>(null)
 
 export function CaisseProvider({ children }: { children: ReactNode }) {
-  const [days, setDays] = useState<TeamMoneyDayEntry[]>(loadFromStorage)
-  useEffect(() => { saveToStorage(days) }, [days])
+  const { getAccessToken } = useAuth()
+  const [days, setDaysState] = useState<TeamMoneyDayEntry[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const fetchDays = useCallback(async () => {
+    const token = getAccessToken()
+    if (!token) {
+      setDaysState([])
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    try {
+      const data = await apiFetch<TeamMoneyDayEntry[]>('/caisse', { token })
+      setDaysState(Array.isArray(data) ? data : [])
+    } catch {
+      setDaysState([])
+    } finally {
+      setLoading(false)
+    }
+  }, [getAccessToken])
+
+  useEffect(() => {
+    fetchDays()
+  }, [fetchDays])
+
+  const persistDays = useCallback(
+    async (next: TeamMoneyDayEntry[]) => {
+      const token = getAccessToken()
+      if (!token) return
+      try {
+        await apiFetch('/caisse', {
+          method: 'PUT',
+          token,
+          body: JSON.stringify(next),
+        })
+      } catch (err) {
+        console.error('Erreur sync caisse, rechargement depuis serveur', err)
+        // En cas d'échec, on revient à l'état serveur pour éviter la divergence entre postes.
+        await fetchDays()
+      }
+    },
+    [getAccessToken, fetchDays]
+  )
+
+  const setDays: React.Dispatch<React.SetStateAction<TeamMoneyDayEntry[]>> = useCallback(
+    (updater) => {
+      setDaysState(prev => {
+        const next = typeof updater === 'function' ? (updater as (p: TeamMoneyDayEntry[]) => TeamMoneyDayEntry[])(prev) : updater
+        void persistDays(next)
+        return next
+      })
+    },
+    [persistDays]
+  )
+
   return (
-    <Context.Provider value={{ days, setDays }}>
+    <Context.Provider value={{ days, loading, setDays }}>
       {children}
     </Context.Provider>
   )

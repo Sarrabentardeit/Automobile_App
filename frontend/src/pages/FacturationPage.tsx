@@ -8,7 +8,7 @@ import { useToast } from '@/contexts/ToastContext'
 import type { Facture, LigneFacture, FactureStatut } from '@/types'
 import type { ProduitStock } from '@/types'
 import { FACTURE_STATUT_CONFIG } from '@/types'
-import { computeFactureTotals, formatMontantEnLettres, printFacture } from '@/lib/factureUtils'
+import { computeFactureTotals, formatMontantEnLettres, printFacture, exportFacturePdf } from '@/lib/factureUtils'
 import { formatDate } from '@/lib/utils'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -23,6 +23,7 @@ import {
   Copy,
   Receipt,
   Printer,
+  FileDown,
   TrendingUp,
   CheckCircle,
   Clock,
@@ -213,7 +214,7 @@ export default function FacturationPage() {
     setForm(prev => ({ ...prev, lignes: prev.lignes.filter((_, i) => i !== index) }))
   }
 
-  const saveFacture = () => {
+  const saveFacture = async () => {
     if (!form.clientNom.trim()) {
       toast.error('Indiquez le client')
       return
@@ -245,7 +246,8 @@ export default function FacturationPage() {
     if (devientValidee && (!prevFacture || prevFacture.statut === 'brouillon')) {
       const lignesProduit = payload.lignes.filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
       for (const l of lignesProduit) {
-        if (!decrementerStock(l.productId, l.qte, { origine: 'facture', reference: payload.numero })) {
+        const ok = await decrementerStock(l.productId, l.qte, { origine: 'facture', reference: payload.numero })
+        if (!ok) {
           const nom = produits.find(p => p.id === l.productId)?.nom ?? 'Produit'
           toast.error(`Stock insuffisant pour "${nom}" (demandé: ${l.qte})`)
           return
@@ -261,7 +263,7 @@ export default function FacturationPage() {
     }
     if (editingId && devientAnnulee && etaitValidee) {
       const lignesProduit = prevFacture!.lignes.filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
-      for (const l of lignesProduit) incrementerStock(l.productId, l.qte)
+      for (const l of lignesProduit) await incrementerStock(l.productId, l.qte)
     }
 
     if (editingId) {
@@ -282,12 +284,22 @@ export default function FacturationPage() {
     }
   }
 
-  const confirmAnnuler = () => {
+  const handleExportPdf = async (f: Facture) => {
+    try {
+      await exportFacturePdf(f)
+      toast.success('Facture exportée en PDF')
+    } catch (err) {
+      console.error('Export PDF:', err)
+      toast.error('Erreur lors de l\'export PDF')
+    }
+  }
+
+  const confirmAnnuler = async () => {
     if (annulerId === null) return
     const f = factures.find(x => x.id === annulerId)
     if (f && (f.statut === 'envoyee' || f.statut === 'payee')) {
       const lignesProduit = f.lignes.filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
-      for (const l of lignesProduit) incrementerStock(l.productId, l.qte)
+      for (const l of lignesProduit) await incrementerStock(l.productId, l.qte)
     }
     updateFacture(annulerId, { statut: 'annulee' })
     toast.success('Facture annulée')
@@ -311,7 +323,7 @@ export default function FacturationPage() {
     executeWorkflowAction(f, newStatut)
   }
 
-  const executeWorkflowAction = (f: Facture, newStatut: FactureStatut) => {
+  const executeWorkflowAction = async (f: Facture, newStatut: FactureStatut) => {
     setPendingValidation(null)
     if (newStatut === 'annulee') {
       setAnnulerId(f.id)
@@ -321,7 +333,8 @@ export default function FacturationPage() {
     if ((newStatut === 'envoyee' || newStatut === 'payee') && f.statut === 'brouillon') {
       const lignesProduit = f.lignes.filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
       for (const l of lignesProduit) {
-        if (!decrementerStock(l.productId, l.qte, { origine: 'facture', reference: f.numero })) {
+        const ok = await decrementerStock(l.productId, l.qte, { origine: 'facture', reference: f.numero })
+        if (!ok) {
           const nom = produits.find(p => p.id === l.productId)?.nom ?? 'Produit'
           toast.error(`Stock insuffisant pour "${nom}" (demandé: ${l.qte})`)
           return
@@ -338,7 +351,7 @@ export default function FacturationPage() {
     // Réouverture (remise en brouillon) depuis Validée/Payée → réintégrer le stock
     if (newStatut === 'brouillon' && (f.statut === 'envoyee' || f.statut === 'payee')) {
       const lignesProduit = f.lignes.filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
-      for (const l of lignesProduit) incrementerStock(l.productId, l.qte)
+      for (const l of lignesProduit) await incrementerStock(l.productId, l.qte)
     }
     updateFacture(f.id, { statut: newStatut })
     toast.success(`Facture ${FACTURE_STATUT_CONFIG[newStatut].label.toLowerCase()}`)
@@ -570,6 +583,7 @@ export default function FacturationPage() {
                     <span className="text-lg font-bold text-emerald-700 tabular-nums">{t.totalTTC.toFixed(2)} DT</span>
                     <div className="flex gap-1">
                       <button type="button" onClick={() => printFacture(f)} className="p-2 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600" title="Imprimer"><Printer className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => handleExportPdf(f)} className="p-2 rounded-lg hover:bg-violet-50 text-gray-400 hover:text-violet-600" title="Exporter en PDF"><FileDown className="w-4 h-4" /></button>
                       <button type="button" onClick={() => openEdit(f)} className="p-2 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600" title="Modifier"><Pencil className="w-4 h-4" /></button>
                           <button type="button" onClick={() => openDuplicate(f)} className="p-2 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600" title="Dupliquer"><Copy className="w-4 h-4" /></button>
                       <button type="button" onClick={() => setDeleteId(f.id)} className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
@@ -671,6 +685,7 @@ export default function FacturationPage() {
                       <td className="px-3 sm:px-4 py-2 whitespace-nowrap">
                         <div className="flex items-center gap-0.5 sm:gap-1">
                           <button type="button" onClick={() => printFacture(f)} className="p-2.5 sm:p-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center" title="Imprimer"><Printer className="w-4 h-4" /></button>
+                          <button type="button" onClick={() => handleExportPdf(f)} className="p-2.5 sm:p-2 rounded-lg text-gray-400 hover:text-violet-600 hover:bg-violet-50 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center" title="Exporter en PDF"><FileDown className="w-4 h-4" /></button>
                           <button type="button" onClick={() => openEdit(f)} className="p-2.5 sm:p-2 rounded-lg text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center" title="Modifier"><Pencil className="w-4 h-4" /></button>
                           <button type="button" onClick={() => openDuplicate(f)} className="p-2.5 sm:p-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center" title="Dupliquer"><Copy className="w-4 h-4" /></button>
                           <button type="button" onClick={() => setDeleteId(f.id)} className="p-2.5 sm:p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center" title="Supprimer"><Trash2 className="w-4 h-4" /></button>

@@ -1,26 +1,51 @@
 import { useState } from 'react'
-import type { Vehicule, VehiculeFormData, VehiculeType, EtatVehicule } from '@/types'
+import type {
+  Vehicule,
+  VehiculeFormData,
+  VehiculeType,
+  EtatVehicule,
+  VehiculeImageCategory,
+  VehiculeImageUploadInput,
+} from '@/types'
 import { ETAT_CONFIG } from '@/types'
-import { mockUsers } from '@/data/mock'
+import { useUsers } from '@/contexts/UsersContext'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Textarea from '@/components/ui/Textarea'
 import Button from '@/components/ui/Button'
-import { Save, Car, Bike } from 'lucide-react'
+import { Save, Car, Bike, Camera, ImagePlus, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface Props {
   vehicule: Vehicule | null
   onClose: () => void
-  onSubmit: (data: VehiculeFormData) => void
+  onSubmit: (data: VehiculeFormData, images: VehiculeImageUploadInput[]) => void
 }
 
 const today = () => new Date().toISOString().split('T')[0]
 
-const ETATS_ENTREE: EtatVehicule[] = ['orange', 'mauve', 'bleu', 'rouge', 'vert']
+const ETATS_ENTREE: EtatVehicule[] = ['orange', 'mauve', 'bleu', 'rouge', 'vert', 'retour']
+const MAX_IMAGES = 12
+const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024
+
+const IMAGE_CATEGORIES: { value: VehiculeImageCategory; label: string }[] = [
+  { value: 'etat_exterieur', label: 'Etat extérieur' },
+  { value: 'etat_interieur', label: 'Etat intérieur' },
+  { value: 'compteur', label: 'Compteur / KM' },
+  { value: 'plaque', label: 'Plaque / châssis' },
+  { value: 'dommage', label: 'Dommage constaté' },
+  { value: 'intervention', label: 'Intervention / pièce' },
+]
+
+interface PendingImage {
+  id: string
+  previewUrl: string
+  payload: VehiculeImageUploadInput
+}
 
 export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
+  const { users } = useUsers()
   const isEdit = !!vehicule
   const [form, setForm] = useState<VehiculeFormData>({
     modele: vehicule?.modele ?? '',
@@ -33,11 +58,15 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
     responsable_id: vehicule?.responsable_id ?? null,
     client_telephone: vehicule?.client_telephone ?? '',
     notes: vehicule?.notes ?? '',
+    service_type: vehicule?.service_type ?? 'diagnostic',
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [pendingImages, setPendingImages] = useState<PendingImage[]>([])
+  const [imageCategory, setImageCategory] = useState<VehiculeImageCategory>('etat_exterieur')
+  const [imageNote, setImageNote] = useState('')
 
-  const techniciens = mockUsers.filter(u => u.statut === 'actif' && u.permissions.canChangeEtat && u.permissions.vehiculeVisibility === 'own')
-  const responsables = mockUsers.filter(u => u.statut === 'actif' && u.permissions.canAssignTechnicien)
+  const techniciens = users.filter(u => u.statut === 'actif' && u.permissions.canChangeEtat && u.permissions.vehiculeVisibility === 'own')
+  const responsables = users.filter(u => u.statut === 'actif' && u.permissions.canAssignTechnicien)
 
   const update = (field: keyof VehiculeFormData, value: unknown) => {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -56,7 +85,69 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
   const handleSubmit = (ev: React.FormEvent) => {
     ev.preventDefault()
     if (!validate()) return
-    onSubmit(form)
+    onSubmit(
+      form,
+      pendingImages.map(img => img.payload)
+    )
+  }
+
+  const readFileAsDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result ?? ''))
+      reader.onerror = () => reject(new Error('Erreur lecture fichier'))
+      reader.readAsDataURL(file)
+    })
+
+  const handlePickFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    const availableSlots = Math.max(0, MAX_IMAGES - pendingImages.length)
+    if (availableSlots <= 0) {
+      setErrors(prev => ({ ...prev, images: `Maximum ${MAX_IMAGES} photos` }))
+      return
+    }
+
+    const selected = Array.from(files).slice(0, availableSlots)
+    const accepted: PendingImage[] = []
+    for (const file of selected) {
+      if (!file.type.startsWith('image/')) continue
+      if (file.size > MAX_IMAGE_SIZE_BYTES) {
+        setErrors(prev => ({ ...prev, images: `Une image dépasse 8 MB (${file.name})` }))
+        continue
+      }
+      try {
+        const dataUrl = await readFileAsDataUrl(file)
+        accepted.push({
+          id: `${Date.now()}-${Math.random()}`,
+          previewUrl: URL.createObjectURL(file),
+          payload: {
+            dataUrl,
+            fileName: file.name,
+            category: imageCategory,
+            note: imageNote.trim(),
+          },
+        })
+      } catch {
+        setErrors(prev => ({ ...prev, images: `Impossible de lire le fichier ${file.name}` }))
+      }
+    }
+
+    if (accepted.length > 0) {
+      setPendingImages(prev => [...prev, ...accepted])
+      setErrors(prev => {
+        const next = { ...prev }
+        delete next.images
+        return next
+      })
+    }
+  }
+
+  const removePendingImage = (id: string) => {
+    setPendingImages(prev => {
+      const found = prev.find(x => x.id === id)
+      if (found) URL.revokeObjectURL(found.previewUrl)
+      return prev.filter(x => x.id !== id)
+    })
   }
 
   return (
@@ -98,10 +189,33 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
           />
         </div>
 
-        <Textarea id="defaut" label="Défaut / Travaux à effectuer" value={form.defaut} required rows={2}
-          onChange={e => update('defaut', e.target.value)} placeholder="Décrire le problème ou les travaux..."
+        <Textarea
+          id="defaut"
+          label="Défaut / Travaux à effectuer"
+          value={form.defaut}
+          required
+          rows={2}
+          onChange={e => update('defaut', e.target.value)}
+          placeholder="Décrire le problème ou les travaux..."
           error={errors.defaut}
         />
+
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium text-gray-700">Type de service</label>
+          <select
+            value={form.service_type ?? 'diagnostic'}
+            onChange={e =>
+              update('service_type', e.target.value as VehiculeFormData['service_type'])
+            }
+            className="w-full px-3 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm bg-white"
+          >
+            <option value="diagnostic">Diagnostic</option>
+            <option value="diagnostic_approfondi">Diagnostic approfondi</option>
+            <option value="service_rapide">Service rapide</option>
+            <option value="reprogrammation">Reprogrammation</option>
+            <option value="autre">Autre</option>
+          </select>
+        </div>
 
         {/* Statut + Date d'entrée */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -159,6 +273,82 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
         <Textarea id="notes" label="Notes" value={form.notes} rows={2}
           onChange={e => update('notes', e.target.value)} placeholder="Informations supplémentaires..."
         />
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <label className="block text-sm font-medium text-gray-700">Photos véhicule (optionnel)</label>
+            <span className="text-xs text-gray-500">{pendingImages.length}/{MAX_IMAGES}</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <select
+              value={imageCategory}
+              onChange={e => setImageCategory(e.target.value as VehiculeImageCategory)}
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm bg-white"
+            >
+              {IMAGE_CATEGORIES.map(c => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+            <Input
+              id="image_note"
+              label="Note photo"
+              value={imageNote}
+              onChange={e => setImageNote(e.target.value)}
+              placeholder="Ex: rayure aile droite"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer">
+              <Camera className="w-4 h-4" />
+              Prendre photo
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={e => {
+                  void handlePickFiles(e.target.files)
+                  e.target.value = ''
+                }}
+              />
+            </label>
+            <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer">
+              <ImagePlus className="w-4 h-4" />
+              Depuis galerie
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={e => {
+                  void handlePickFiles(e.target.files)
+                  e.target.value = ''
+                }}
+              />
+            </label>
+          </div>
+          {errors.images && <p className="text-xs text-red-600">{errors.images}</p>}
+
+          {pendingImages.length > 0 && (
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {pendingImages.map(img => (
+                <div key={img.id} className="relative group">
+                  <img src={img.previewUrl} alt="Aperçu véhicule" className="w-full h-20 object-cover rounded-lg border border-gray-200" />
+                  <button
+                    type="button"
+                    onClick={() => removePendingImage(img.id)}
+                    className="absolute top-1 right-1 p-1 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                    aria-label="Supprimer image"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Footer - sticky on mobile */}
         <div className="flex gap-2 sm:gap-3 pt-3 border-t border-gray-100 sticky bottom-0 bg-white pb-safe">

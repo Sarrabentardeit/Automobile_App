@@ -25,7 +25,7 @@ const STATUT_STYLES: Record<DemandeDevisStatut, string> = {
 
 export default function DemandeDevisPage() {
   const { user } = useAuth()
-  const { demandes, addDemande, updateDemande } = useDemandesDevis()
+  const { demandes, loading, addDemande, updateDemande } = useDemandesDevis()
   const toast = useToast()
   const [filterStatut, setFilterStatut] = useState<DemandeDevisStatut | 'toutes'>('toutes')
   const [search, setSearch] = useState('')
@@ -109,6 +109,27 @@ export default function DemandeDevisPage() {
   }
 
   if (!user) return null
+
+  if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto pb-12">
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900 tracking-tight flex items-center gap-2">
+              <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-indigo-500 text-white shadow-lg shadow-indigo-500/25">
+                <ClipboardList className="w-5 h-5" />
+              </span>
+              Demandes Devis
+            </h1>
+            <p className="text-sm text-gray-500 mt-1">Suivi des demandes de devis clients</p>
+          </div>
+        </header>
+        <div className="flex items-center justify-center py-16">
+          <p className="text-gray-500 font-medium">Chargement des demandes de devis...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-4xl mx-auto pb-12">

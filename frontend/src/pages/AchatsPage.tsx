@@ -1,30 +1,36 @@
-import { useState, useMemo, type ChangeEvent } from 'react'
+import { useState, useMemo, useEffect, type ChangeEvent } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAchats } from '@/contexts/AchatsContext'
 import { useFournisseurs } from '@/contexts/FournisseursContext'
 import { useStockGeneral } from '@/contexts/StockGeneralContext'
 import { useMoney } from '@/contexts/MoneyContext'
 import { useToast } from '@/contexts/ToastContext'
-import type { FactureFournisseur, LigneAchat, FactureFournisseurStatut } from '@/types'
-import { FACTURE_FOURNISSEUR_STATUT_CONFIG } from '@/types'
+import type { FactureFournisseur, LigneAchat, FactureFournisseurStatut, FournisseurTopItem, FournisseurFiche } from '@/types'
+import { FACTURE_FOURNISSEUR_STATUT_CONFIG, MODE_PAIEMENT_OPTIONS } from '@/types'
 import { formatDate } from '@/lib/utils'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
-import { Package, Plus, Search, Pencil, Trash2, Truck, CheckCircle, Copy } from 'lucide-react'
+import { Package, Plus, Search, Pencil, Trash2, Truck, CheckCircle, Copy, AlertCircle, TrendingUp, Users, X, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function AchatsPage() {
   const { permissions } = useAuth()
-  const { factures, addFacture, updateFacture, removeFacture, getNextNumero } = useAchats()
-  const { fournisseurs } = useFournisseurs()
-  const { produits, incrementerStock } = useStockGeneral()
+  const { factures, loading, addFacture, updateFacture, removeFacture, getNextNumero } = useAchats()
+  const { fournisseurs, fetchTopFournisseurs, fetchFournisseurFiche } = useFournisseurs()
+  const { produits, refetch: refetchStock } = useStockGeneral()
   const { addOut } = useMoney()
   const toast = useToast()
 
   const [search, setSearch] = useState('')
+  const [period, setPeriod] = useState<'semaine' | 'mois' | 'annee'>('mois')
+  const [filtreStatut, setFiltreStatut] = useState<FactureFournisseurStatut | 'tous'>('tous')
   const [showModal, setShowModal] = useState(false)
+  const [panelFournisseur, setPanelFournisseur] = useState<{ nom: string; fournisseurId: number | null } | null>(null)
+  const [panelFiche, setPanelFiche] = useState<FournisseurFiche | null>(null)
+  const [panelFicheLoading, setPanelFicheLoading] = useState(false)
+  const [panelDetail, setPanelDetail] = useState<FactureFournisseur | null>(null)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [form, setForm] = useState<Omit<FactureFournisseur, 'id' | 'createdAt'>>({
@@ -32,6 +38,9 @@ export default function AchatsPage() {
     date: new Date().toISOString().slice(0, 10),
     fournisseurId: null,
     fournisseurNom: '',
+    numeroFactureFournisseur: '',
+    modePaiement: '',
+    commentaire: '',
     statut: 'brouillon',
     lignes: [],
     paye: false,
@@ -39,21 +48,85 @@ export default function AchatsPage() {
 
   const filtered = useMemo(() => {
     let list = factures.sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
+    if (filtreStatut !== 'tous') {
+      list = list.filter(f => f.statut === filtreStatut)
+    }
     if (search.trim()) {
       const q = search.toLowerCase()
       list = list.filter(f => f.numero.toLowerCase().includes(q) || f.fournisseurNom.toLowerCase().includes(q))
     }
     return list
-  }, [factures, search])
+  }, [factures, search, filtreStatut])
 
   const totalLignes = (lignes: LigneAchat[]) => lignes.reduce((s, l) => s + l.quantite * l.prixUnitaire, 0)
 
-  const openNew = () => {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth()
+  const monthStart = new Date(year, month, 1).toISOString().slice(0, 10)
+  const monthEnd = new Date(year, month + 1, 0).toISOString().slice(0, 10)
+  const weekAgo = new Date(now)
+  weekAgo.setDate(weekAgo.getDate() - 7)
+  const weekStart = weekAgo.toISOString().slice(0, 10)
+  const yearStart = `${year}-01-01`
+  const yearEnd = `${year}-12-31`
+
+  const stats = useMemo(() => {
+    const sum = (l: LigneAchat[]) => l.reduce((s, x) => s + x.quantite * x.prixUnitaire, 0)
+    const totalDuMois = factures
+      .filter(f => f.date >= monthStart && f.date <= monthEnd)
+      .reduce((s, f) => s + sum(f.lignes), 0)
+    const enAttente = factures.filter(f => !f.paye).reduce((s, f) => s + sum(f.lignes), 0)
+    const countEnAttente = factures.filter(f => !f.paye).length
+    return { totalDuMois, enAttente, countEnAttente }
+  }, [factures, monthStart, monthEnd])
+
+  const totalParPeriode = useMemo(() => {
+    const sum = (l: LigneAchat[]) => l.reduce((s, x) => s + x.quantite * x.prixUnitaire, 0)
+    const today = now.toISOString().slice(0, 10)
+    const inRange = (d: string) => {
+      if (period === 'semaine') return d >= weekStart && d <= today
+      if (period === 'mois') return d >= monthStart && d <= monthEnd
+      return d >= yearStart && d <= yearEnd
+    }
+    return factures.filter(f => inRange(f.date)).reduce((s, f) => s + sum(f.lignes), 0)
+  }, [factures, period, weekStart, monthStart, monthEnd, yearStart, yearEnd])
+
+  const [topFournisseurs, setTopFournisseurs] = useState<FournisseurTopItem[]>([])
+  useEffect(() => {
+    fetchTopFournisseurs(5).then(setTopFournisseurs)
+  }, [fetchTopFournisseurs])
+
+  useEffect(() => {
+    if (!panelFournisseur) {
+      setPanelFiche(null)
+      setPanelFicheLoading(false)
+      return
+    }
+    if (panelFournisseur.fournisseurId) {
+      setPanelFicheLoading(true)
+      setPanelFiche(null)
+      fetchFournisseurFiche(panelFournisseur.fournisseurId)
+        .then(f => {
+          setPanelFiche(f ?? null)
+        })
+        .finally(() => setPanelFicheLoading(false))
+    } else {
+      setPanelFiche(null)
+      setPanelFicheLoading(false)
+    }
+  }, [panelFournisseur, fetchFournisseurFiche])
+
+  const openNew = async () => {
+    const numero = await getNextNumero()
     setForm({
-      numero: getNextNumero(),
+      numero,
       date: new Date().toISOString().slice(0, 10),
       fournisseurId: null,
       fournisseurNom: '',
+      numeroFactureFournisseur: '',
+      modePaiement: '',
+      commentaire: '',
       statut: 'brouillon',
       lignes: [],
       paye: false,
@@ -68,6 +141,9 @@ export default function AchatsPage() {
       date: f.date,
       fournisseurId: f.fournisseurId,
       fournisseurNom: f.fournisseurNom,
+      numeroFactureFournisseur: f.numeroFactureFournisseur ?? '',
+      modePaiement: f.modePaiement ?? '',
+      commentaire: f.commentaire ?? '',
       statut: f.statut,
       lignes: f.lignes.length ? f.lignes : [],
       paye: f.paye,
@@ -76,12 +152,16 @@ export default function AchatsPage() {
     setShowModal(true)
   }
 
-  const openDuplicate = (f: FactureFournisseur) => {
+  const openDuplicate = async (f: FactureFournisseur) => {
+    const numero = await getNextNumero()
     setForm({
-      numero: getNextNumero(),
+      numero,
       date: new Date().toISOString().slice(0, 10),
       fournisseurId: f.fournisseurId,
       fournisseurNom: f.fournisseurNom,
+      numeroFactureFournisseur: f.numeroFactureFournisseur ?? '',
+      modePaiement: f.modePaiement ?? '',
+      commentaire: f.commentaire ?? '',
       statut: 'brouillon',
       lignes: f.lignes.length ? f.lignes.map(l => ({ ...l })) : [],
       paye: false,
@@ -90,12 +170,16 @@ export default function AchatsPage() {
     setShowModal(true)
   }
 
+  const modePaiementLabel = (v: string) => (MODE_PAIEMENT_OPTIONS.find(o => o.value === v)?.label ?? v) || '—'
+
   const addLigne = (productId: number) => {
     const p = produits.find(x => x.id === productId)
     if (!p) return
+    const qte = p.quantite ?? 0
+    const prixUnitaire = p.prixVente ?? (qte > 0 ? (p.valeurAchatTTC ?? 0) / qte : 0)
     setForm(prev => ({
       ...prev,
-      lignes: [...prev.lignes, { productId: p.id, designation: p.nom, quantite: 1, prixUnitaire: p.valeurAchatTTC }],
+      lignes: [...prev.lignes, { productId: p.id, designation: p.nom, quantite: 1, prixUnitaire }],
     }))
   }
 
@@ -110,7 +194,7 @@ export default function AchatsPage() {
     setForm(prev => ({ ...prev, lignes: prev.lignes.filter((_, i) => i !== index) }))
   }
 
-  const saveAchat = (validerEtEntrerStock?: boolean) => {
+  const saveAchat = async (validerEtEntrerStock?: boolean) => {
     if (!form.fournisseurNom.trim()) {
       toast.error('Indiquez le fournisseur')
       return
@@ -133,9 +217,6 @@ export default function AchatsPage() {
     const doitIncrementerStock = (newStatut === 'validee' || newStatut === 'payee') && (!prev || prev.statut === 'brouillon')
 
     if (doitIncrementerStock) {
-      for (const l of lignesValides) incrementerStock(l.productId, l.quantite, { origine: 'achat', reference: payload.numero })
-    }
-    if (doitIncrementerStock) {
       const totalAchat = totalLignes(lignesValides)
       addOut({
         date: payload.date,
@@ -145,19 +226,23 @@ export default function AchatsPage() {
       })
     }
 
-    if (editingId) {
-      updateFacture(editingId, payload)
-      toast.success(validerEtEntrerStock ? 'Achat validé — stock mis à jour' : 'Achat enregistré')
-    } else {
-      addFacture(payload)
-      toast.success(validerEtEntrerStock ? 'Achat créé et validé — stock mis à jour' : 'Achat créé')
+    try {
+      if (editingId) {
+        await updateFacture(editingId, payload)
+        toast.success(validerEtEntrerStock ? 'Achat validé — stock mis à jour' : 'Achat enregistré')
+      } else {
+        await addFacture(payload)
+        toast.success(validerEtEntrerStock ? 'Achat créé et validé — stock mis à jour' : 'Achat créé')
+      }
+      if (doitIncrementerStock) refetchStock()
+      setShowModal(false)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement')
     }
-    setShowModal(false)
   }
 
-  const marquerPayee = (f: FactureFournisseur) => {
+  const marquerPayee = async (f: FactureFournisseur) => {
     if (f.statut === 'brouillon') {
-      for (const l of f.lignes) incrementerStock(l.productId, l.quantite, { origine: 'achat', reference: f.numero })
       const totalAchat = totalLignes(f.lignes)
       addOut({
         date: f.date,
@@ -166,8 +251,13 @@ export default function AchatsPage() {
         description: `Achat ${f.numero} — ${f.fournisseurNom}`,
       })
     }
-    updateFacture(f.id, { statut: 'payee', paye: true })
-    toast.success('Facture marquée payée')
+    try {
+      await updateFacture(f.id, { statut: 'payee', paye: true })
+      if (f.statut === 'brouillon') refetchStock()
+      toast.success('Achat marqué payé')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur')
+    }
   }
 
   if (!permissions?.canViewFinance) {
@@ -179,8 +269,16 @@ export default function AchatsPage() {
     )
   }
 
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16">
+        <p className="text-gray-500 font-medium">Chargement des achats...</p>
+      </div>
+    )
+  }
+
   return (
-    <div className="space-y-4 px-3 sm:px-4 pb-6 max-w-full overflow-x-hidden">
+    <div className="space-y-3 sm:space-y-4 px-2 sm:px-4 md:px-6 pb-6 max-w-full overflow-x-hidden">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center gap-2">
@@ -192,6 +290,92 @@ export default function AchatsPage() {
         <Button onClick={openNew} icon={<Plus className="w-4 h-4" />} size="sm" className="w-full sm:w-auto shrink-0">
           Nouvel achat
         </Button>
+      </div>
+
+      {/* Stats : Total du mois + En attente de paiement */}
+      <div className="grid grid-cols-2 sm:grid-cols-2 gap-2 sm:gap-3">
+        <Card padding="sm" className="bg-gradient-to-br from-orange-50 to-white border-orange-100 py-2.5 sm:py-3">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-orange-100 flex items-center justify-center shrink-0">
+              <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wide truncate">Total du mois</p>
+              <p className="text-sm sm:text-lg font-bold text-gray-900 tabular-nums truncate">{stats.totalDuMois.toFixed(2)} DT</p>
+            </div>
+          </div>
+        </Card>
+        <Card padding="sm" className={cn('border py-2.5 sm:py-3', stats.enAttente > 0 ? 'bg-amber-50 border-amber-200' : 'bg-gray-50/50 border-gray-100')}>
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className={cn('w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0', stats.enAttente > 0 ? 'bg-amber-200' : 'bg-gray-200')}>
+              <AlertCircle className={cn('w-4 h-4 sm:w-5 sm:h-5', stats.enAttente > 0 ? 'text-amber-700' : 'text-gray-500')} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wide truncate">En attente</p>
+              <p className={cn('text-sm sm:text-lg font-bold tabular-nums truncate', stats.enAttente > 0 ? 'text-amber-800' : 'text-gray-700')}>
+                {stats.enAttente.toFixed(2)} DT
+              </p>
+              {stats.countEnAttente > 0 && (
+                <p className="text-[10px] sm:text-xs text-gray-500">{stats.countEnAttente} fact.</p>
+              )}
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Badge alerte Factures à payer */}
+      {stats.enAttente > 0 && (
+        <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-amber-100 border border-amber-300 text-amber-900">
+          <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+          <p className="text-xs sm:text-sm font-semibold flex-1 min-w-0 truncate">
+            Factures à payer : <strong>{stats.enAttente.toFixed(2)} DT</strong> ({stats.countEnAttente} fact.)
+          </p>
+        </div>
+      )}
+
+      {/* Résumé par période + Top fournisseurs */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+        <Card padding="sm" className="py-3 sm:py-4">
+          <h3 className="text-xs sm:text-sm font-semibold text-gray-800 mb-2 sm:mb-3">Résumé par période</h3>
+          <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-2 sm:mb-3">
+            {(['semaine', 'mois', 'annee'] as const).map(p => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPeriod(p)}
+                className={cn(
+                  'px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors',
+                  period === p
+                    ? 'bg-orange-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                )}
+              >
+                {p === 'semaine' ? 'Semaine' : p === 'mois' ? 'Mois' : 'Année'}
+              </button>
+            ))}
+          </div>
+          <p className="text-xl sm:text-2xl font-bold text-gray-900 tabular-nums">{totalParPeriode.toFixed(2)} DT</p>
+        </Card>
+        <Card padding="sm" className="py-3 sm:py-4">
+          <h3 className="text-xs sm:text-sm font-semibold text-gray-800 mb-2 sm:mb-3 flex items-center gap-2">
+            <Users className="w-4 h-4 text-orange-500" />
+            Top fournisseurs
+          </h3>
+          {topFournisseurs.length === 0 ? (
+            <p className="text-sm text-gray-500">Aucun achat enregistré</p>
+          ) : (
+            <ul className="space-y-2">
+              {topFournisseurs.map((f, i) => (
+                <li key={f.fournisseurId} className="flex items-center justify-between text-xs sm:text-sm gap-2 min-w-0">
+                  <span className="font-medium text-gray-700 truncate min-w-0">
+                    {i + 1}. {f.nom}
+                  </span>
+                  <span className="tabular-nums font-semibold text-gray-900 shrink-0">{f.total.toFixed(2)} DT</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
       </div>
 
       <Card padding="sm" className="py-2.5">
@@ -209,26 +393,94 @@ export default function AchatsPage() {
         </div>
       </Card>
 
-      <Card padding="none" className="overflow-hidden shadow-sm border border-gray-100 rounded-2xl">
+      {/* Filtre par statut */}
+      <div className="flex flex-wrap gap-1.5 sm:gap-2">
+        {(['tous', 'brouillon', 'validee', 'payee'] as const).map(s => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => setFiltreStatut(s)}
+            className={cn(
+              'px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors',
+              filtreStatut === s
+                ? 'bg-orange-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            )}
+          >
+            {s === 'tous' ? 'Tous' : FACTURE_FOURNISSEUR_STATUT_CONFIG[s].label}
+          </button>
+        ))}
+      </div>
+
+      <Card padding="none" className="overflow-hidden shadow-sm border border-gray-100 rounded-xl sm:rounded-2xl">
         {filtered.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="w-16 h-16 rounded-2xl bg-orange-50 flex items-center justify-center mx-auto mb-4">
-              <Truck className="w-8 h-8 text-orange-500" />
+          <div className="text-center py-12 sm:py-16 px-4">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-orange-50 flex items-center justify-center mx-auto mb-3 sm:mb-4">
+              <Truck className="w-7 h-7 sm:w-8 sm:h-8 text-orange-500" />
             </div>
-            <p className="font-semibold text-gray-700">Aucun achat</p>
-            <p className="text-sm text-gray-500 mt-1">Créez un achat pour enregistrer une entrée en stock.</p>
-            <Button className="mt-4" onClick={openNew} icon={<Plus className="w-4 h-4" />}>
+            <p className="font-semibold text-gray-700 text-sm sm:text-base">Aucun achat</p>
+            <p className="text-xs sm:text-sm text-gray-500 mt-1">Créez un achat pour enregistrer une entrée en stock.</p>
+            <Button className="mt-3 sm:mt-4" onClick={openNew} icon={<Plus className="w-4 h-4" />} size="sm">
               Nouvel achat
             </Button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[500px]">
+          <>
+          {/* Vue cartes - Mobile & Tablette */}
+          <div className="md:hidden divide-y divide-gray-100">
+            {filtered.map((f, i) => (
+              <div
+                key={f.id}
+                onClick={() => setPanelDetail(f)}
+                className={cn(
+                  'p-3 sm:p-4 cursor-pointer active:bg-orange-50/70 transition-colors',
+                  i % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
+                )}
+              >
+                <div className="flex items-start justify-between gap-2 mb-1.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-gray-900 truncate">{f.numero}</p>
+                    <p className="text-xs text-gray-500">{formatDate(f.date)}</p>
+                  </div>
+                  <span className="tabular-nums font-bold text-gray-900 shrink-0">{totalLignes(f.lignes).toFixed(2)} DT</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={e => { e.stopPropagation(); setPanelFournisseur({ nom: f.fournisseurNom, fournisseurId: f.fournisseurId }) }}
+                  className="text-orange-600 hover:text-orange-700 text-sm font-medium truncate block w-full text-left"
+                >
+                  {f.fournisseurNom}
+                </button>
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold border', FACTURE_FOURNISSEUR_STATUT_CONFIG[f.statut].badge)}>
+                    {FACTURE_FOURNISSEUR_STATUT_CONFIG[f.statut].label}
+                  </span>
+                  {f.paye ? (
+                    <span className="text-emerald-600 text-xs font-medium flex items-center gap-0.5"><CheckCircle className="w-3.5 h-3.5" /> Payé</span>
+                  ) : (
+                    <span className="text-amber-600 text-xs font-medium">Non payé</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-100" onClick={e => e.stopPropagation()}>
+                  <button type="button" onClick={() => openEdit(f)} className="p-1.5 rounded-lg text-gray-400 hover:bg-orange-50 hover:text-orange-600" title="Modifier"><Pencil className="w-4 h-4" /></button>
+                  <button type="button" onClick={() => openDuplicate(f)} className="p-1.5 rounded-lg text-gray-400 hover:bg-blue-50 hover:text-blue-600" title="Dupliquer"><Copy className="w-4 h-4" /></button>
+                  {f.statut !== 'payee' && <button type="button" onClick={() => marquerPayee(f)} className="p-1.5 rounded-lg text-gray-400 hover:bg-emerald-50 hover:text-emerald-600" title="Marquer payée"><CheckCircle className="w-4 h-4" /></button>}
+                  <button type="button" onClick={() => setDeleteId(f.id)} className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Vue tableau - Desktop */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full text-sm min-w-[600px]">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">N°</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Date</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Fournisseur</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">N° fact. fourn.</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Mode paiement</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Total</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Statut</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Payé</th>
@@ -239,15 +491,27 @@ export default function AchatsPage() {
                 {filtered.map((f, i) => (
                   <tr
                     key={f.id}
+                    onClick={() => setPanelDetail(f)}
                     className={cn(
-                      'border-b border-gray-50',
+                      'border-b border-gray-50 cursor-pointer',
                       i % 2 === 0 ? 'bg-white' : 'bg-gray-50/30',
                       'hover:bg-orange-50/50'
                     )}
                   >
                     <td className="px-4 py-3 font-semibold text-gray-900">{f.numero}</td>
                     <td className="px-4 py-3 text-gray-600">{formatDate(f.date)}</td>
-                    <td className="px-4 py-3 text-gray-800">{f.fournisseurNom}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); setPanelFournisseur({ nom: f.fournisseurNom, fournisseurId: f.fournisseurId }) }}
+                        className="text-orange-600 hover:text-orange-700 font-medium hover:underline flex items-center gap-1"
+                      >
+                        {f.fournisseurNom}
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">{f.numeroFactureFournisseur || '—'}</td>
+                    <td className="px-4 py-3 text-gray-600">{modePaiementLabel(f.modePaiement ?? '')}</td>
                     <td className="px-4 py-3 text-right font-semibold tabular-nums">{totalLignes(f.lignes).toFixed(2)} DT</td>
                     <td className="px-4 py-2">
                       <span className={cn('inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border', FACTURE_FOURNISSEUR_STATUT_CONFIG[f.statut].badge)}>
@@ -261,7 +525,7 @@ export default function AchatsPage() {
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">Non payé</span>
                       )}
                     </td>
-                    <td className="px-4 py-2">
+                    <td className="px-4 py-2" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-1">
                         <button type="button" onClick={() => openEdit(f)} className="p-2 rounded-lg text-gray-400 hover:bg-orange-50 hover:text-orange-600" title="Modifier"><Pencil className="w-4 h-4" /></button>
                         <button type="button" onClick={() => openDuplicate(f)} className="p-2 rounded-lg text-gray-400 hover:bg-blue-50 hover:text-blue-600" title="Dupliquer"><Copy className="w-4 h-4" /></button>
@@ -274,6 +538,7 @@ export default function AchatsPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </Card>
 
@@ -315,9 +580,30 @@ export default function AchatsPage() {
             </div>
             <Input label="Date" type="date" value={form.date} onChange={(e: ChangeEvent<HTMLInputElement>) => setForm(prev => ({ ...prev, date: e.target.value }))} />
           </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input
+              label="N° facture fournisseur"
+              value={form.numeroFactureFournisseur ?? ''}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setForm(prev => ({ ...prev, numeroFactureFournisseur: e.target.value }))}
+              placeholder="Ex. FAC-2026-001"
+            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Mode de paiement</label>
+              <select
+                value={form.modePaiement ?? ''}
+                onChange={e => setForm(prev => ({ ...prev, modePaiement: e.target.value }))}
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm"
+              >
+                <option value="">— Choisir —</option>
+                {MODE_PAIEMENT_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
 
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
               <h3 className="text-sm font-semibold text-gray-800">Lignes (produits)</h3>
               <select
                 value=""
@@ -326,7 +612,7 @@ export default function AchatsPage() {
                   if (id) addLigne(id)
                   e.target.value = ''
                 }}
-                className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm bg-white"
+                className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs sm:text-sm bg-white w-full sm:w-auto min-w-0"
               >
                 <option value="">+ Ajouter un produit</option>
                 {produits.map(p => (
@@ -334,8 +620,8 @@ export default function AchatsPage() {
                 ))}
               </select>
             </div>
-            <div className="border border-gray-200 rounded-xl overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="border border-gray-200 rounded-xl overflow-x-auto -mx-1">
+              <table className="w-full text-xs sm:text-sm min-w-[280px]">
                 <thead>
                   <tr className="bg-gray-50">
                     <th className="text-left px-3 py-2 font-medium text-gray-600">Produit</th>
@@ -355,7 +641,7 @@ export default function AchatsPage() {
                           step={0.01}
                           value={l.quantite}
                           onChange={e => setLigne(i, { quantite: Number(e.target.value) || 0 })}
-                          className="w-16 px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-right"
+                          className="w-14 sm:w-16 min-w-0 px-1.5 sm:px-2 py-1.5 border border-gray-200 rounded-lg text-xs sm:text-sm text-right"
                         />
                       </td>
                       <td className="px-3 py-2 text-right">
@@ -365,7 +651,7 @@ export default function AchatsPage() {
                           step={0.01}
                           value={l.prixUnitaire}
                           onChange={e => setLigne(i, { prixUnitaire: Number(e.target.value) || 0 })}
-                          className="w-20 px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-right"
+                          className="w-16 sm:w-20 min-w-0 px-1.5 sm:px-2 py-1.5 border border-gray-200 rounded-lg text-xs sm:text-sm text-right"
                         />
                       </td>
                       <td className="px-2 py-1">
@@ -379,6 +665,16 @@ export default function AchatsPage() {
             <p className="text-xs text-gray-500 mt-1.5">Total : <strong>{totalLignes(form.lignes).toFixed(2)} DT</strong></p>
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Commentaire / Pièces jointes (réf)</label>
+            <textarea
+              value={form.commentaire ?? ''}
+              onChange={e => setForm(prev => ({ ...prev, commentaire: e.target.value }))}
+              placeholder="Notes, référence pièce jointe..."
+              rows={2}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 resize-none text-sm"
+            />
+          </div>
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={form.paye} onChange={e => setForm(prev => ({ ...prev, paye: e.target.checked }))} className="rounded border-gray-300" />
@@ -404,10 +700,182 @@ export default function AchatsPage() {
           <p className="text-gray-600 text-sm">Cette action est irréversible. Le stock ne sera pas modifié (suppression uniquement de l'enregistrement).</p>
           <div className="flex gap-3">
             <Button variant="outline" onClick={() => setDeleteId(null)} className="flex-1">Annuler</Button>
-            <Button variant="outline" onClick={() => { if (deleteId != null) { removeFacture(deleteId); toast.success('Achat supprimé'); setDeleteId(null) } }} className="flex-1 text-red-600 border-red-200 hover:bg-red-50">Supprimer</Button>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                if (deleteId == null) return
+                const ok = await removeFacture(deleteId)
+                if (ok) {
+                  toast.success('Achat supprimé')
+                  setDeleteId(null)
+                } else {
+                  toast.error('Erreur lors de la suppression')
+                }
+              }}
+              className="flex-1 text-red-600 border-red-200 hover:bg-red-50"
+            >
+              Supprimer
+            </Button>
           </div>
         </div>
       </Modal>
+
+      {/* Panneau latéral : Fiche fournisseur */}
+      {panelFournisseur && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setPanelFournisseur(null)} />
+          <div className="relative w-full sm:max-w-sm md:max-w-md bg-white shadow-2xl flex flex-col slide-in-from-right max-h-[100dvh] sm:max-h-[90vh] sm:rounded-l-2xl overflow-hidden">
+            <div className="flex items-center justify-between p-3 sm:p-4 border-b border-gray-100 shrink-0">
+              <h3 className="text-base sm:text-lg font-bold text-gray-900 truncate pr-2">Fiche fournisseur</h3>
+              <button onClick={() => setPanelFournisseur(null)} className="p-2 hover:bg-gray-100 rounded-lg shrink-0 touch-manipulation"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="overflow-y-auto p-3 sm:p-4 flex-1 min-h-0">
+              {panelFournisseur.fournisseurId ? (
+                panelFicheLoading ? (
+                  <p className="text-sm text-gray-500">Chargement…</p>
+                ) : panelFiche ? (
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="font-semibold text-gray-900 text-lg">{panelFiche.fournisseur.nom}</h4>
+                      <div className="mt-2 space-y-1 text-sm text-gray-600">
+                        {panelFiche.fournisseur.telephone && <p>📞 {panelFiche.fournisseur.telephone}</p>}
+                        {panelFiche.fournisseur.email && <p>✉️ {panelFiche.fournisseur.email}</p>}
+                        {panelFiche.fournisseur.adresse && <p>📍 {panelFiche.fournisseur.adresse}</p>}
+                      </div>
+                    </div>
+                    <div className="border-t border-gray-100 pt-4">
+                      <p className="text-sm font-semibold text-gray-700">Total cumulé</p>
+                      <p className="text-xl font-bold text-orange-600 tabular-nums">{panelFiche.totalCumule.toFixed(2)} DT</p>
+                    </div>
+                    {panelFiche.dernierAchat && (
+                      <div className="border-t border-gray-100 pt-4">
+                        <p className="text-sm font-semibold text-gray-700">Dernier achat</p>
+                        <p className="text-sm text-gray-600">{panelFiche.dernierAchat.numero} — {formatDate(panelFiche.dernierAchat.date)} — {panelFiche.dernierAchat.total.toFixed(2)} DT</p>
+                      </div>
+                    )}
+                    <div className="border-t border-gray-100 pt-4">
+                      <p className="text-sm font-semibold text-gray-700 mb-2">Historique ({panelFiche.countAchats} achats)</p>
+                      <ul className="space-y-1 max-h-48 overflow-y-auto">
+                        {panelFiche.historique.slice(0, 20).map(a => (
+                          <li key={a.id} className="flex justify-between text-sm">
+                            <span>{a.numero} — {formatDate(a.date)}</span>
+                            <span className="font-medium tabular-nums">{a.total.toFixed(2)} DT</span>
+                          </li>
+                        ))}
+                        {panelFiche.countAchats > 20 && <li className="text-xs text-gray-500">… et {panelFiche.countAchats - 20} autres</li>}
+                      </ul>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">Fournisseur introuvable</p>
+                )
+              ) : (
+                (() => {
+                  const fournisseur = fournisseurs.find(f => f.nom.toLowerCase() === panelFournisseur.nom.toLowerCase())
+                  const achatsFournisseur = factures.filter(a => a.fournisseurNom.trim().toLowerCase() === panelFournisseur.nom.trim().toLowerCase())
+                  const totalCumule = achatsFournisseur.reduce((s, a) => s + totalLignes(a.lignes), 0)
+                  const dernierAchat = achatsFournisseur.sort((a, b) => b.date.localeCompare(a.date))[0]
+                  return (
+                    <div className="space-y-4">
+                      <div>
+                        <h4 className="font-semibold text-gray-900 text-lg">{panelFournisseur.nom}</h4>
+                        {fournisseur && (
+                          <div className="mt-2 space-y-1 text-sm text-gray-600">
+                            {fournisseur.telephone && <p>📞 {fournisseur.telephone}</p>}
+                            {fournisseur.email && <p>✉️ {fournisseur.email}</p>}
+                            {fournisseur.adresse && <p>📍 {fournisseur.adresse}</p>}
+                          </div>
+                        )}
+                      </div>
+                      <div className="border-t border-gray-100 pt-4">
+                        <p className="text-sm font-semibold text-gray-700">Total cumulé</p>
+                        <p className="text-xl font-bold text-orange-600 tabular-nums">{totalCumule.toFixed(2)} DT</p>
+                      </div>
+                      {dernierAchat && (
+                        <div className="border-t border-gray-100 pt-4">
+                          <p className="text-sm font-semibold text-gray-700">Dernier achat</p>
+                          <p className="text-sm text-gray-600">{dernierAchat.numero} — {formatDate(dernierAchat.date)} — {totalLignes(dernierAchat.lignes).toFixed(2)} DT</p>
+                        </div>
+                      )}
+                      <div className="border-t border-gray-100 pt-4">
+                        <p className="text-sm font-semibold text-gray-700 mb-2">Historique ({achatsFournisseur.length} achats)</p>
+                        <ul className="space-y-1 max-h-48 overflow-y-auto">
+                          {achatsFournisseur.slice(0, 20).map(a => (
+                            <li key={a.id} className="flex justify-between text-sm">
+                              <span>{a.numero} — {formatDate(a.date)}</span>
+                              <span className="font-medium tabular-nums">{totalLignes(a.lignes).toFixed(2)} DT</span>
+                            </li>
+                          ))}
+                          {achatsFournisseur.length > 20 && <li className="text-xs text-gray-500">… et {achatsFournisseur.length - 20} autres</li>}
+                        </ul>
+                      </div>
+                    </div>
+                  )
+                })()
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Panneau latéral : Détail rapide achat */}
+      {panelDetail && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setPanelDetail(null)} />
+          <div className="relative w-full sm:max-w-sm md:max-w-md bg-white shadow-2xl flex flex-col slide-in-from-right max-h-[100dvh] sm:max-h-[90vh] sm:rounded-l-2xl overflow-hidden">
+            <div className="flex items-center justify-between p-3 sm:p-4 border-b border-gray-100 shrink-0">
+              <h3 className="text-base sm:text-lg font-bold text-gray-900 truncate pr-2">Achat {panelDetail.numero}</h3>
+              <button onClick={() => setPanelDetail(null)} className="p-2 hover:bg-gray-100 rounded-lg shrink-0 touch-manipulation"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="overflow-y-auto p-3 sm:p-4 flex-1 min-h-0 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm">
+                <p><span className="text-gray-500">Date :</span> {formatDate(panelDetail.date)}</p>
+                <p><span className="text-gray-500">Fournisseur :</span> {panelDetail.fournisseurNom}</p>
+                {panelDetail.numeroFactureFournisseur && <p><span className="text-gray-500">N° fact. fourn. :</span> {panelDetail.numeroFactureFournisseur}</p>}
+                {panelDetail.modePaiement && <p><span className="text-gray-500">Mode paiement :</span> {modePaiementLabel(panelDetail.modePaiement)}</p>}
+                <p><span className="text-gray-500">Statut :</span> <span className={cn('px-2 py-0.5 rounded-full text-xs font-semibold', FACTURE_FOURNISSEUR_STATUT_CONFIG[panelDetail.statut].badge)}>{FACTURE_FOURNISSEUR_STATUT_CONFIG[panelDetail.statut].label}</span></p>
+              </div>
+              <div>
+                <h4 className="font-semibold text-gray-800 mb-2 text-sm">Lignes produits</h4>
+                <div className="overflow-x-auto -mx-1">
+                <table className="w-full text-xs sm:text-sm min-w-[240px]">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-2 font-medium text-gray-600">Produit</th>
+                      <th className="text-right py-2 font-medium text-gray-600">Qté</th>
+                      <th className="text-right py-2 font-medium text-gray-600">Prix unit.</th>
+                      <th className="text-right py-2 font-medium text-gray-600">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {panelDetail.lignes.map((l, i) => (
+                      <tr key={i} className="border-b border-gray-100">
+                        <td className="py-2">{l.designation}</td>
+                        <td className="py-2 text-right tabular-nums">{l.quantite}</td>
+                        <td className="py-2 text-right tabular-nums">{l.prixUnitaire.toFixed(2)} DT</td>
+                        <td className="py-2 text-right font-medium tabular-nums">{(l.quantite * l.prixUnitaire).toFixed(2)} DT</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                </div>
+                <p className="text-sm font-bold text-gray-900 mt-2">Total : {totalLignes(panelDetail.lignes).toFixed(2)} DT</p>
+              </div>
+              {panelDetail.commentaire && (
+                <div>
+                  <h4 className="font-semibold text-gray-800 mb-1">Commentaire</h4>
+                  <p className="text-sm text-gray-600 whitespace-pre-wrap">{panelDetail.commentaire}</p>
+                </div>
+              )}
+              <div className="flex gap-2 pt-2 border-t border-gray-100">
+                <Button size="sm" onClick={() => { openEdit(panelDetail); setPanelDetail(null) }} icon={<Pencil className="w-4 h-4" />}>
+                  Modifier
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

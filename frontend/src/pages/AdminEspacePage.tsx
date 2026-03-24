@@ -16,6 +16,7 @@ import { useStockGeneral } from '@/contexts/StockGeneralContext'
 import { useOutils } from '@/contexts/OutilsContext'
 import { useMoney } from '@/contexts/MoneyContext'
 import { useToast } from '@/contexts/ToastContext'
+import { apiFetch } from '@/lib/api'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -47,6 +48,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ClientAvecDette } from '@/types'
+import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, BarChart, Bar } from 'recharts'
 
 const STORAGE_KEY = 'elmecano-admin-corrections'
 
@@ -55,6 +57,17 @@ export interface AdminCorrectionItem {
   text: string
   done: boolean
   createdAt: string
+}
+
+type StatsTrendPoint = {
+  period: string
+  caFacture: number
+  encaissements: number
+  depenses: number
+  vehiculesTraites: number
+  reclamations: number
+  achats: number
+  paiementsFournisseurs: number
 }
 
 function loadCorrections(): AdminCorrectionItem[] {
@@ -76,10 +89,10 @@ function saveCorrections(items: AdminCorrectionItem[]) {
 
 export default function AdminEspacePage() {
   const navigate = useNavigate()
-  const { user, permissions } = useAuth()
+  const { user, permissions, getAccessToken } = useAuth()
   const toast = useToast()
-  const { vehicules } = useVehiculesContext()
-  const { clients } = useClients()
+  const { vehicules, stats: vehiculeStats, fetchStats } = useVehiculesContext()
+  const { clients, stats: clientStats } = useClients()
   const { members } = useTeamMembers()
   const { days: caisseDays } = useCaisse()
   const { assignments } = useCalendar()
@@ -92,11 +105,13 @@ export default function AdminEspacePage() {
   const { mouvements, produits } = useStockGeneral()
   const { outilsMohamed, outilsAhmed } = useOutils()
   const { ins: moneyIns, outs: moneyOuts } = useMoney()
-  const { historique } = useVehiculesContext()
 
   const now = new Date()
   const [statsMonth, setStatsMonth] = useState(now.getMonth() + 1)
   const [statsYear, setStatsYear] = useState(now.getFullYear())
+  const [trendGroupBy, setTrendGroupBy] = useState<'month' | 'quarter'>('month')
+  const [trendData, setTrendData] = useState<StatsTrendPoint[]>([])
+  const [trendLoading, setTrendLoading] = useState(false)
   const [corrections, setCorrections] = useState<AdminCorrectionItem[]>(loadCorrections)
   const [newCorrectionText, setNewCorrectionText] = useState('')
 
@@ -140,9 +155,35 @@ export default function AdminEspacePage() {
     )
   }
 
+  useEffect(() => {
+    fetchStats(statsMonth, statsYear)
+  }, [statsMonth, statsYear, fetchStats])
+
+  useEffect(() => {
+    const token = getAccessToken()
+    if (!token) {
+      setTrendData([])
+      return
+    }
+    void (async () => {
+      setTrendLoading(true)
+      try {
+        const res = await apiFetch<{ data: StatsTrendPoint[] }>('/stats/trends', {
+          token,
+          params: { year: statsYear, groupBy: trendGroupBy },
+        })
+        setTrendData(Array.isArray(res.data) ? res.data : [])
+      } catch {
+        setTrendData([])
+      } finally {
+        setTrendLoading(false)
+      }
+    })()
+  }, [getAccessToken, statsYear, trendGroupBy])
+
   const stats = [
-    { label: 'Véhicules', value: (vehicules ?? []).length, icon: Car, href: '/vehicules', color: 'bg-blue-50 text-blue-700' },
-    { label: 'Clients', value: (clients ?? []).length, icon: UserCircle, href: '/clients', color: 'bg-emerald-50 text-emerald-700' },
+    { label: 'Véhicules', value: vehiculeStats?.total ?? (vehicules ?? []).length, icon: Car, href: '/vehicules', color: 'bg-blue-50 text-blue-700' },
+    { label: 'Clients', value: clientStats?.total ?? (clients ?? []).length, icon: UserCircle, href: '/clients', color: 'bg-emerald-50 text-emerald-700' },
     { label: 'Membres équipe', value: (members ?? []).length, icon: Users, href: '/equipe/membres', color: 'bg-violet-50 text-violet-700' },
     { label: 'Jours caisse', value: (caisseDays ?? []).length, icon: BarChart3, href: '/caisse', color: 'bg-amber-50 text-amber-700' },
     { label: 'Affectations calendrier', value: (assignments ?? []).length, icon: CalendarDays, href: '/calendar', color: 'bg-indigo-50 text-indigo-700' },
@@ -179,9 +220,8 @@ export default function AdminEspacePage() {
   const totalDettesClients = (clientsDettes ?? []).reduce((s: number, c: ClientAvecDette) => s + (c.reste ?? 0), 0)
   const topDettes = [...(clientsDettes ?? [])].sort((a, b) => (b.reste ?? 0) - (a.reste ?? 0)).slice(0, 5)
 
-  const historiqueCeMois = (historique ?? []).filter(h => isInStatsMonth(h.date_changement))
-  const vehiculesTerminesCeMois = historiqueCeMois.filter(h => h.etat_nouveau === 'vert').length
-  const vehiculesEnCours = (vehicules ?? []).filter(v => v.etat_actuel !== 'vert').length
+  const vehiculesTerminesCeMois = vehiculeStats?.terminesCeMois ?? 0
+  const vehiculesEnCours = vehiculeStats?.enCours ?? (vehicules ?? []).filter(v => v.etat_actuel !== 'vert').length
 
   const moisLabel = `${String(statsMonth).padStart(2, '0')}/${statsYear}`
   const moisOptions = Array.from({ length: 12 }, (_, i) => i + 1)
@@ -217,19 +257,120 @@ export default function AdminEspacePage() {
               key={label}
               type="button"
               onClick={() => navigate(href)}
-              className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:border-indigo-200 hover:bg-indigo-50/50 transition-colors group text-left w-full"
+              className="flex items-center sm:items-start gap-3 p-3 rounded-xl border border-gray-100 hover:border-indigo-200 hover:bg-indigo-50/50 transition-colors group text-left w-full"
             >
               <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0', color)}>
                 <Icon className="w-5 h-5" />
               </div>
               <div className="min-w-0">
                 <p className="text-xl font-bold text-gray-900 tabular-nums">{value}</p>
-                <p className="text-xs text-gray-500 truncate">{label}</p>
+                <p className="text-[11px] sm:text-xs text-gray-500 leading-snug break-words whitespace-normal">
+                  {label}
+                </p>
               </div>
               <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-500 flex-shrink-0 ml-auto" />
             </button>
           ))}
         </div>
+      </Card>
+
+      <Card padding="none" className="overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-violet-50/80 to-white">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-violet-600" />
+                Courbes statistiques ({statsYear})
+              </h2>
+              <p className="text-sm text-gray-500 mt-0.5">Évolution CA / encaissements, véhicules, réclamations et fournisseurs.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={trendGroupBy}
+                onChange={e => setTrendGroupBy(e.target.value as 'month' | 'quarter')}
+                className="px-3 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-800 bg-white"
+              >
+                <option value="month">Par mois</option>
+                <option value="quarter">Par trimestre</option>
+              </select>
+              <select
+                value={statsYear}
+                onChange={e => setStatsYear(Number(e.target.value))}
+                className="px-3 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-800 bg-white"
+              >
+                {anneeOptions.map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+        <div className="p-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div className="rounded-xl border border-gray-100 bg-white p-3">
+            <p className="text-sm font-semibold text-gray-800 mb-2">CA facturé vs Encaissements vs Dépenses</p>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={trendData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="period" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip formatter={(value: unknown) => `${Number(value ?? 0).toFixed(2)} DT`} />
+                  <Legend />
+                  <Line type="monotone" dataKey="caFacture" name="CA facturé" stroke="#4f46e5" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="encaissements" name="Encaissements" stroke="#10b981" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="depenses" name="Dépenses" stroke="#ef4444" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <div className="rounded-xl border border-gray-100 bg-white p-3">
+            <p className="text-sm font-semibold text-gray-800 mb-2">Véhicules traités et réclamations</p>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={trendData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="period" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="vehiculesTraites" name="Véhicules traités" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="reclamations" name="Réclamations" fill="#f97316" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <div className="rounded-xl border border-gray-100 bg-white p-3 xl:col-span-2">
+            <p className="text-sm font-semibold text-gray-800 mb-2">Achats et paiements fournisseurs</p>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={trendData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="period" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip formatter={(value: unknown) => `${Number(value ?? 0).toFixed(2)} DT`} />
+                  <Legend />
+                  <Line type="monotone" dataKey="achats" name="Achats fournisseurs" stroke="#0ea5e9" strokeWidth={2} dot={false} />
+                  <Line
+                    type="monotone"
+                    dataKey="paiementsFournisseurs"
+                    name="Paiements fournisseurs"
+                    stroke="#f59e0b"
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Données réelles backend (PostgreSQL): factures, achats, véhicules traités et réclamations.
+            </p>
+          </div>
+        </div>
+        {trendLoading && (
+          <div className="px-4 pb-4">
+            <p className="text-xs text-gray-500">Chargement des courbes réelles...</p>
+          </div>
+        )}
       </Card>
 
       {/* Statistiques avancées — revenus, dépenses, consommation, dettes */}

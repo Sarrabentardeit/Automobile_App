@@ -82,7 +82,7 @@ export interface User {
 }
 
 // ==================== ETATS / WORKFLOW ====================
-export type EtatVehicule = 'orange' | 'mauve' | 'bleu' | 'rouge' | 'vert'
+export type EtatVehicule = 'orange' | 'mauve' | 'bleu' | 'rouge' | 'vert' | 'retour'
 export type VehiculeType = 'voiture' | 'moto'
 
 export interface EtatConfig {
@@ -135,14 +135,23 @@ export const ETAT_CONFIG: Record<EtatVehicule, EtatConfig> = {
     bgLight: 'bg-green-50',
     border: 'border-green-400',
   },
+  retour: {
+    label: 'RETOUR',
+    description: 'Retour client après livraison',
+    color: '#0f172a',
+    bg: 'bg-slate-800',
+    bgLight: 'bg-slate-50',
+    border: 'border-slate-400',
+  },
 }
 
 export const TRANSITIONS_AUTORISEES: Record<EtatVehicule, EtatVehicule[]> = {
-  orange: ['bleu', 'mauve', 'rouge', 'vert'],
+  orange: ['bleu', 'mauve', 'rouge', 'vert', 'retour'],
   mauve: ['orange'],
   bleu: ['vert', 'orange'],
   rouge: ['orange', 'mauve'],
-  vert: [],
+  vert: ['retour'],
+  retour: [],
 }
 
 // ==================== VEHICULES ====================
@@ -152,6 +161,7 @@ export interface Vehicule {
   modele: string
   type: VehiculeType
   etat_actuel: EtatVehicule
+  service_type?: 'diagnostic' | 'diagnostic_approfondi' | 'service_rapide' | 'reprogrammation' | 'autre'
   technicien_id: number | null
   responsable_id: number | null
   defaut: string
@@ -160,6 +170,28 @@ export interface Vehicule {
   date_sortie: string | null
   notes: string
   derniere_mise_a_jour: string
+}
+
+export type VehiculeImageCategory =
+  | 'etat_exterieur'
+  | 'etat_interieur'
+  | 'compteur'
+  | 'plaque'
+  | 'dommage'
+  | 'intervention'
+
+export interface VehiculeImage {
+  id: number
+  vehicule_id: number
+  url_path: string
+  original_name: string
+  mime_type: string
+  size_bytes: number
+  category: VehiculeImageCategory
+  note: string
+  created_by_id: number | null
+  created_by: string
+  created_at: string
 }
 
 export interface VehiculeFormData {
@@ -173,6 +205,14 @@ export interface VehiculeFormData {
   responsable_id: number | null
   client_telephone: string
   notes: string
+  service_type?: 'diagnostic' | 'diagnostic_approfondi' | 'service_rapide' | 'reprogrammation' | 'autre'
+}
+
+export interface VehiculeImageUploadInput {
+  dataUrl: string
+  fileName: string
+  category: VehiculeImageCategory
+  note: string
 }
 
 // ==================== HISTORIQUE ====================
@@ -305,13 +345,18 @@ export const MONEY_OUT_CATEGORIES = ['GARAGE', 'DEPENSE VOITURE', 'FOURNISSEUR',
 export const MONEY_PAYMENT_METHODS = ['ESPECE', 'CHEQUE', 'VIREMENT'] as const
 
 // ==================== NOTIFICATIONS ====================
-/** Notification reçue par un technicien (ex. assignation véhicule / calendrier) */
+/** Notification reçue par un technicien (ex. assignation réclamation, véhicule, calendrier) */
 export interface Notification {
   id: number
   userId: number
   message: string
   date: string
   read: boolean
+  /** Type (ex. reclamation_assigned) - venu de l'API */
+  type?: string
+  /** ID réclamation si type reclamation_assigned - pour lien vers la page */
+  reclamationId?: number
+  title?: string
 }
 
 // ==================== CALENDRIER / AFFECTATIONS ====================
@@ -341,6 +386,8 @@ export interface Reclamation {
   statut: ReclamationStatut
   assigneA?: string // nom du responsable
   priorite?: 'basse' | 'normale' | 'haute'
+   /** Autres techniciens assignés (noms complets) */
+  techniciens?: string[]
 }
 
 export const RECLAMATION_STATUTS: ReclamationStatut[] = ['ouverte', 'en_cours', 'traitee', 'cloturee']
@@ -380,6 +427,7 @@ export interface HuileProduct {
   quantite: number
   unite: string // L, bidon, unité
   seuilAlerte?: number // alerte si quantite < seuil
+  prix?: number // prix unitaire (optionnel)
 }
 
 export const HUILE_TYPES: Record<HuileType, { label: string; color: string }> = {
@@ -398,16 +446,17 @@ export interface Client {
   email?: string
   adresse?: string
   notes?: string
+  matriculeFiscale?: string
 }
 
 // ==================== CLIENTS AVEC DETTES ====================
 export interface ClientAvecDette {
   id: number
-  clientName: string // NOM DU CLIENT
-  telephoneClient: string // TELEPHONE CLIENT (tél. ou véhicule)
-  designation: string // DESIGNATION (ex. PIECES, MO, RESTE PIECES ET MO)
-  reste: number // RESTE (montant dû)
-  notes?: string // NOTES
+  clientName: string
+  telephoneClient: string
+  designation: string
+  reste: number
+  notes?: string
 }
 
 // ==================== CONTACTS IMPORTANTS (AUTRES) ====================
@@ -452,6 +501,20 @@ export interface Fournisseur {
   adresse?: string
   contact?: string // personne de contact
   notes?: string
+}
+
+export interface FournisseurTopItem {
+  fournisseurId: number
+  nom: string
+  total: number
+}
+
+export interface FournisseurFiche {
+  fournisseur: Fournisseur
+  totalCumule: number
+  dernierAchat: { numero: string; date: string; total: number } | null
+  historique: { id: number; numero: string; date: string; total: number }[]
+  countAchats: number
 }
 
 // ==================== STOCK GÉNÉRAL (PRODUITS) ====================
@@ -598,12 +661,25 @@ export interface LigneAchat {
   prixUnitaire: number
 }
 
+export type ModePaiement = 'especes' | 'virement' | 'cheque' | 'carte' | 'autre'
+
+export const MODE_PAIEMENT_OPTIONS: { value: ModePaiement; label: string }[] = [
+  { value: 'especes', label: 'Espèces' },
+  { value: 'virement', label: 'Virement' },
+  { value: 'cheque', label: 'Chèque' },
+  { value: 'carte', label: 'Carte bancaire' },
+  { value: 'autre', label: 'Autre' },
+]
+
 export interface FactureFournisseur {
   id: number
   numero: string
   date: string // YYYY-MM-DD
   fournisseurId: number | null
   fournisseurNom: string
+  numeroFactureFournisseur?: string
+  modePaiement?: string
+  commentaire?: string
   statut: FactureFournisseurStatut
   lignes: LigneAchat[]
   paye: boolean // suivi payé / non payé
@@ -617,4 +693,94 @@ export const FACTURE_FOURNISSEUR_STATUT_CONFIG: Record<
   brouillon: { label: 'Brouillon', badge: 'bg-slate-100 text-slate-700 border border-slate-200' },
   validee: { label: 'Validée', badge: 'bg-blue-100 text-blue-800 border border-blue-200' },
   payee: { label: 'Payée', badge: 'bg-emerald-100 text-emerald-800 border border-emerald-200' },
+}
+
+// ==================== CHECKLISTS JOURNALIERES ====================
+export type ChecklistRole = 'chef_atelier' | 'coordinateur' | 'technicien'
+export type ChecklistItemStatus = 'todo' | 'done' | 'na'
+export type ChecklistWorkflowStatus = 'draft' | 'submitted' | 'validated' | 'rejected'
+
+export interface ChecklistItem {
+  id: string
+  label: string
+  status: ChecklistItemStatus
+  comment: string
+}
+
+export interface ChecklistSection {
+  id: string
+  title: string
+  items: ChecklistItem[]
+}
+
+export interface DailyChecklistData {
+  version: number
+  sections: ChecklistSection[]
+}
+
+export interface DailyChecklist {
+  id: number
+  userId: number
+  userName: string
+  role: ChecklistRole
+  date: string
+  status: ChecklistWorkflowStatus
+  data: DailyChecklistData
+  submittedAt: string | null
+  validatedAt: string | null
+  validatorId: number | null
+  validatorName: string
+  validatorComment: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ChecklistAuditLog {
+  id: number
+  checklistId: number
+  action: 'created' | 'updated' | 'submitted' | 'validated' | 'rejected' | string
+  actorId: number | null
+  actorName: string
+  actorRole: string
+  summary: string
+  snapshot: DailyChecklistData | null
+  createdAt: string
+}
+
+export interface ChecklistMonthlyKpi {
+  period: string
+  totalChecklists: number
+  submitted: number
+  validated: number
+  rejected: number
+  lateSubmissions: number
+  nonConformities: number
+  submissionRate: number
+  validationRate: number
+  byRole: Record<string, number>
+}
+
+export interface ChecklistHistoryMetrics {
+  done: number
+  todo: number
+  na: number
+  total: number
+  nonConformities: number
+}
+
+export interface ChecklistHistoryEntry extends DailyChecklist {
+  metrics: ChecklistHistoryMetrics
+  lateSubmission: boolean
+}
+
+export interface ChecklistHistorySummaryRow {
+  userId: number
+  userName: string
+  role: string
+  total: number
+  validated: number
+  rejected: number
+  lateSubmissions: number
+  nonConformities: number
+  avgCompletionRate: number
 }

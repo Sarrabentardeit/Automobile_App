@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { useTeamMembers } from '@/contexts/TeamMembersContext'
+import { useUsers } from '@/contexts/UsersContext'
 import type { Reclamation, ReclamationStatut } from '@/types'
 import { RECLAMATION_STATUTS, RECLAMATION_STATUT_LABELS } from '@/types'
 import { useReclamations } from '@/contexts/ReclamationsContext'
@@ -28,8 +28,8 @@ const PRIORITE_STYLES: Record<string, string> = {
 
 export default function ReclamationPage() {
   const { user } = useAuth()
-  const { members } = useTeamMembers()
-  const { reclamations, addReclamation, updateReclamation } = useReclamations()
+  const { users } = useUsers()
+  const { reclamations, loading, addReclamation, updateReclamation } = useReclamations()
   const toast = useToast()
   const [filterStatut, setFilterStatut] = useState<ReclamationStatut | 'toutes'>('toutes')
   const [search, setSearch] = useState('')
@@ -45,9 +45,13 @@ export default function ReclamationPage() {
     statut: 'ouverte',
     assigneA: '',
     priorite: 'normale',
+    techniciens: [],
   })
 
-  const memberNames = useMemo(() => members.map(m => m.name), [members])
+  const techniciensNames = useMemo(
+    () => users.filter(u => u.role === 'technicien' && u.statut === 'actif').map(u => u.nom_complet),
+    [users]
+  )
 
   const filtered = useMemo(() => {
     let list = reclamations
@@ -78,6 +82,7 @@ export default function ReclamationPage() {
       statut: 'ouverte',
       assigneA: '',
       priorite: 'normale',
+      techniciens: [],
     })
     setSelectedId(null)
     setShowForm(true)
@@ -94,25 +99,56 @@ export default function ReclamationPage() {
       statut: r.statut,
       assigneA: r.assigneA ?? '',
       priorite: r.priorite ?? 'normale',
+      techniciens: r.techniciens ?? [],
     })
     setSelectedId(r.id)
     setShowForm(true)
   }
 
-  const save = () => {
+  const save = async () => {
     if (!form.clientName.trim() || !form.date) return
-    const payload = { ...form, clientTelephone: form.clientTelephone || undefined, assigneA: form.assigneA || undefined }
-    if (selectedId) {
-      updateReclamation(selectedId, payload)
-      toast.success('Réclamation modifiée avec succès')
-    } else {
-      addReclamation(payload)
-      toast.success('Réclamation ajoutée avec succès')
+    const payload = {
+      ...form,
+      clientTelephone: form.clientTelephone || undefined,
+      assigneA: form.assigneA || undefined,
+      techniciens: form.techniciens ?? [],
     }
-    setShowForm(false)
+    try {
+      if (selectedId) {
+        await updateReclamation(selectedId, payload)
+        toast.success('Réclamation modifiée avec succès')
+      } else {
+        await addReclamation(payload)
+        toast.success('Réclamation ajoutée avec succès')
+      }
+      setShowForm(false)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement')
+    }
   }
 
   if (!user) return null
+
+  if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto pb-12">
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900 tracking-tight flex items-center gap-2">
+              <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500 text-white">
+                <AlertCircle className="w-5 h-5" />
+              </span>
+              Réclamations
+            </h1>
+            <p className="text-sm text-gray-500 mt-1">Suivi des réclamations clients</p>
+          </div>
+        </header>
+        <div className="flex items-center justify-center py-16">
+          <p className="text-gray-500 font-medium">Chargement des réclamations...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-4xl mx-auto pb-12">
@@ -202,8 +238,22 @@ export default function ReclamationPage() {
                       {r.description && (
                         <p className="text-sm text-gray-500 mt-1 line-clamp-2">{r.description}</p>
                       )}
-                      {r.assigneA && (
-                        <p className="text-xs text-gray-400 mt-1.5">Assigné à {r.assigneA}</p>
+                      {(r.assigneA || (r.techniciens && r.techniciens.length > 0)) && (
+                        <p className="text-xs text-gray-400 mt-1.5">
+                          {r.assigneA && <>Assigné à {r.assigneA}</>}
+                          {r.techniciens && r.techniciens.length > 0 && (
+                            <>
+                              {r.assigneA && ' '}
+                              <span>
+                                (+
+                                {r.assigneA
+                                  ? r.techniciens.length
+                                  : r.techniciens.length - 1}
+                                {' '}tech)
+                              </span>
+                            </>
+                          )}
+                        </p>
                       )}
                     </div>
                     <ChevronRight className="w-5 h-5 text-gray-300 flex-shrink-0" />
@@ -259,7 +309,25 @@ export default function ReclamationPage() {
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
               >
                 <option value="">— Non assigné —</option>
-                {memberNames.map(n => (
+                {techniciensNames.map(n => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Autres techniciens</label>
+              <select
+                multiple
+                value={form.techniciens ?? []}
+                onChange={e =>
+                  setForm(prev => ({
+                    ...prev,
+                    techniciens: Array.from(e.target.selectedOptions).map(o => o.value),
+                  }))
+                }
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 min-h-[90px]"
+              >
+                {techniciensNames.map(n => (
                   <option key={n} value={n}>{n}</option>
                 ))}
               </select>

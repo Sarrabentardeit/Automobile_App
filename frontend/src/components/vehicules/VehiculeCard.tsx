@@ -1,9 +1,9 @@
 import { useNavigate } from 'react-router-dom'
 import { ETAT_CONFIG, type Vehicule } from '@/types'
-import { mockUsers } from '@/data/mock'
+import { useUsers } from '@/contexts/UsersContext'
 import EtatBadge from './EtatBadge'
-import { Phone, Calendar, ArrowRightLeft, Eye, Pencil, Clock } from 'lucide-react'
-import { daysSince, getUserDisplayName, formatDuree } from '@/lib/utils'
+import { Phone, Calendar, ArrowRightLeft, Eye, Pencil, Clock, Trash2 } from 'lucide-react'
+import { daysSince, getUserDisplayName, formatDuree, formatDate } from '@/lib/utils'
 import type { Permissions } from '@/types'
 
 interface Props {
@@ -11,14 +11,16 @@ interface Props {
   permissions: Permissions
   onChangeEtat: () => void
   onEdit: () => void
+  onDelete?: () => void
 }
 
-export default function VehiculeCard({ vehicule: v, permissions, onChangeEtat, onEdit }: Props) {
+export default function VehiculeCard({ vehicule: v, permissions, onChangeEtat, onEdit, onDelete }: Props) {
   const navigate = useNavigate()
+  const { users } = useUsers()
   const cfg = ETAT_CONFIG[v.etat_actuel]
   const jours = daysSince(v.date_entree)
-  const techName = getUserDisplayName(v.technicien_id, mockUsers)
-  const respName = getUserDisplayName(v.responsable_id, mockUsers)
+  const techName = getUserDisplayName(v.technicien_id, users)
+  const respName = getUserDisplayName(v.responsable_id, users)
 
   const minutesSinceUpdate = Math.round(
     (Date.now() - new Date(v.derniere_mise_a_jour).getTime()) / 60000
@@ -59,6 +61,13 @@ export default function VehiculeCard({ vehicule: v, permissions, onChangeEtat, o
                   <Pencil className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
               )}
+              {onDelete && (
+                <button onClick={onDelete} title="Supprimer"
+                  className="p-1.5 sm:p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 active:bg-red-200 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                </button>
+              )}
               <button onClick={() => navigate(`/vehicules/${v.id}`)} title="Voir détails"
                 className="p-1.5 sm:p-2 rounded-lg bg-gray-50 text-gray-500 hover:bg-gray-100 active:bg-gray-200 transition-colors"
               >
@@ -81,7 +90,7 @@ export default function VehiculeCard({ vehicule: v, permissions, onChangeEtat, o
             {v.client_telephone && (
               <span className="hidden sm:inline-flex items-center gap-1"><Phone className="w-3 h-3" />{v.client_telephone}</span>
             )}
-            <span className="inline-flex items-center gap-1"><Calendar className="w-3 h-3" />{v.date_entree}</span>
+            <span className="inline-flex items-center gap-1"><Calendar className="w-3 h-3" />{formatDate(v.date_entree)}</span>
             <span className="inline-flex items-center gap-1">
               <Clock className="w-3 h-3" />
               <span className="font-medium" style={{ color: jours > 7 ? '#ef4444' : undefined }}>

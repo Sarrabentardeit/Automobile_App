@@ -19,13 +19,11 @@ const Context = createContext<ToastContextValue | null>(null)
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
-  const [nextId, setNextId] = useState(1)
 
   const add = useCallback((type: ToastType, message: string) => {
-    const id = nextId
-    setNextId(prev => prev + 1)
+    const id = Date.now() + Math.floor(Math.random() * 100000)
     setToasts(prev => [...prev, { id, type, message }])
-  }, [nextId])
+  }, [])
 
   const success = useCallback((message: string) => add('success', message), [add])
   const error = useCallback((message: string) => add('error', message), [add])

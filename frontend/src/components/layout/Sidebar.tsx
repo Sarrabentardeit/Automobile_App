@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import type { Permissions, TogglePermissionKey } from '@/types'
 import { ROLE_CONFIG } from '@/types'
@@ -28,23 +28,22 @@ const NAV_STRUCTURE: NavCategory[] = [
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, requiredPermission: 'canViewDashboard' },
       { name: 'Statistiques', href: '/admin', icon: Shield, requiredPermission: 'canManageUsers' },
       { name: 'Calendrier', href: '/calendar', icon: CalendarDays },
-      { name: 'Véhicules', href: '/vehicules', icon: Car, requireVehiculeAccess: true },
     ],
   },
   {
     label: 'INVENTAIRE',
     items: [
       { name: 'Stock Général', href: '/stock-general', icon: Package },
-      { name: 'Prix Huiles', href: '/huile', icon: Droplets },
+      { name: 'Huiles', href: '/huile', icon: Droplets },
     ],
   },
   {
-    label: 'CLIENTS',
+    label: 'HISTORIQUE OPÉRATION',
     items: [
       { name: 'Clients', href: '/clients', icon: UserCircle },
-      { name: 'Clients avec Dettes', href: '/clients/dettes', icon: CreditCard },
       { name: 'Réclamations', href: '/reclamation', icon: AlertCircle },
-      { name: 'Demandes Devis', href: '/devis', icon: ClipboardList },
+      { name: 'Véhicules', href: '/vehicules', icon: Car, requireVehiculeAccess: true },
+
     ],
   },
   {
@@ -55,7 +54,10 @@ const NAV_STRUCTURE: NavCategory[] = [
       { name: 'Suivi Argent Équipe', href: '/caisse', icon: Wallet, requiredPermission: 'canViewFinance' },
       { name: 'Transactions Fournisseurs', href: '/fournisseurs/transactions', icon: Receipt },
       { name: 'Fournisseurs', href: '/fournisseurs', icon: Truck },
+      { name: 'Demandes Devis', href: '/devis', icon: ClipboardList },
       { name: 'Détails Money', href: '/money', icon: Wallet, requiredPermission: 'canViewFinance' },
+      { name: 'Clients avec Dettes', href: '/clients/dettes', icon: CreditCard },
+
     ],
   },
   {
@@ -70,6 +72,7 @@ const NAV_STRUCTURE: NavCategory[] = [
   {
     label: 'AUTRES',
     items: [
+      { name: 'Checklists', href: '/checklists', icon: ClipboardList },
       { name: 'Contacts Importants', href: '/contacts-importants', icon: Phone },
       { name: 'Rapports', href: '#', icon: BarChart2, disabled: true },
     ],
@@ -115,6 +118,7 @@ function SidebarNavItem({ item, onClose }: { item: NavItemConfig; onClose: () =>
 }
 
 export default function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const navigate = useNavigate()
   const { user, permissions, logout } = useAuth()
   const { myNotifications, unreadCount, markAsRead, markAllAsRead } = useNotifications()
   const [showNotif, setShowNotif] = useState(false)
@@ -198,7 +202,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                       </button>
                     )}
                   </div>
-                  <div className="divide-y divide-gray-50">
+                  <div className="divide-y divide-gray-50">   
                     {myNotifs.length === 0 ? (
                       <p className="p-4 text-sm text-gray-500 text-center">Aucune notification</p>
                     ) : (
@@ -206,8 +210,13 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                         <div
                           key={n.id}
                           className={cn('p-3 text-left cursor-pointer hover:bg-gray-50', !n.read && 'bg-orange-50/50')}
-                          onClick={() => { markAsRead(n.id); setShowNotif(false) }}
+                          onClick={() => {
+                            markAsRead(n.id)
+                            setShowNotif(false)
+                            if (n.reclamationId != null) navigate('/reclamation')
+                          }}
                         >
+                          {n.title && <p className="text-xs font-semibold text-orange-600">{n.title}</p>}
                           <p className="text-sm text-gray-800">{n.message}</p>
                           <p className="text-[11px] text-gray-400 mt-0.5">
                             {new Date(n.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}

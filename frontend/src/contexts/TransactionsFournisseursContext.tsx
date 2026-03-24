@@ -1,18 +1,17 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import type { TransactionFournisseur } from '@/types'
-import { mockTransactionsFournisseurs } from '@/data/mock'
 
 const STORAGE_KEY = 'elmecano-transactions-fournisseurs'
 
 function loadFromStorage(): TransactionFournisseur[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return mockTransactionsFournisseurs
+    if (!raw) return []
     const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return mockTransactionsFournisseurs
+    if (!Array.isArray(parsed)) return []
     return parsed
   } catch {
-    return mockTransactionsFournisseurs
+    return []
   }
 }
 

@@ -1,139 +1,398 @@
 import { useState, useCallback, useEffect } from 'react'
-import type { Vehicule, VehiculeFormData, HistoriqueEtat, EtatVehicule } from '@/types'
+import type {
+  Vehicule,
+  VehiculeFormData,
+  HistoriqueEtat,
+  EtatVehicule,
+  VehiculeImage,
+  VehiculeImageUploadInput,
+} from '@/types'
 import { TRANSITIONS_AUTORISEES } from '@/types'
-import { initialVehicules, initialHistorique } from '@/data/mock'
+import { apiFetch } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
 
-const VEHS_KEY = 'elmecano-vehicules'
-const HIST_KEY = 'elmecano-historique'
-
-function loadVehicules(): Vehicule[] {
-  try {
-    const raw = localStorage.getItem(VEHS_KEY)
-    if (!raw) return initialVehicules
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : initialVehicules
-  } catch { return initialVehicules }
+export interface VehiculesFilters {
+  type?: 'voiture' | 'moto'
+  etat?: EtatVehicule
+  technicien_id?: number
+  date_debut?: string
+  date_fin?: string
+  q?: string
+  page?: number
+  limit?: number
 }
 
-function loadHistorique(): HistoriqueEtat[] {
-  try {
-    const raw = localStorage.getItem(HIST_KEY)
-    if (!raw) return initialHistorique
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : initialHistorique
-  } catch { return initialHistorique }
+export interface VehiculeStats {
+  total: number
+  enCours: number
+  byEtat: Record<string, number>
+  terminesCeMois: number
 }
 
 export function useVehicules() {
-  const [vehicules, setVehicules] = useState<Vehicule[]>(loadVehicules)
-  const [historique, setHistorique] = useState<HistoriqueEtat[]>(loadHistorique)
+  const { user, getAccessToken } = useAuth()
+  const [vehicules, setVehicules] = useState<Vehicule[]>([])
+  const [historique, setHistorique] = useState<HistoriqueEtat[]>([])
+  const [loading, setLoading] = useState(true)
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(20)
+  const [vehiculeCache, setVehiculeCache] = useState<Record<number, Vehicule>>({})
+  const [imagesByVehicule, setImagesByVehicule] = useState<Record<number, VehiculeImage[]>>({})
+  const [stats, setStats] = useState<VehiculeStats | null>(null)
 
-  useEffect(() => { localStorage.setItem(VEHS_KEY, JSON.stringify(vehicules)) }, [vehicules])
-  useEffect(() => { localStorage.setItem(HIST_KEY, JSON.stringify(historique)) }, [historique])
-
-  const addVehicule = useCallback((data: VehiculeFormData, userId: number, userName: string) => {
-    const maxVId = Math.max(0, ...vehicules.map(v => v.id))
-    const id = maxVId + 1
-    const now = new Date().toISOString()
-    const newV: Vehicule = {
-      id,
-      immatriculation: data.immatriculation,
-      modele: data.modele,
-      type: data.type,
-      etat_actuel: data.etat_initial,
-      technicien_id: data.technicien_id,
-      responsable_id: data.responsable_id,
-      defaut: data.defaut,
-      client_telephone: data.client_telephone,
-      date_entree: data.date_entree,
-      date_sortie: null,
-      notes: data.notes,
-      derniere_mise_a_jour: now,
-    }
-    setVehicules(prev => [newV, ...prev])
-
-    const maxHId = Math.max(0, ...historique.map(h => h.id))
-    const hId = maxHId + 1
-    setHistorique(prev => [...prev, {
-      id: hId, vehicule_id: id,
-      etat_precedent: null, etat_nouveau: data.etat_initial,
-      date_changement: now, utilisateur_id: userId, utilisateur_nom: userName,
-      commentaire: `Réception du véhicule - ${data.defaut}`,
-      duree_etat_precedent_minutes: null, pieces_utilisees: '',
-    }])
-
-    return newV
-  }, [vehicules, historique])
-
-  const editVehicule = useCallback((id: number, data: Partial<VehiculeFormData>) => {
-    setVehicules(prev => prev.map(v => {
-      if (v.id !== id) return v
-      return {
-        ...v,
-        modele: data.modele ?? v.modele,
-        immatriculation: data.immatriculation ?? v.immatriculation,
-        type: data.type ?? v.type,
-        defaut: data.defaut ?? v.defaut,
-        technicien_id: data.technicien_id !== undefined ? data.technicien_id : v.technicien_id,
-        responsable_id: data.responsable_id !== undefined ? data.responsable_id : v.responsable_id,
-        client_telephone: data.client_telephone ?? v.client_telephone,
-        notes: data.notes ?? v.notes,
-        date_entree: data.date_entree ?? v.date_entree,
-        derniere_mise_a_jour: new Date().toISOString(),
+  const fetchVehicules = useCallback(
+    async (filters?: VehiculesFilters) => {
+      const token = getAccessToken()
+      if (!token) {
+        setVehicules([])
+        setLoading(false)
+        return
       }
-    }))
-  }, [])
+      setLoading(true)
+      try {
+        const params: Record<string, string | number | undefined> = {
+          page: filters?.page ?? 1,
+          limit: filters?.limit ?? 20,
+        }
+        if (filters?.type) params.type = filters.type
+        if (filters?.etat) params.etat = filters.etat
+        if (filters?.technicien_id) params.technicien_id = filters.technicien_id
+        if (filters?.date_debut) params.date_debut = filters.date_debut
+        if (filters?.date_fin) params.date_fin = filters.date_fin
+        if (filters?.q) params.q = filters.q
 
-  const changeEtat = useCallback((
-    vehiculeId: number,
-    nouvelEtat: EtatVehicule,
-    userId: number,
-    userName: string,
-    commentaire: string,
-    piecesUtilisees: string,
-  ) => {
-    const vehicule = vehicules.find(v => v.id === vehiculeId)
-    if (!vehicule) return false
+        const res = await apiFetch<{ data: Vehicule[]; total: number; page: number; limit: number }>('/vehicules', {
+          token,
+          params,
+        })
+        setVehicules(Array.isArray(res.data) ? res.data : [])
+        setTotal(res.total ?? 0)
+        setPage(res.page ?? 1)
+        setLimit(res.limit ?? 20)
+      } catch {
+        setVehicules([])
+        setTotal(0)
+      } finally {
+        setLoading(false)
+      }
+    },
+    [getAccessToken]
+  )
 
-    const allowed = TRANSITIONS_AUTORISEES[vehicule.etat_actuel]
-    if (!allowed.includes(nouvelEtat)) return false
+  const fetchStats = useCallback(
+    async (month?: number, year?: number) => {
+      const token = getAccessToken()
+      if (!token) return
+      try {
+        const params: Record<string, number> = {}
+        if (month) params.month = month
+        if (year) params.year = year
+        const s = await apiFetch<VehiculeStats>('/vehicules/stats', { token, params: Object.keys(params).length ? params : undefined })
+        setStats(s)
+      } catch {
+        setStats(null)
+      }
+    },
+    [getAccessToken]
+  )
 
-    const now = new Date().toISOString()
-    const lastChange = historique
-      .filter(h => h.vehicule_id === vehiculeId)
-      .sort((a, b) => new Date(b.date_changement).getTime() - new Date(a.date_changement).getTime())[0]
+  const fetchHistorique = useCallback(
+    async (ids: number[]) => {
+      const token = getAccessToken()
+      if (!token || ids.length === 0) return
+      const all: HistoriqueEtat[] = []
+      for (const id of ids) {
+        try {
+          const list = await apiFetch<HistoriqueEtat[]>(`/vehicules/${id}/historique`, { token })
+          if (Array.isArray(list)) all.push(...list)
+        } catch {}
+      }
+      setHistorique(prev => {
+        const byVeh = new Map(prev.map(h => [h.vehicule_id, true]))
+        const newOnes = all.filter(h => !byVeh.get(h.vehicule_id))
+        return [...prev.filter(h => !ids.includes(h.vehicule_id)), ...all]
+      })
+    },
+    [getAccessToken]
+  )
 
-    let duree: number | null = null
-    if (lastChange) {
-      duree = Math.round((new Date(now).getTime() - new Date(lastChange.date_changement).getTime()) / 60000)
-    }
+  useEffect(() => {
+    fetchVehicules({ page: 1, limit: 20 })
+    fetchStats()
+  }, [fetchVehicules, fetchStats])
 
-    setVehicules(prev => prev.map(v =>
-      v.id === vehiculeId
-        ? { ...v, etat_actuel: nouvelEtat, derniere_mise_a_jour: now, date_sortie: nouvelEtat === 'vert' ? now.split('T')[0] : v.date_sortie }
-        : v
-    ))
+  useEffect(() => {
+    if (vehicules.length > 0) fetchHistorique(vehicules.map(v => v.id))
+    else setHistorique([])
+  }, [vehicules, fetchHistorique])
 
-    const maxHId = Math.max(0, ...historique.map(h => h.id))
-    setHistorique(prev => [...prev, {
-      id: maxHId + 1, vehicule_id: vehiculeId,
-      etat_precedent: vehicule.etat_actuel, etat_nouveau: nouvelEtat,
-      date_changement: now, utilisateur_id: userId, utilisateur_nom: userName,
-      commentaire, duree_etat_precedent_minutes: duree, pieces_utilisees: piecesUtilisees,
-    }])
+  const addVehicule = useCallback(
+    async (data: VehiculeFormData, userId: number, userName: string) => {
+      const token = getAccessToken()
+      if (!token) throw new Error('Non authentifié')
+      const v = await apiFetch<Vehicule>('/vehicules', {
+        method: 'POST',
+        token,
+        body: JSON.stringify({
+          immatriculation: data.immatriculation,
+          modele: data.modele,
+          type: data.type,
+          etat_initial: data.etat_initial,
+          date_entree: data.date_entree,
+          defaut: data.defaut,
+          technicien_id: data.technicien_id,
+          responsable_id: data.responsable_id,
+          client_telephone: data.client_telephone,
+          notes: data.notes,
+          service_type: data.service_type,
+        }),
+      })
+      setVehicules(prev => [v, ...prev])
+      setHistorique(prev => [
+        ...prev,
+        {
+          id: Date.now(),
+          vehicule_id: v.id,
+          etat_precedent: null,
+          etat_nouveau: data.etat_initial,
+          date_changement: new Date().toISOString(),
+          utilisateur_id: userId,
+          utilisateur_nom: userName,
+          commentaire: `Réception du véhicule - ${data.defaut}`,
+          duree_etat_precedent_minutes: null,
+          pieces_utilisees: '',
+        },
+      ])
+      setTotal(prev => prev + 1)
+      return v
+    },
+    [getAccessToken]
+  )
 
-    return true
-  }, [vehicules, historique])
+  const editVehicule = useCallback(
+    async (id: number, data: Partial<VehiculeFormData>) => {
+      const token = getAccessToken()
+      if (!token) throw new Error('Non authentifié')
+      const v = await apiFetch<Vehicule>(`/vehicules/${id}`, {
+        method: 'PUT',
+        token,
+        body: JSON.stringify(data),
+      })
+      setVehicules(prev => prev.map(x => (x.id === id ? v : x)))
+      setVehiculeCache(prev => (prev[id] ? { ...prev, [id]: v } : prev))
+      return v
+    },
+    [getAccessToken]
+  )
 
-  const getHistorique = useCallback((vehiculeId: number) => {
-    return historique
-      .filter(h => h.vehicule_id === vehiculeId)
-      .sort((a, b) => new Date(a.date_changement).getTime() - new Date(b.date_changement).getTime())
-  }, [historique])
+  const deleteVehicule = useCallback(
+    async (id: number): Promise<boolean> => {
+      const token = getAccessToken()
+      if (!token) return false
+      try {
+        await apiFetch(`/vehicules/${id}`, { method: 'DELETE', token })
+        setVehicules(prev => prev.filter(x => x.id !== id))
+        setHistorique(prev => prev.filter(h => h.vehicule_id !== id))
+        setTotal(prev => Math.max(0, prev - 1))
+        setVehiculeCache(prev => {
+          const next = { ...prev }
+          delete next[id]
+          return next
+        })
+        return true
+      } catch {
+        return false
+      }
+    },
+    [getAccessToken]
+  )
 
-  const getVehicule = useCallback((id: number) => {
-    return vehicules.find(v => v.id === id) ?? null
-  }, [vehicules])
+  const changeEtat = useCallback(
+    async (
+      vehiculeId: number,
+      nouvelEtat: EtatVehicule,
+      userId: number,
+      userName: string,
+      commentaire: string,
+      piecesUtilisees: string
+    ): Promise<boolean> => {
+      const vehicule = vehicules.find(v => v.id === vehiculeId) ?? vehiculeCache[vehiculeId]
+      if (!vehicule) return false
+      const allowed = TRANSITIONS_AUTORISEES[vehicule.etat_actuel]
+      if (!allowed.includes(nouvelEtat)) return false
 
-  return { vehicules, historique, addVehicule, editVehicule, changeEtat, getHistorique, getVehicule }
+      const token = getAccessToken()
+      if (!token) return false
+
+      try {
+        const v = await apiFetch<Vehicule>(`/vehicules/${vehiculeId}/changer-etat`, {
+          method: 'POST',
+          token,
+          body: JSON.stringify({
+            nouvel_etat: nouvelEtat,
+            commentaire,
+            pieces_utilisees: piecesUtilisees,
+          }),
+        })
+        setVehicules(prev => prev.map(x => (x.id === vehiculeId ? v : x)))
+        setVehiculeCache(prev => (prev[vehiculeId] ? { ...prev, [vehiculeId]: v } : prev))
+
+        const lastChange = historique
+          .filter(h => h.vehicule_id === vehiculeId)
+          .sort((a, b) => new Date(b.date_changement).getTime() - new Date(a.date_changement).getTime())[0]
+        const now = new Date().toISOString()
+        let duree: number | null = null
+        if (lastChange) {
+          duree = Math.round((new Date(now).getTime() - new Date(lastChange.date_changement).getTime()) / 60000)
+        }
+        setHistorique(prev => [
+          ...prev,
+          {
+            id: Date.now(),
+            vehicule_id: vehiculeId,
+            etat_precedent: vehicule.etat_actuel,
+            etat_nouveau: nouvelEtat,
+            date_changement: now,
+            utilisateur_id: userId,
+            utilisateur_nom: userName,
+            commentaire,
+            duree_etat_precedent_minutes: duree,
+            pieces_utilisees: piecesUtilisees,
+          },
+        ])
+        return true
+      } catch {
+        return false
+      }
+    },
+    [vehicules, vehiculeCache, historique, getAccessToken]
+  )
+
+  const getHistorique = useCallback(
+    (vehiculeId: number) => {
+      return historique
+        .filter(h => h.vehicule_id === vehiculeId)
+        .sort((a, b) => new Date(a.date_changement).getTime() - new Date(b.date_changement).getTime())
+    },
+    [historique]
+  )
+
+  const getVehicule = useCallback(
+    (id: number) => {
+      return vehicules.find(v => v.id === id) ?? vehiculeCache[id] ?? null
+    },
+    [vehicules, vehiculeCache]
+  )
+
+  const fetchVehiculeById = useCallback(
+    async (id: number): Promise<Vehicule | null> => {
+      const token = getAccessToken()
+      if (!token) return null
+      try {
+        const [v, hist] = await Promise.all([
+          apiFetch<Vehicule>(`/vehicules/${id}`, { token }),
+          apiFetch<HistoriqueEtat[]>(`/vehicules/${id}/historique`, { token }),
+        ])
+        setVehiculeCache(prev => ({ ...prev, [id]: v }))
+        if (Array.isArray(hist)) {
+          setHistorique(prev => [...prev.filter(h => h.vehicule_id !== id), ...hist])
+        }
+        return v
+      } catch {
+        return null
+      }
+    },
+    [getAccessToken]
+  )
+
+  const fetchVehiculeImages = useCallback(
+    async (vehiculeId: number): Promise<VehiculeImage[]> => {
+      const token = getAccessToken()
+      if (!token) return []
+      try {
+        const images = await apiFetch<VehiculeImage[]>(`/vehicules/${vehiculeId}/images`, { token })
+        const normalized = Array.isArray(images) ? images : []
+        setImagesByVehicule(prev => ({ ...prev, [vehiculeId]: normalized }))
+        return normalized
+      } catch {
+        setImagesByVehicule(prev => ({ ...prev, [vehiculeId]: [] }))
+        return []
+      }
+    },
+    [getAccessToken]
+  )
+
+  const uploadVehiculeImage = useCallback(
+    async (vehiculeId: number, payload: VehiculeImageUploadInput): Promise<VehiculeImage> => {
+      const token = getAccessToken()
+      if (!token) throw new Error('Non authentifié')
+      const created = await apiFetch<VehiculeImage>(`/vehicules/${vehiculeId}/images`, {
+        method: 'POST',
+        token,
+        body: JSON.stringify(payload),
+      })
+      setImagesByVehicule(prev => {
+        const current = prev[vehiculeId] ?? []
+        return { ...prev, [vehiculeId]: [created, ...current] }
+      })
+      return created
+    },
+    [getAccessToken]
+  )
+
+  const deleteVehiculeImage = useCallback(
+    async (vehiculeId: number, imageId: number): Promise<boolean> => {
+      const token = getAccessToken()
+      if (!token) return false
+      try {
+        await apiFetch<void>(`/vehicules/${vehiculeId}/images/${imageId}`, { method: 'DELETE', token })
+        setImagesByVehicule(prev => ({
+          ...prev,
+          [vehiculeId]: (prev[vehiculeId] ?? []).filter(i => i.id !== imageId),
+        }))
+        return true
+      } catch {
+        return false
+      }
+    },
+    [getAccessToken]
+  )
+
+  const getVehiculeImages = useCallback(
+    (vehiculeId: number) => imagesByVehicule[vehiculeId] ?? [],
+    [imagesByVehicule]
+  )
+
+  const refetch = useCallback(
+    (filters?: VehiculesFilters) => {
+      fetchVehicules(filters ?? { page, limit })
+      fetchStats()
+    },
+    [fetchVehicules, fetchStats, page, limit]
+  )
+
+  return {
+    vehicules,
+    historique,
+    loading,
+    total,
+    page,
+    limit,
+    stats,
+    fetchStats,
+    addVehicule,
+    editVehicule,
+    deleteVehicule,
+    changeEtat,
+    getHistorique,
+    getVehicule,
+    getVehiculeImages,
+    fetchVehiculeById,
+    fetchVehiculeImages,
+    uploadVehiculeImage,
+    deleteVehiculeImage,
+    fetchVehicules,
+    refetch,
+  }
 }

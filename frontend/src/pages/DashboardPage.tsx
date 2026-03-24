@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useVehiculesContext } from '@/contexts/VehiculesContext'
-import { mockUsers } from '@/data/mock'
+import { useUsers } from '@/contexts/UsersContext'
 import { ETAT_CONFIG, type EtatVehicule } from '@/types'
 import Card from '@/components/ui/Card'
 import { Car, AlertTriangle, Clock, CheckCircle, Users, ArrowRight } from 'lucide-react'
@@ -10,6 +10,7 @@ import { daysSince } from '@/lib/utils'
 export default function DashboardPage() {
   const { user, permissions } = useAuth()
   const { vehicules, historique } = useVehiculesContext()
+  const { users } = useUsers()
   const navigate = useNavigate()
   if (!user || !permissions) return null
 
@@ -101,8 +102,11 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Alerts */}
         <Card>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm sm:text-base font-bold text-gray-900">Alertes</h2>
+          <div
+            className="flex items-center justify-between mb-3 cursor-pointer select-none hover:text-red-600"
+            onClick={() => navigate('/vehicules')}
+          >
+            <h2 className="text-sm sm:text-base font-bold">Alertes</h2>
             <AlertTriangle className="w-4 h-4 text-gray-400" />
           </div>
           <div className="space-y-2">
@@ -137,8 +141,11 @@ export default function DashboardPage() {
 
         {/* Recent activity */}
         <Card>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm sm:text-base font-bold text-gray-900">Activité récente</h2>
+          <div
+            className="flex items-center justify-between mb-3 cursor-pointer select-none hover:text-indigo-600"
+            onClick={() => navigate('/vehicules')}
+          >
+            <h2 className="text-sm sm:text-base font-bold">Activité récente</h2>
             <Clock className="w-4 h-4 text-gray-400" />
           </div>
           <div className="space-y-2.5">
@@ -170,12 +177,15 @@ export default function DashboardPage() {
       {/* Team */}
       {permissions.canManageUsers && (
         <Card>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm sm:text-base font-bold text-gray-900">Équipe</h2>
+          <div
+            className="flex items-center justify-between mb-3 cursor-pointer select-none hover:text-violet-600"
+            onClick={() => navigate('/equipe/membres')}
+          >
+            <h2 className="text-sm sm:text-base font-bold">Équipe</h2>
             <Users className="w-4 h-4 text-gray-400" />
           </div>
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 sm:gap-3">
-            {mockUsers.filter(u => u.statut === 'actif' && u.role === 'technicien').map(tech => {
+            {users.filter(u => u.statut === 'actif' && u.role === 'technicien').map(tech => {
               const assignedCount = vehicules.filter(v => v.technicien_id === tech.id && v.etat_actuel !== 'vert').length
               return (
                 <div key={tech.id} className="bg-gray-50 rounded-xl p-2.5 sm:p-3 text-center">
