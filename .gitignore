@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+!/backend/.env.example
+
+uploads/
+**/uploads/
+
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+backend/dist/
+frontend/dist/
+
+*.log
+*.pid
