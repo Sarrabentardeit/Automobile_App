@@ -9,7 +9,7 @@ import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import { formatDate } from '@/lib/utils'
-import { ClipboardList, Plus, User, Car, ChevronRight, FileText } from 'lucide-react'
+import { ClipboardList, Plus, User, Car, ChevronRight, FileText, Printer, Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 function formatMontant(n: number): string {
@@ -106,6 +106,146 @@ export default function DemandeDevisPage() {
       toast.success('Demande de devis ajoutée avec succès')
     }
     setShowForm(false)
+  }
+
+  const buildDevisHtml = (d: DemandeDevis) => {
+    const montant = d.montantEstime != null ? formatMontant(d.montantEstime) : 'À définir'
+    const phone = d.clientTelephone?.trim() ? d.clientTelephone : '—'
+    const vehicle = d.vehicleRef?.trim() ? d.vehicleRef : '—'
+    const notes = d.notes?.trim() ? d.notes : '—'
+    const validite = d.dateLimite ? formatDate(d.dateLimite) : '—'
+    return `
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Devis - ${d.clientName}</title>
+          <style>
+            body { font-family: Arial, sans-serif; color: #111827; margin: 0; padding: 24px; }
+            .wrap { max-width: 800px; margin: 0 auto; }
+            .head { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; }
+            .title { font-size: 26px; font-weight: 700; margin: 0; }
+            .muted { color:#6b7280; font-size:12px; }
+            .box { border:1px solid #e5e7eb; border-radius:10px; padding:14px; margin-bottom:12px; }
+            .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+            .k { font-size:12px; color:#6b7280; margin-bottom:3px; }
+            .v { font-size:14px; font-weight:600; }
+            .section-title { font-size:13px; font-weight:700; margin:0 0 8px 0; color:#374151; }
+            .big { font-size:22px; font-weight:700; }
+            .footer { margin-top:24px; font-size:12px; color:#6b7280; }
+          </style>
+        </head>
+        <body>
+          <div class="wrap">
+            <div class="head">
+              <div>
+                <h1 class="title">DEVIS</h1>
+                <div class="muted">Réf. demande #${d.id} · ${formatDate(d.date)}</div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-weight:700">EL MECANO GARAGE</div>
+                <div class="muted">Document généré depuis l'application</div>
+              </div>
+            </div>
+            <div class="box">
+              <div class="section-title">Informations client</div>
+              <div class="grid">
+                <div><div class="k">Client</div><div class="v">${d.clientName}</div></div>
+                <div><div class="k">Téléphone</div><div class="v">${phone}</div></div>
+                <div><div class="k">Véhicule</div><div class="v">${vehicle}</div></div>
+                <div><div class="k">Validité</div><div class="v">${validite}</div></div>
+              </div>
+            </div>
+            <div class="box">
+              <div class="section-title">Travaux demandés</div>
+              <div style="white-space:pre-wrap; font-size:14px; line-height:1.5">${d.description}</div>
+            </div>
+            <div class="box">
+              <div class="section-title">Montant estimé</div>
+              <div class="big">${montant}</div>
+              <div class="muted">Statut: ${DEMANDE_DEVIS_STATUT_LABELS[d.statut]}</div>
+            </div>
+            <div class="box">
+              <div class="section-title">Notes</div>
+              <div style="white-space:pre-wrap; font-size:14px; line-height:1.5">${notes}</div>
+            </div>
+            <div class="footer">
+              Bon pour accord client: ______________________ &nbsp;&nbsp; Date: ____ / ____ / ______
+            </div>
+          </div>
+        </body>
+      </html>
+    `
+  }
+
+  const printDevis = (d: DemandeDevis) => {
+    const w = window.open('', '_blank')
+    if (!w) return
+    w.document.write(buildDevisHtml(d))
+    w.document.close()
+    w.focus()
+    w.print()
+  }
+
+  const exportDevisPdf = async (d: DemandeDevis) => {
+    const { jsPDF } = await import('jspdf')
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
+    const pageW = pdf.internal.pageSize.getWidth()
+    let y = 14
+
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(18)
+    pdf.text('DEVIS', 14, y)
+    pdf.setFontSize(10)
+    pdf.setFont('helvetica', 'normal')
+    pdf.text(`Ref. demande #${d.id} - ${formatDate(d.date)}`, 14, y + 5)
+    pdf.text('EL MECANO GARAGE', pageW - 14, y, { align: 'right' })
+    y += 14
+
+    const line = (label: string, value: string) => {
+      pdf.setFont('helvetica', 'bold')
+      pdf.text(label, 14, y)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text(value || '—', 56, y)
+      y += 6
+    }
+
+    pdf.setFont('helvetica', 'bold')
+    pdf.text('Informations client', 14, y)
+    y += 7
+    line('Client', d.clientName)
+    line('Telephone', d.clientTelephone ?? '—')
+    line('Vehicule', d.vehicleRef || '—')
+    line('Validite', d.dateLimite ? formatDate(d.dateLimite) : '—')
+
+    y += 3
+    pdf.setFont('helvetica', 'bold')
+    pdf.text('Travaux demandes', 14, y)
+    y += 6
+    pdf.setFont('helvetica', 'normal')
+    const description = pdf.splitTextToSize(d.description || '—', pageW - 28)
+    pdf.text(description, 14, y)
+    y += description.length * 5 + 4
+
+    pdf.setFont('helvetica', 'bold')
+    pdf.text('Montant estime', 14, y)
+    y += 6
+    pdf.setFont('helvetica', 'normal')
+    pdf.text(d.montantEstime != null ? formatMontant(d.montantEstime) : 'A definir', 14, y)
+    y += 6
+    pdf.text(`Statut: ${DEMANDE_DEVIS_STATUT_LABELS[d.statut]}`, 14, y)
+    y += 8
+
+    pdf.setFont('helvetica', 'bold')
+    pdf.text('Notes', 14, y)
+    y += 6
+    pdf.setFont('helvetica', 'normal')
+    const notes = pdf.splitTextToSize(d.notes?.trim() || '—', pageW - 28)
+    pdf.text(notes, 14, y)
+    y += notes.length * 5 + 12
+
+    pdf.setFontSize(10)
+    pdf.text('Bon pour accord client: ______________________    Date: ____ / ____ / ______', 14, y)
+    pdf.save(`devis-${d.id}-${d.clientName.replace(/\s+/g, '_')}.pdf`)
   }
 
   if (!user) return null
@@ -248,6 +388,28 @@ export default function DemandeDevisPage() {
                           {formatMontant(d.montantEstime)}
                         </span>
                       )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void exportDevisPdf(d)
+                        }}
+                        className="p-2 rounded-lg hover:bg-indigo-50 text-gray-400 hover:text-indigo-600"
+                        title="Exporter PDF"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          printDevis(d)
+                        }}
+                        className="p-2 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"
+                        title="Imprimer"
+                      >
+                        <Printer className="w-4 h-4" />
+                      </button>
                       <ChevronRight className="w-5 h-5 text-gray-300" />
                     </div>
                   </div>
