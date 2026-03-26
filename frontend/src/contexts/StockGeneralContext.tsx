@@ -1,28 +1,17 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import type { MouvementProduit, ProduitStock, MouvementStock } from '@/types'
 import { useStockGeneral as useStockGeneralHook } from '@/hooks/useStockGeneral'
-
-const MOUVEMENTS_KEY = 'elmecano-stock-mouvements'
-
-function loadMouvements(): MouvementProduit[] {
-  try {
-    const raw = localStorage.getItem(MOUVEMENTS_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
+import { apiFetch } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface StockGeneralContextValue {
   mouvements: MouvementProduit[]
   produits: ProduitStock[]
   mouvementsStock: MouvementStock[]
   loading: boolean
-  addMouvement: (m: Omit<MouvementProduit, 'id'>) => void
-  updateMouvement: (id: number, m: Partial<MouvementProduit>) => void
-  removeMouvement: (id: number) => void
+  addMouvement: (m: Omit<MouvementProduit, 'id'>) => Promise<MouvementProduit>
+  updateMouvement: (id: number, m: Partial<MouvementProduit>) => Promise<MouvementProduit>
+  removeMouvement: (id: number) => Promise<boolean>
   addProduit: (p: Omit<ProduitStock, 'id'>) => Promise<ProduitStock>
   updateProduit: (id: number, p: Partial<ProduitStock>) => Promise<ProduitStock>
   removeProduit: (id: number) => Promise<void>
@@ -34,22 +23,62 @@ interface StockGeneralContextValue {
 const Context = createContext<StockGeneralContextValue | null>(null)
 
 export function StockGeneralProvider({ children }: { children: ReactNode }) {
-  const [mouvements, setMouvements] = useState<MouvementProduit[]>(loadMouvements)
+  const { getAccessToken, isAuthenticated } = useAuth()
+  const [mouvements, setMouvements] = useState<MouvementProduit[]>([])
   const api = useStockGeneralHook()
 
-  useEffect(() => {
-    localStorage.setItem(MOUVEMENTS_KEY, JSON.stringify(mouvements))
-  }, [mouvements])
+  const fetchMouvements = useCallback(async () => {
+    const token = getAccessToken()
+    if (!token) {
+      setMouvements([])
+      return
+    }
+    try {
+      const list = await apiFetch<MouvementProduit[]>('/stock/mouvements-manuel', { token })
+      setMouvements(Array.isArray(list) ? list : [])
+    } catch {
+      setMouvements([])
+    }
+  }, [getAccessToken])
 
-  const addMouvement = useCallback((m: Omit<MouvementProduit, 'id'>) => {
-    setMouvements(prev => [...prev, { ...m, id: Math.max(0, ...prev.map(x => x.id)) + 1 }])
-  }, [])
-  const updateMouvement = useCallback((id: number, m: Partial<MouvementProduit>) => {
-    setMouvements(prev => prev.map(x => (x.id === id ? { ...x, ...m } : x)))
-  }, [])
-  const removeMouvement = useCallback((id: number) => {
-    setMouvements(prev => prev.filter(x => x.id !== id))
-  }, [])
+  useEffect(() => {
+    if (isAuthenticated) void fetchMouvements()
+    else setMouvements([])
+  }, [isAuthenticated, fetchMouvements])
+
+  const addMouvement = useCallback(async (m: Omit<MouvementProduit, 'id'>): Promise<MouvementProduit> => {
+    const token = getAccessToken()
+    if (!token) throw new Error('Non authentifié')
+    const created = await apiFetch<MouvementProduit>('/stock/mouvements-manuel', {
+      method: 'POST',
+      token,
+      body: JSON.stringify(m),
+    })
+    setMouvements(prev => [created, ...prev])
+    return created
+  }, [getAccessToken])
+  const updateMouvement = useCallback(async (id: number, m: Partial<MouvementProduit>): Promise<MouvementProduit> => {
+    const token = getAccessToken()
+    if (!token) throw new Error('Non authentifié')
+    const updated = await apiFetch<MouvementProduit>(`/stock/mouvements-manuel/${id}`, {
+      method: 'PUT',
+      token,
+      body: JSON.stringify(m),
+    })
+    setMouvements(prev => prev.map(x => (x.id === id ? updated : x)))
+    return updated
+  }, [getAccessToken])
+  const removeMouvement = useCallback(async (id: number): Promise<boolean> => {
+    const token = getAccessToken()
+    if (!token) return false
+    try {
+      await apiFetch(`/stock/mouvements-manuel/${id}`, { method: 'DELETE', token })
+      setMouvements(prev => prev.filter(x => x.id !== id))
+      return true
+    } catch {
+      return false
+    }
+  }, [getAccessToken])
 
   return (
     <Context.Provider

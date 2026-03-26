@@ -4,6 +4,7 @@ import { useUsers } from '@/contexts/UsersContext'
 import { useCaisse } from '@/contexts/CaisseContext'
 import { useMoney } from '@/contexts/MoneyContext'
 import { useCharges } from '@/contexts/ChargesContext'
+import { useToast } from '@/contexts/ToastContext'
 import {
   ALL_PRESENCE_STATUTS,
   PRESENCE_CONFIG,
@@ -74,7 +75,11 @@ export default function CaissePage() {
   const { days, setDays } = useCaisse()
   const { ins, outs, addOut, updateOut, removeOut } = useMoney()
   const { charges, totalCharges, addCharge, updateCharge, removeCharge } = useCharges()
-  const [period, setPeriod] = useState({ year: 2026, month: 2 })
+  const toast = useToast()
+  const [period, setPeriod] = useState(() => {
+    const now = new Date()
+    return { year: now.getFullYear(), month: now.getMonth() + 1 }
+  })
   const [editingDay, setEditingDay] = useState<TeamMoneyDayEntry | null>(null)
   const [editingCell, setEditingCell] = useState<{ day: TeamMoneyDayEntry; memberName: string } | null>(null)
   const [editingCellSlot, setEditingCellSlot] = useState<TeamMemberSlots | null>(null)
@@ -113,7 +118,7 @@ export default function CaissePage() {
     setEditingCell(null)
   }
 
-  const syncTakenToMoneyOut = (dayId: number, date: string, memberName: string, taken: number) => {
+  const syncTakenToMoneyOut = async (dayId: number, date: string, memberName: string, taken: number) => {
     const ref = `caisse:${dayId}:${memberName}`
     const existing = outs.find(o => o.sourceRef === ref)
     if (taken > 0) {
@@ -125,9 +130,11 @@ export default function CaissePage() {
         beneficiary: memberName,
         sourceRef: ref,
       }
-      if (existing) updateOut(existing.id, { amount: taken })
-      else addOut(payload)
-    } else if (existing) removeOut(existing.id)
+      if (existing) await updateOut(existing.id, { amount: taken })
+      else await addOut(payload)
+    } else if (existing) {
+      await removeOut(existing.id)
+    }
   }
 
   if (!permissions?.canViewFinance) {
@@ -241,7 +248,7 @@ export default function CaissePage() {
     return list
   }, [transactions, selectedMember, searchQuery])
 
-  const handleSaveDay = () => {
+  const handleSaveDay = async () => {
     if (!editingDay) return
     const existingSameDate = days.find(d => d.date === editingDay.date)
     let savedDay: TeamMoneyDayEntry
@@ -270,14 +277,20 @@ export default function CaissePage() {
       savedDay = editingDay
       setDays(prev => prev.map(d => (d.id === editingDay.id ? savedDay : d)))
     }
-    memberNames.forEach(name => {
-      const taken = (savedDay.members[name]?.taken ?? 0) || 0
-      syncTakenToMoneyOut(savedDay.id, savedDay.date, name, taken)
-    })
+    try {
+      await Promise.all(
+        memberNames.map(name => {
+          const taken = (savedDay.members[name]?.taken ?? 0) || 0
+          return syncTakenToMoneyOut(savedDay.id, savedDay.date, name, taken)
+        })
+      )
+    } catch {
+      toast.error('Certaines avances n\'ont pas été synchronisées avec Money')
+    }
     setEditingDay(null)
   }
 
-  const handleSaveCell = () => {
+  const handleSaveCell = async () => {
     if (!editingCell || !editingCellSlot) return
     const { day, memberName } = editingCell
     const slot: TeamMemberSlots = editingCellSlot!
@@ -287,7 +300,11 @@ export default function CaissePage() {
     }
     setDays(prev => prev.map(d => (d.id === day.id ? updatedDay : d)))
     const taken = slot.taken ?? 0
-    syncTakenToMoneyOut(day.id, day.date, memberName, taken)
+    try {
+      await syncTakenToMoneyOut(day.id, day.date, memberName, taken)
+    } catch {
+      toast.error('Échec de synchronisation avec Money')
+    }
     setEditingCell(null)
   }
 

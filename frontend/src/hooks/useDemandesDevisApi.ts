@@ -4,7 +4,7 @@ import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 
 export function useDemandesDevisApi() {
-  const { getAccessToken } = useAuth()
+  const { getAccessToken, isAuthenticated } = useAuth()
   const [demandes, setDemandes] = useState<DemandeDevis[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -27,8 +27,8 @@ export function useDemandesDevisApi() {
   }, [getAccessToken])
 
   useEffect(() => {
-    fetchDemandes()
-  }, [fetchDemandes])
+    if (isAuthenticated) fetchDemandes()
+  }, [isAuthenticated, fetchDemandes])
 
   const addDemande = useCallback(
     async (d: Omit<DemandeDevis, 'id'>): Promise<DemandeDevis> => {

@@ -11,7 +11,7 @@ export interface FacturesFilters {
 }
 
 export function useFacturationApi() {
-  const { getAccessToken } = useAuth()
+  const { getAccessToken, isAuthenticated } = useAuth()
   const [factures, setFactures] = useState<Facture[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -46,8 +46,8 @@ export function useFacturationApi() {
   )
 
   useEffect(() => {
-    fetchFactures()
-  }, [fetchFactures])
+    if (isAuthenticated) fetchFactures()
+  }, [isAuthenticated, fetchFactures])
 
   const getNextNumero = useCallback(() => {
     const year = new Date().getFullYear().toString().slice(-2)

@@ -14,7 +14,7 @@ export interface ClientStats {
 }
 
 export function useClients() {
-  const { getAccessToken } = useAuth()
+  const { getAccessToken, isAuthenticated } = useAuth()
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
@@ -68,9 +68,11 @@ export function useClients() {
   }, [getAccessToken])
 
   useEffect(() => {
-    fetchClients({ page: 1, limit: 50 })
-    fetchStats()
-  }, [fetchClients, fetchStats])
+    if (isAuthenticated) {
+      fetchClients({ page: 1, limit: 50 })
+      fetchStats()
+    }
+  }, [isAuthenticated, fetchClients, fetchStats])
 
   const addClient = useCallback(
     async (c: Omit<Client, 'id'>): Promise<Client> => {

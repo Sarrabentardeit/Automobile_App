@@ -14,6 +14,7 @@ import facturesRouter from './routes/factures'
 import achatsRouter from './routes/achats'
 import contactsImportantsRouter from './routes/contactsImportants'
 import fournisseursRouter from './routes/fournisseurs'
+import fournisseurTransactionsRouter from './routes/fournisseurTransactions'
 import demandesDevisRouter from './routes/demandesDevis'
 import clientsDettesRouter from './routes/clientsDettes'
 import reclamationsRouter from './routes/reclamations'
@@ -23,8 +24,11 @@ import calendarAssignmentsRouter from './routes/calendarAssignments'
 import caisseRouter from './routes/caisse'
 import huilesRouter from './routes/huiles'
 import monthlyChargesRouter from './routes/monthlyCharges'
+import moneyRouter from './routes/money'
+import outilsRouter from './routes/outils'
 import checklistsRouter from './routes/checklists'
 import statsRouter from './routes/stats'
+import settingsRouter from './routes/settings'
 
 const app = express()
 
@@ -84,6 +88,7 @@ app.use('/factures', facturesRouter)
 app.use('/achats', achatsRouter)
 app.use('/contacts-importants', contactsImportantsRouter)
 app.use('/fournisseurs', fournisseursRouter)
+app.use('/fournisseur-transactions', fournisseurTransactionsRouter)
 app.use('/demandes-devis', demandesDevisRouter)
 app.use('/clients-dettes', clientsDettesRouter)
 app.use('/reclamations', reclamationsRouter)
@@ -93,8 +98,11 @@ app.use('/calendar-assignments', calendarAssignmentsRouter)
 app.use('/caisse', caisseRouter)
 app.use('/huiles', huilesRouter)
 app.use('/charges-mensuelles', monthlyChargesRouter)
+app.use('/money', moneyRouter)
+app.use('/outils', outilsRouter)
 app.use('/checklists', checklistsRouter)
 app.use('/stats', statsRouter)
+app.use('/settings', settingsRouter)
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err)

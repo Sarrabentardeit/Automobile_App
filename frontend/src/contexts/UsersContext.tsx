@@ -82,7 +82,7 @@ interface UsersContextType {
 const UsersContext = createContext<UsersContextType | null>(null)
 
 export function UsersProvider({ children }: { children: ReactNode }) {
-  const { getAccessToken } = useAuth()
+  const { getAccessToken, isAuthenticated } = useAuth()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -108,8 +108,13 @@ export function UsersProvider({ children }: { children: ReactNode }) {
   }, [getAccessToken])
 
   useEffect(() => {
-    fetchUsers()
-  }, [fetchUsers])
+    if (isAuthenticated) {
+      fetchUsers()
+    } else {
+      setUsers([])
+      setLoading(false)
+    }
+  }, [isAuthenticated, fetchUsers])
 
   const createUser = useCallback(
     async (data: {

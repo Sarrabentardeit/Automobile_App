@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, useLayoutEffect, type ReactNode } from 'react'
 import type { User, Permissions, Role } from '@/types'
 import { ROLE_PRESETS } from '@/types'
 import { apiFetch, setAuthBridge, type LoginResponse, type RegisterResponse, type RefreshResponse } from '@/lib/api'
@@ -146,8 +146,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // Enregistrer le bridge pour que apiFetch puisse rafraîchir le token après 401
-  useEffect(() => {
+  // useLayoutEffect garantit que le bridge est prêt avant tout useEffect dans les composants enfants
+  useLayoutEffect(() => {
     setAuthBridge({
       refresh: async () => {
         const refreshToken = localStorage.getItem(STORAGE_REFRESH)

@@ -4,7 +4,7 @@ import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 
 export function useHuilesApi() {
-  const { getAccessToken } = useAuth()
+  const { getAccessToken, isAuthenticated } = useAuth()
   const [products, setProducts] = useState<HuileProduct[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -27,8 +27,8 @@ export function useHuilesApi() {
   }, [getAccessToken])
 
   useEffect(() => {
-    fetchHuiles()
-  }, [fetchHuiles])
+    if (isAuthenticated) fetchHuiles()
+  }, [isAuthenticated, fetchHuiles])
 
   const addProduct = useCallback(
     async (p: Omit<HuileProduct, 'id'>): Promise<HuileProduct> => {

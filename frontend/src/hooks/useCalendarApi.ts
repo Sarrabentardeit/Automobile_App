@@ -4,7 +4,7 @@ import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 
 export function useCalendarApi() {
-  const { getAccessToken } = useAuth()
+  const { getAccessToken, isAuthenticated } = useAuth()
   const [assignments, setAssignments] = useState<CalendarAssignment[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -27,8 +27,13 @@ export function useCalendarApi() {
   }, [getAccessToken])
 
   useEffect(() => {
-    fetchAssignments()
-  }, [fetchAssignments])
+    if (isAuthenticated) {
+      fetchAssignments()
+    } else {
+      setAssignments([])
+      setLoading(false)
+    }
+  }, [isAuthenticated, fetchAssignments])
 
   const addAssignment = useCallback(
     async (a: Omit<CalendarAssignment, 'id'>): Promise<CalendarAssignment> => {

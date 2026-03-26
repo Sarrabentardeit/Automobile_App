@@ -27,6 +27,19 @@ function toMouvement(m) {
         reference: m.reference ?? undefined,
     };
 }
+function toMouvementManual(m) {
+    return {
+        id: m.id,
+        date: m.date,
+        produit: m.produit,
+        vehicule: m.vehicule,
+        technicien: m.technicien,
+        neufUtilise: (m.neuf_utilise === 'occasion' ? 'occasion' : 'neuf'),
+        statut: (m.statut === 'fini' ? 'fini' : 'en_cours'),
+        prix: m.prix,
+        fournisseur: m.fournisseur,
+    };
+}
 // GET /stock/produits - liste des produits
 router.get('/produits', (0, auth_1.authenticate)(), async (req, res) => {
     try {
@@ -153,6 +166,94 @@ router.get('/mouvements', (0, auth_1.authenticate)(), async (req, res) => {
             take: limit,
         });
         return res.json(list.map(toMouvement));
+    }
+    catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// GET /stock/mouvements-manuel - historique manuel produit (écran stock général)
+router.get('/mouvements-manuel', (0, auth_1.authenticate)(), async (_req, res) => {
+    try {
+        const list = await db.mouvementProduitManual.findMany({
+            orderBy: [{ date: 'desc' }, { id: 'desc' }],
+        });
+        return res.json(list.map(toMouvementManual));
+    }
+    catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+router.post('/mouvements-manuel', (0, auth_1.authenticate)(), async (req, res) => {
+    try {
+        const body = req.body;
+        if (!body.date || !body.produit?.trim()) {
+            return res.status(400).json({ error: 'date et produit requis' });
+        }
+        const created = await db.mouvementProduitManual.create({
+            data: {
+                date: body.date,
+                produit: body.produit.trim(),
+                vehicule: (body.vehicule ?? '').trim(),
+                technicien: (body.technicien ?? '').trim(),
+                neuf_utilise: body.neufUtilise === 'occasion' ? 'occasion' : 'neuf',
+                statut: body.statut === 'fini' ? 'fini' : 'en_cours',
+                prix: Number(body.prix) || 0,
+                fournisseur: (body.fournisseur ?? '').trim(),
+            },
+        });
+        return res.status(201).json(toMouvementManual(created));
+    }
+    catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+router.put('/mouvements-manuel/:id', (0, auth_1.authenticate)(), async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        if (Number.isNaN(id))
+            return res.status(400).json({ error: 'ID invalide' });
+        const existing = await db.mouvementProduitManual.findUnique({ where: { id } });
+        if (!existing)
+            return res.status(404).json({ error: 'Mouvement introuvable' });
+        const body = req.body;
+        const data = {};
+        if (body.date !== undefined)
+            data.date = body.date;
+        if (body.produit !== undefined)
+            data.produit = body.produit.trim();
+        if (body.vehicule !== undefined)
+            data.vehicule = body.vehicule.trim();
+        if (body.technicien !== undefined)
+            data.technicien = body.technicien.trim();
+        if (body.neufUtilise !== undefined)
+            data.neuf_utilise = body.neufUtilise === 'occasion' ? 'occasion' : 'neuf';
+        if (body.statut !== undefined)
+            data.statut = body.statut === 'fini' ? 'fini' : 'en_cours';
+        if (body.prix !== undefined)
+            data.prix = Number(body.prix) || 0;
+        if (body.fournisseur !== undefined)
+            data.fournisseur = body.fournisseur.trim();
+        const updated = await db.mouvementProduitManual.update({ where: { id }, data });
+        return res.json(toMouvementManual(updated));
+    }
+    catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+router.delete('/mouvements-manuel/:id', (0, auth_1.authenticate)(), async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        if (Number.isNaN(id))
+            return res.status(400).json({ error: 'ID invalide' });
+        const existing = await db.mouvementProduitManual.findUnique({ where: { id } });
+        if (!existing)
+            return res.status(404).json({ error: 'Mouvement introuvable' });
+        await db.mouvementProduitManual.delete({ where: { id } });
+        return res.status(204).send();
     }
     catch (err) {
         console.error(err);

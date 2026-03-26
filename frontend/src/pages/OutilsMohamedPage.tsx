@@ -18,7 +18,7 @@ function formatMontant(n: number): string {
 
 export default function OutilsMohamedPage() {
   const { user } = useAuth()
-  const { outilsMohamed, addOutilMohamed, updateOutilMohamed, removeOutilMohamed } = useOutils()
+  const { outilsMohamed, loading, addOutilMohamed, updateOutilMohamed, removeOutilMohamed } = useOutils()
   const toast = useToast()
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -54,17 +54,21 @@ export default function OutilsMohamedPage() {
     setShowForm(true)
   }
 
-  const save = () => {
+  const save = async () => {
     if (!form.outillage.trim() || !form.date) return
     const prixMohamed = form.prixMohamed ?? form.prixGarage * TAUX_MOHAMED
-    if (editingId) {
-      updateOutilMohamed(editingId, { ...form, prixMohamed })
-      toast.success('Mouvement modifié avec succès')
-    } else {
-      addOutilMohamed({ ...form, prixMohamed })
-      toast.success('Mouvement ajouté avec succès')
+    try {
+      if (editingId) {
+        await updateOutilMohamed(editingId, { ...form, prixMohamed })
+        toast.success('Mouvement modifié avec succès')
+      } else {
+        await addOutilMohamed({ ...form, prixMohamed })
+        toast.success('Mouvement ajouté avec succès')
+      }
+      setShowForm(false)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement')
     }
-    setShowForm(false)
   }
 
   const recalcPrix = () => setForm(f => ({ ...f, prixMohamed: f.prixGarage * TAUX_MOHAMED }))
@@ -119,7 +123,9 @@ export default function OutilsMohamedPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {loading ? (
+                <tr><td colSpan={6} className="px-4 py-12 text-center text-gray-500">Chargement...</td></tr>
+              ) : filtered.length === 0 ? (
                 <tr><td colSpan={6} className="px-4 py-12 text-center text-gray-500">Aucune donnée</td></tr>
               ) : (
                 filtered.map(o => (
@@ -161,7 +167,7 @@ export default function OutilsMohamedPage() {
         <p className="text-gray-600 text-sm">Êtes-vous sûr de vouloir supprimer cette entrée ?</p>
         <div className="flex justify-end gap-2 mt-6">
           <Button variant="ghost" onClick={() => setDeleteId(null)}>Annuler</Button>
-          <Button variant="danger" onClick={() => { if (deleteId !== null) { removeOutilMohamed(deleteId); toast.success('Entrée supprimée'); setDeleteId(null) } }}>Supprimer</Button>
+          <Button variant="danger" onClick={async () => { if (deleteId !== null) { const ok = await removeOutilMohamed(deleteId); if (ok) toast.success('Entrée supprimée'); else toast.error('Erreur lors de la suppression'); setDeleteId(null) } }}>Supprimer</Button>
         </div>
       </Modal>
     </div>

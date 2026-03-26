@@ -1,71 +1,135 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import type { OutilMohamed, OutilAhmed } from '@/types'
-
-const MOHAMED_KEY = 'elmecano-outils-mohamed'
-const AHMED_KEY = 'elmecano-outils-ahmed'
-
-function loadMohamed(): OutilMohamed[] {
-  try {
-    const raw = localStorage.getItem(MOHAMED_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function loadAhmed(): OutilAhmed[] {
-  try {
-    const raw = localStorage.getItem(AHMED_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
+import { apiFetch } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface OutilsContextValue {
   outilsMohamed: OutilMohamed[]
   outilsAhmed: OutilAhmed[]
-  addOutilMohamed: (o: Omit<OutilMohamed, 'id'>) => void
-  updateOutilMohamed: (id: number, o: Partial<OutilMohamed>) => void
-  removeOutilMohamed: (id: number) => void
-  addOutilAhmed: (o: Omit<OutilAhmed, 'id'>) => void
-  updateOutilAhmed: (id: number, o: Partial<OutilAhmed>) => void
-  removeOutilAhmed: (id: number) => void
+  loading: boolean
+  addOutilMohamed: (o: Omit<OutilMohamed, 'id'>) => Promise<OutilMohamed>
+  updateOutilMohamed: (id: number, o: Partial<OutilMohamed>) => Promise<OutilMohamed>
+  removeOutilMohamed: (id: number) => Promise<boolean>
+  addOutilAhmed: (o: Omit<OutilAhmed, 'id'>) => Promise<OutilAhmed>
+  updateOutilAhmed: (id: number, o: Partial<OutilAhmed>) => Promise<OutilAhmed>
+  removeOutilAhmed: (id: number) => Promise<boolean>
 }
 
 const Context = createContext<OutilsContextValue | null>(null)
 
 export function OutilsProvider({ children }: { children: ReactNode }) {
-  const [outilsMohamed, setOutilsMohamed] = useState<OutilMohamed[]>(loadMohamed)
-  const [outilsAhmed, setOutilsAhmed] = useState<OutilAhmed[]>(loadAhmed)
-  useEffect(() => { localStorage.setItem(MOHAMED_KEY, JSON.stringify(outilsMohamed)) }, [outilsMohamed])
-  useEffect(() => { localStorage.setItem(AHMED_KEY, JSON.stringify(outilsAhmed)) }, [outilsAhmed])
+  const { getAccessToken, isAuthenticated } = useAuth()
+  const [outilsMohamed, setOutilsMohamed] = useState<OutilMohamed[]>([])
+  const [outilsAhmed, setOutilsAhmed] = useState<OutilAhmed[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const addOutilMohamed = useCallback((o: Omit<OutilMohamed, 'id'>) => {
-    setOutilsMohamed(prev => [...prev, { ...o, id: Math.max(0, ...prev.map(x => x.id)) + 1 }])
-  }, [])
-  const updateOutilMohamed = useCallback((id: number, o: Partial<OutilMohamed>) => {
-    setOutilsMohamed(prev => prev.map(x => (x.id === id ? { ...x, ...o } : x)))
-  }, [])
-  const removeOutilMohamed = useCallback((id: number) => setOutilsMohamed(prev => prev.filter(x => x.id !== id)), [])
+  const fetchOutils = useCallback(async () => {
+    const token = getAccessToken()
+    if (!token) {
+      setOutilsMohamed([])
+      setOutilsAhmed([])
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    try {
+      const [mohamed, ahmed] = await Promise.all([
+        apiFetch<OutilMohamed[]>('/outils/mohamed', { token }),
+        apiFetch<OutilAhmed[]>('/outils/ahmed', { token }),
+      ])
+      setOutilsMohamed(Array.isArray(mohamed) ? mohamed : [])
+      setOutilsAhmed(Array.isArray(ahmed) ? ahmed : [])
+    } catch {
+      setOutilsMohamed([])
+      setOutilsAhmed([])
+    } finally {
+      setLoading(false)
+    }
+  }, [getAccessToken])
 
-  const addOutilAhmed = useCallback((o: Omit<OutilAhmed, 'id'>) => {
-    setOutilsAhmed(prev => [...prev, { ...o, id: Math.max(0, ...prev.map(x => x.id)) + 1 }])
-  }, [])
-  const updateOutilAhmed = useCallback((id: number, o: Partial<OutilAhmed>) => {
-    setOutilsAhmed(prev => prev.map(x => (x.id === id ? { ...x, ...o } : x)))
-  }, [])
-  const removeOutilAhmed = useCallback((id: number) => setOutilsAhmed(prev => prev.filter(x => x.id !== id)), [])
+  useEffect(() => {
+    if (isAuthenticated) fetchOutils()
+    else {
+      setOutilsMohamed([])
+      setOutilsAhmed([])
+      setLoading(false)
+    }
+  }, [isAuthenticated, fetchOutils])
+
+  const addOutilMohamed = useCallback(async (o: Omit<OutilMohamed, 'id'>): Promise<OutilMohamed> => {
+    const token = getAccessToken()
+    if (!token) throw new Error('Non authentifié')
+    const created = await apiFetch<OutilMohamed>('/outils/mohamed', {
+      method: 'POST',
+      token,
+      body: JSON.stringify(o),
+    })
+    setOutilsMohamed(prev => [created, ...prev])
+    return created
+  }, [getAccessToken])
+  const updateOutilMohamed = useCallback(async (id: number, o: Partial<OutilMohamed>): Promise<OutilMohamed> => {
+    const token = getAccessToken()
+    if (!token) throw new Error('Non authentifié')
+    const updated = await apiFetch<OutilMohamed>(`/outils/mohamed/${id}`, {
+      method: 'PUT',
+      token,
+      body: JSON.stringify(o),
+    })
+    setOutilsMohamed(prev => prev.map(x => (x.id === id ? updated : x)))
+    return updated
+  }, [getAccessToken])
+  const removeOutilMohamed = useCallback(async (id: number): Promise<boolean> => {
+    const token = getAccessToken()
+    if (!token) return false
+    try {
+      await apiFetch(`/outils/mohamed/${id}`, { method: 'DELETE', token })
+      setOutilsMohamed(prev => prev.filter(x => x.id !== id))
+      return true
+    } catch {
+      return false
+    }
+  }, [getAccessToken])
+
+  const addOutilAhmed = useCallback(async (o: Omit<OutilAhmed, 'id'>): Promise<OutilAhmed> => {
+    const token = getAccessToken()
+    if (!token) throw new Error('Non authentifié')
+    const created = await apiFetch<OutilAhmed>('/outils/ahmed', {
+      method: 'POST',
+      token,
+      body: JSON.stringify(o),
+    })
+    setOutilsAhmed(prev => [created, ...prev])
+    return created
+  }, [getAccessToken])
+  const updateOutilAhmed = useCallback(async (id: number, o: Partial<OutilAhmed>): Promise<OutilAhmed> => {
+    const token = getAccessToken()
+    if (!token) throw new Error('Non authentifié')
+    const updated = await apiFetch<OutilAhmed>(`/outils/ahmed/${id}`, {
+      method: 'PUT',
+      token,
+      body: JSON.stringify(o),
+    })
+    setOutilsAhmed(prev => prev.map(x => (x.id === id ? updated : x)))
+    return updated
+  }, [getAccessToken])
+  const removeOutilAhmed = useCallback(async (id: number): Promise<boolean> => {
+    const token = getAccessToken()
+    if (!token) return false
+    try {
+      await apiFetch(`/outils/ahmed/${id}`, { method: 'DELETE', token })
+      setOutilsAhmed(prev => prev.filter(x => x.id !== id))
+      return true
+    } catch {
+      return false
+    }
+  }, [getAccessToken])
 
   return (
     <Context.Provider
       value={{
         outilsMohamed,
         outilsAhmed,
+        loading,
         addOutilMohamed,
         updateOutilMohamed,
         removeOutilMohamed,

@@ -3,19 +3,6 @@ import type { Notification } from '@/types'
 import { useAuth } from '@/contexts/AuthContext'
 import { apiFetch } from '@/lib/api'
 
-const STORAGE_KEY = 'elmecano-notifications'
-
-function loadNotifications(): Notification[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
 interface NotificationsContextValue {
   notifications: Notification[]
   myNotifications: (userId: number) => Notification[]
@@ -30,15 +17,12 @@ const Context = createContext<NotificationsContextValue | null>(null)
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const { user, getAccessToken } = useAuth()
-  const [notifications, setNotifications] = useState<Notification[]>(loadNotifications)
-  const [apiNotifications, setApiNotifications] = useState<Notification[]>([])
-
-  useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(notifications)) }, [notifications])
+  const [notifications, setNotifications] = useState<Notification[]>([])
 
   const fetchApiNotifications = useCallback(async () => {
     const token = getAccessToken()
     if (!token || !user?.id) {
-      setApiNotifications([])
+      setNotifications([])
       return
     }
     try {
@@ -46,9 +30,9 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         '/notifications',
         { token }
       )
-      setApiNotifications(list ?? [])
+      setNotifications(list ?? [])
     } catch {
-      setApiNotifications([])
+      setNotifications([])
     }
   }, [user?.id, getAccessToken])
 
@@ -58,11 +42,10 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
   const myNotifications = useCallback(
     (userId: number) => {
-      const local = notifications.filter(n => n.userId === userId)
-      const api = user?.id === userId ? apiNotifications : []
-      return [...local, ...api].sort((a, b) => b.date.localeCompare(a.date))
+      const api = user?.id === userId ? notifications : []
+      return [...api].sort((a, b) => b.date.localeCompare(a.date))
     },
-    [notifications, apiNotifications, user?.id]
+    [notifications, user?.id]
   )
 
   const unreadCount = useCallback(
@@ -74,36 +57,37 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   )
 
   const addNotification = useCallback((userId: number, message: string) => {
-    setNotifications(prev => [
-      ...prev,
-      {
-        id: Math.max(0, ...prev.map(n => n.id)) + 1,
-        userId,
-        message,
-        date: new Date().toISOString(),
-        read: false,
-      },
-    ])
-  }, [])
+    const token = getAccessToken()
+    if (!token) return
+    void (async () => {
+      try {
+        const created = await apiFetch<Notification>('/notifications', {
+          method: 'POST',
+          token,
+          body: JSON.stringify({ userId, message }),
+        })
+        if (user?.id === userId) {
+          setNotifications(prev => [created, ...prev])
+        }
+      } catch {
+        // ignore notification creation failures
+      }
+    })()
+  }, [getAccessToken, user?.id])
 
   const markAsRead = useCallback(
     async (id: number) => {
-      const fromApi = apiNotifications.some(n => n.id === id)
-      if (fromApi) {
-        const token = getAccessToken()
-        if (token) {
-          try {
-            await apiFetch(`/notifications/${id}/read`, { method: 'PATCH', token })
-            setApiNotifications(prev => prev.map(n => (n.id === id ? { ...n, read: true } : n)))
-          } catch {
-            // ignore
-          }
+      const token = getAccessToken()
+      if (token) {
+        try {
+          await apiFetch(`/notifications/${id}/read`, { method: 'PATCH', token })
+          setNotifications(prev => prev.map(n => (n.id === id ? { ...n, read: true } : n)))
+        } catch {
+          // ignore
         }
-      } else {
-        setNotifications(prev => prev.map(n => (n.id === id ? { ...n, read: true } : n)))
       }
     },
-    [apiNotifications, getAccessToken]
+    [getAccessToken]
   )
 
   const markAllAsRead = useCallback(
@@ -113,13 +97,12 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         if (token) {
           try {
             await apiFetch('/notifications/read-all', { method: 'PATCH', token })
-            setApiNotifications(prev => prev.map(n => ({ ...n, read: true })))
+            setNotifications(prev => prev.map(n => ({ ...n, read: true })))
           } catch {
             // ignore
           }
         }
       }
-      setNotifications(prev => prev.map(n => (n.userId === userId ? { ...n, read: true } : n)))
     },
     [user?.id, getAccessToken]
   )

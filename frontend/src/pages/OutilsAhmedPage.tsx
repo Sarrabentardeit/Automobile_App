@@ -17,7 +17,7 @@ function formatMontant(n: number): string {
 
 export default function OutilsAhmedPage() {
   const { user } = useAuth()
-  const { outilsAhmed, addOutilAhmed, updateOutilAhmed, removeOutilAhmed } = useOutils()
+  const { outilsAhmed, loading, addOutilAhmed, updateOutilAhmed, removeOutilAhmed } = useOutils()
   const toast = useToast()
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -69,16 +69,20 @@ export default function OutilsAhmedPage() {
     setShowForm(true)
   }
 
-  const save = () => {
+  const save = async () => {
     if (!form.date) return
-    if (editingId) {
-      updateOutilAhmed(editingId, form)
-      toast.success('Entrée modifiée avec succès')
-    } else {
-      addOutilAhmed(form)
-      toast.success('Entrée ajoutée avec succès')
+    try {
+      if (editingId) {
+        await updateOutilAhmed(editingId, form)
+        toast.success('Entrée modifiée avec succès')
+      } else {
+        await addOutilAhmed(form)
+        toast.success('Entrée ajoutée avec succès')
+      }
+      setShowForm(false)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement')
     }
-    setShowForm(false)
   }
 
   if (!user) return null
@@ -139,7 +143,13 @@ export default function OutilsAhmedPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
+                    Chargement...
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
                     Aucune donnée
@@ -209,10 +219,11 @@ export default function OutilsAhmedPage() {
           <Button variant="ghost" onClick={() => setDeleteId(null)}>Annuler</Button>
           <Button
             variant="danger"
-            onClick={() => {
+            onClick={async () => {
               if (deleteId !== null) {
-                removeOutilAhmed(deleteId)
-                toast.success('Entrée supprimée')
+                const ok = await removeOutilAhmed(deleteId)
+                if (ok) toast.success('Entrée supprimée')
+                else toast.error('Erreur lors de la suppression')
                 setDeleteId(null)
               }
             }}

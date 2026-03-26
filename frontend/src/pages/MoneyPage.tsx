@@ -5,6 +5,7 @@ import type { MoneyIn, MoneyOut } from '@/types'
 import { MONEY_IN_TYPES, MONEY_OUT_CATEGORIES, MONEY_PAYMENT_METHODS } from '@/types'
 import { useMoney } from '@/contexts/MoneyContext'
 import { useCharges } from '@/contexts/ChargesContext'
+import { useToast } from '@/contexts/ToastContext'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
@@ -22,26 +23,7 @@ import {
   Trash2,
 } from 'lucide-react'
 
-const CUSTOM_IN_TYPES_KEY = 'money-custom-in-types'
-const CUSTOM_OUT_CATEGORIES_KEY = 'money-custom-out-categories'
-
-function loadCustomList(key: string): string[] {
-  try {
-    const raw = localStorage.getItem(key)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : []
-  } catch {
-    return []
-  }
-}
-
-function saveCustomInTypes(types: string[]) {
-  localStorage.setItem(CUSTOM_IN_TYPES_KEY, JSON.stringify(types))
-}
-function saveCustomOutCategories(categories: string[]) {
-  localStorage.setItem(CUSTOM_OUT_CATEGORIES_KEY, JSON.stringify(categories))
-}
+import { apiFetch } from '@/lib/api'
 
 const MONTH_NAMES = [
   'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
@@ -59,11 +41,15 @@ function roundMoney(n: number): number {
 type Tab = 'all' | 'in' | 'out'
 
 export default function MoneyPage() {
-  const { permissions } = useAuth()
+  const { permissions, getAccessToken } = useAuth()
   const { members } = useTeamMembers()
-  const [period, setPeriod] = useState({ year: 2026, month: 2 })
+  const [period, setPeriod] = useState(() => {
+    const now = new Date()
+    return { year: now.getFullYear(), month: now.getMonth() + 1 }
+  })
   const [tab, setTab] = useState<Tab>('all')
-  const { ins, outs, addIn, addOut } = useMoney()
+  const { ins, outs, loading, addIn, addOut } = useMoney()
+  const toast = useToast()
   const { charges, totalCharges } = useCharges()
   const [addingIn, setAddingIn] = useState(false)
   const [addingOut, setAddingOut] = useState(false)
@@ -88,48 +74,87 @@ export default function MoneyPage() {
   const [showAddOutCategory, setShowAddOutCategory] = useState(false)
   const [newOutCategoryLabel, setNewOutCategoryLabel] = useState('')
   const [showParamsModal, setShowParamsModal] = useState(false)
+  const [savingIn, setSavingIn] = useState(false)
+  const [savingOut, setSavingOut] = useState(false)
 
   useEffect(() => {
-    setCustomInTypes(loadCustomList(CUSTOM_IN_TYPES_KEY))
-    setCustomOutCategories(loadCustomList(CUSTOM_OUT_CATEGORIES_KEY))
-  }, [])
+    const token = getAccessToken()
+    if (!token) {
+      setCustomInTypes([])
+      setCustomOutCategories([])
+      return
+    }
+    void (async () => {
+      try {
+        const [inTypesRes, outCatsRes] = await Promise.all([
+          apiFetch<{ value: unknown }>('/settings/money_custom_in_types', { token }),
+          apiFetch<{ value: unknown }>('/settings/money_custom_out_categories', { token }),
+        ])
+        setCustomInTypes(Array.isArray(inTypesRes.value) ? inTypesRes.value.filter((x): x is string => typeof x === 'string') : [])
+        setCustomOutCategories(Array.isArray(outCatsRes.value) ? outCatsRes.value.filter((x): x is string => typeof x === 'string') : [])
+      } catch {
+        setCustomInTypes([])
+        setCustomOutCategories([])
+      }
+    })()
+  }, [getAccessToken])
+
+  const persistCustomInTypes = async (types: string[]) => {
+    const token = getAccessToken()
+    if (!token) return
+    await apiFetch('/settings/money_custom_in_types', {
+      method: 'PUT',
+      token,
+      body: JSON.stringify({ value: types }),
+    })
+  }
+
+  const persistCustomOutCategories = async (categories: string[]) => {
+    const token = getAccessToken()
+    if (!token) return
+    await apiFetch('/settings/money_custom_out_categories', {
+      method: 'PUT',
+      token,
+      body: JSON.stringify({ value: categories }),
+    })
+  }
 
   const allInTypes = useMemo(() => [...MONEY_IN_TYPES, ...customInTypes], [customInTypes])
   const allOutCategories = useMemo(() => [...MONEY_OUT_CATEGORIES, ...customOutCategories], [customOutCategories])
   const memberNames = useMemo(() => members.map(m => m.name), [members])
 
-  const addCustomInType = () => {
+  const addCustomInType = async () => {
     const label = newInTypeLabel.trim()
     if (!label || allInTypes.some(t => t.toLowerCase() === label.toLowerCase())) return
     const next = [...customInTypes, label]
     setCustomInTypes(next)
-    saveCustomInTypes(next)
+    await persistCustomInTypes(next).catch(() => {})
     setNewIn(prev => ({ ...prev, type: label }))
     setNewInTypeLabel('')
     setShowAddInType(false)
   }
 
-  const addCustomOutCategory = () => {
+  const addCustomOutCategory = async () => {
     const label = newOutCategoryLabel.trim()
     if (!label || allOutCategories.some(c => c.toLowerCase() === label.toLowerCase())) return
     const next = [...customOutCategories, label]
     setCustomOutCategories(next)
-    saveCustomOutCategories(next)
+    await persistCustomOutCategories(next).catch(() => {})
     setNewOut(prev => ({ ...prev, category: label }))
     setNewOutCategoryLabel('')
     setShowAddOutCategory(false)
   }
 
-  const removeCustomInType = (label: string) => {
+  const removeCustomInType = async (label: string) => {
     const next = customInTypes.filter(t => t !== label)
     setCustomInTypes(next)
-    saveCustomInTypes(next)
+    await persistCustomInTypes(next).catch(() => {})
     if (newIn.type === label) setNewIn(prev => ({ ...prev, type: 'MECA' }))
   }
-  const removeCustomOutCategory = (label: string) => {
+  const removeCustomOutCategory = async (label: string) => {
     const next = customOutCategories.filter(c => c !== label)
     setCustomOutCategories(next)
-    saveCustomOutCategories(next)
+    await persistCustomOutCategories(next).catch(() => {})
     if (newOut.category === label) setNewOut(prev => ({ ...prev, category: 'GARAGE' }))
   }
 
@@ -258,16 +283,32 @@ export default function MoneyPage() {
     setAddingOut(true)
   }
 
-  const saveIn = () => {
+  const saveIn = async () => {
     if (!newIn.date) return
-    addIn({ ...newIn, amount: roundMoney(Number(newIn.amount) || 0) })
-    setAddingIn(false)
+    setSavingIn(true)
+    try {
+      await addIn({ ...newIn, amount: roundMoney(Number(newIn.amount) || 0) })
+      setAddingIn(false)
+      toast.success('Entrée enregistrée')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement')
+    } finally {
+      setSavingIn(false)
+    }
   }
 
-  const saveOut = () => {
+  const saveOut = async () => {
     if (!newOut.date) return
-    addOut({ ...newOut, amount: roundMoney(Number(newOut.amount) || 0), beneficiary: newOut.beneficiary?.trim() || undefined })
-    setAddingOut(false)
+    setSavingOut(true)
+    try {
+      await addOut({ ...newOut, amount: roundMoney(Number(newOut.amount) || 0), beneficiary: newOut.beneficiary?.trim() || undefined })
+      setAddingOut(false)
+      toast.success('Sortie enregistrée')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement')
+    } finally {
+      setSavingOut(false)
+    }
   }
 
   const filteredActivity = useMemo(() => {
@@ -435,7 +476,11 @@ export default function MoneyPage() {
             </div>
           </div>
           <div className="p-4 pt-0">
-            {filteredActivity.length === 0 ? (
+            {loading ? (
+              <div className="text-center py-12">
+                <p className="text-gray-500 font-medium">Chargement des mouvements...</p>
+              </div>
+            ) : filteredActivity.length === 0 ? (
               <div className="text-center py-12">
                 <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-3">
                   <Sparkles className="w-6 h-6 text-gray-400" />
@@ -548,7 +593,9 @@ export default function MoneyPage() {
           </div>
           <div className="flex gap-3 pt-2">
             <Button variant="outline" onClick={() => setAddingIn(false)} className="flex-1">Annuler</Button>
-            <Button onClick={saveIn} className="flex-1">Enregistrer</Button>
+            <Button onClick={saveIn} className="flex-1" disabled={savingIn}>
+              {savingIn ? 'Enregistrement...' : 'Enregistrer'}
+            </Button>
           </div>
         </div>
       </Modal>
@@ -622,7 +669,9 @@ export default function MoneyPage() {
           </div>
           <div className="flex gap-3 pt-2">
             <Button variant="outline" onClick={() => setAddingOut(false)} className="flex-1">Annuler</Button>
-            <Button onClick={saveOut} className="flex-1">Enregistrer</Button>
+            <Button onClick={saveOut} className="flex-1" disabled={savingOut}>
+              {savingOut ? 'Enregistrement...' : 'Enregistrer'}
+            </Button>
           </div>
         </div>
       </Modal>

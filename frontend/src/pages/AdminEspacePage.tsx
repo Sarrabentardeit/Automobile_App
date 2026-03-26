@@ -50,8 +50,6 @@ import { cn } from '@/lib/utils'
 import type { ClientAvecDette } from '@/types'
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, BarChart, Bar } from 'recharts'
 
-const STORAGE_KEY = 'elmecano-admin-corrections'
-
 export interface AdminCorrectionItem {
   id: number
   text: string
@@ -68,23 +66,6 @@ type StatsTrendPoint = {
   reclamations: number
   achats: number
   paiementsFournisseurs: number
-}
-
-function loadCorrections(): AdminCorrectionItem[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function saveCorrections(items: AdminCorrectionItem[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
-  } catch {}
 }
 
 export default function AdminEspacePage() {
@@ -112,12 +93,40 @@ export default function AdminEspacePage() {
   const [trendGroupBy, setTrendGroupBy] = useState<'month' | 'quarter'>('month')
   const [trendData, setTrendData] = useState<StatsTrendPoint[]>([])
   const [trendLoading, setTrendLoading] = useState(false)
-  const [corrections, setCorrections] = useState<AdminCorrectionItem[]>(loadCorrections)
+  const [corrections, setCorrections] = useState<AdminCorrectionItem[]>([])
+  const [correctionsLoaded, setCorrectionsLoaded] = useState(false)
   const [newCorrectionText, setNewCorrectionText] = useState('')
 
   useEffect(() => {
-    saveCorrections(corrections)
-  }, [corrections])
+    const token = getAccessToken()
+    if (!token) {
+      setCorrections([])
+      setCorrectionsLoaded(true)
+      return
+    }
+    void (async () => {
+      try {
+        const res = await apiFetch<{ key: string; value: unknown }>('/settings/admin_corrections', { token })
+        const list = Array.isArray(res.value) ? (res.value as AdminCorrectionItem[]) : []
+        setCorrections(list)
+      } catch {
+        setCorrections([])
+      } finally {
+        setCorrectionsLoaded(true)
+      }
+    })()
+  }, [getAccessToken])
+
+  useEffect(() => {
+    if (!correctionsLoaded) return
+    const token = getAccessToken()
+    if (!token) return
+    void apiFetch('/settings/admin_corrections', {
+      method: 'PUT',
+      token,
+      body: JSON.stringify({ value: corrections }),
+    }).catch(() => {})
+  }, [corrections, correctionsLoaded, getAccessToken])
 
   const addCorrection = useCallback(() => {
     const text = newCorrectionText.trim()

@@ -4,7 +4,7 @@ import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 
 export function useStockGeneral() {
-  const { getAccessToken } = useAuth()
+  const { getAccessToken, isAuthenticated } = useAuth()
   const [produits, setProduits] = useState<ProduitStock[]>([])
   const [mouvementsStock, setMouvementsStock] = useState<MouvementStock[]>([])
   const [loading, setLoading] = useState(true)
@@ -39,12 +39,12 @@ export function useStockGeneral() {
   }, [getAccessToken])
 
   useEffect(() => {
-    fetchProduits()
-  }, [fetchProduits])
+    if (isAuthenticated) fetchProduits()
+  }, [isAuthenticated, fetchProduits])
 
   useEffect(() => {
-    fetchMouvements()
-  }, [fetchMouvements])
+    if (isAuthenticated) fetchMouvements()
+  }, [isAuthenticated, fetchMouvements])
 
   const addProduit = useCallback(
     async (p: Omit<ProduitStock, 'id'>): Promise<ProduitStock> => {

@@ -6,7 +6,7 @@ import type { TeamMember } from '@/types'
 type TeamMemberRow = TeamMember & { id: number }
 
 export function useTeamMembersApi() {
-  const { getAccessToken } = useAuth()
+  const { getAccessToken, isAuthenticated } = useAuth()
   const [members, setMembers] = useState<TeamMemberRow[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -29,8 +29,8 @@ export function useTeamMembersApi() {
   }, [getAccessToken])
 
   useEffect(() => {
-    fetchMembers()
-  }, [fetchMembers])
+    if (isAuthenticated) fetchMembers()
+  }, [isAuthenticated, fetchMembers])
 
   const addMember = useCallback(
     async (name: string, phone = ''): Promise<void> => {

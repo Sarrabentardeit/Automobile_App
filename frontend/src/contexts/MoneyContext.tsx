@@ -1,68 +1,135 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import type { MoneyIn, MoneyOut } from '@/types'
-
-const IN_KEY = 'elmecano-money-in'
-const OUT_KEY = 'elmecano-money-out'
-
-function loadIns(): MoneyIn[] {
-  try {
-    const raw = localStorage.getItem(IN_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function loadOuts(): MoneyOut[] {
-  try {
-    const raw = localStorage.getItem(OUT_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
+import { apiFetch } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface MoneyContextValue {
   ins: MoneyIn[]
   outs: MoneyOut[]
-  addIn: (m: Omit<MoneyIn, 'id'>) => void
-  updateIn: (id: number, m: Partial<MoneyIn>) => void
-  removeIn: (id: number) => void
-  addOut: (m: Omit<MoneyOut, 'id'>) => void
-  updateOut: (id: number, m: Partial<MoneyOut>) => void
-  removeOut: (id: number) => void
+  loading: boolean
+  addIn: (m: Omit<MoneyIn, 'id'>) => Promise<MoneyIn>
+  updateIn: (id: number, m: Partial<MoneyIn>) => Promise<MoneyIn>
+  removeIn: (id: number) => Promise<boolean>
+  addOut: (m: Omit<MoneyOut, 'id'>) => Promise<MoneyOut>
+  updateOut: (id: number, m: Partial<MoneyOut>) => Promise<MoneyOut>
+  removeOut: (id: number) => Promise<boolean>
 }
 
 const Context = createContext<MoneyContextValue | null>(null)
 
 export function MoneyProvider({ children }: { children: ReactNode }) {
-  const [ins, setIns] = useState<MoneyIn[]>(loadIns)
-  const [outs, setOuts] = useState<MoneyOut[]>(loadOuts)
-  useEffect(() => { localStorage.setItem(IN_KEY, JSON.stringify(ins)) }, [ins])
-  useEffect(() => { localStorage.setItem(OUT_KEY, JSON.stringify(outs)) }, [outs])
+  const { getAccessToken, isAuthenticated } = useAuth()
+  const [ins, setIns] = useState<MoneyIn[]>([])
+  const [outs, setOuts] = useState<MoneyOut[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const addIn = useCallback((m: Omit<MoneyIn, 'id'>) => {
-    setIns(prev => [...prev, { ...m, id: Math.max(0, ...prev.map(x => x.id)) + 1 }])
-  }, [])
-  const updateIn = useCallback((id: number, m: Partial<MoneyIn>) => {
-    setIns(prev => prev.map(x => (x.id === id ? { ...x, ...m } : x)))
-  }, [])
-  const removeIn = useCallback((id: number) => setIns(prev => prev.filter(x => x.id !== id)), [])
+  const fetchMoney = useCallback(async () => {
+    const token = getAccessToken()
+    if (!token) {
+      setIns([])
+      setOuts([])
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    try {
+      const [insData, outsData] = await Promise.all([
+        apiFetch<MoneyIn[]>('/money/in', { token }),
+        apiFetch<MoneyOut[]>('/money/out', { token }),
+      ])
+      setIns(Array.isArray(insData) ? insData : [])
+      setOuts(Array.isArray(outsData) ? outsData : [])
+    } catch {
+      setIns([])
+      setOuts([])
+    } finally {
+      setLoading(false)
+    }
+  }, [getAccessToken])
 
-  const addOut = useCallback((m: Omit<MoneyOut, 'id'>) => {
-    setOuts(prev => [...prev, { ...m, id: Math.max(0, ...prev.map(x => x.id)) + 1 }])
-  }, [])
-  const updateOut = useCallback((id: number, m: Partial<MoneyOut>) => {
-    setOuts(prev => prev.map(x => (x.id === id ? { ...x, ...m } : x)))
-  }, [])
-  const removeOut = useCallback((id: number) => setOuts(prev => prev.filter(x => x.id !== id)), [])
+  useEffect(() => {
+    if (isAuthenticated) fetchMoney()
+    else {
+      setIns([])
+      setOuts([])
+      setLoading(false)
+    }
+  }, [isAuthenticated, fetchMoney])
+
+  const addIn = useCallback(async (m: Omit<MoneyIn, 'id'>): Promise<MoneyIn> => {
+    const token = getAccessToken()
+    if (!token) throw new Error('Non authentifié')
+    const created = await apiFetch<MoneyIn>('/money/in', {
+      method: 'POST',
+      token,
+      body: JSON.stringify(m),
+    })
+    setIns(prev => [created, ...prev])
+    return created
+  }, [getAccessToken])
+
+  const updateIn = useCallback(async (id: number, m: Partial<MoneyIn>): Promise<MoneyIn> => {
+    const token = getAccessToken()
+    if (!token) throw new Error('Non authentifié')
+    const updated = await apiFetch<MoneyIn>(`/money/in/${id}`, {
+      method: 'PUT',
+      token,
+      body: JSON.stringify(m),
+    })
+    setIns(prev => prev.map(x => (x.id === id ? updated : x)))
+    return updated
+  }, [getAccessToken])
+
+  const removeIn = useCallback(async (id: number): Promise<boolean> => {
+    const token = getAccessToken()
+    if (!token) return false
+    try {
+      await apiFetch(`/money/in/${id}`, { method: 'DELETE', token })
+      setIns(prev => prev.filter(x => x.id !== id))
+      return true
+    } catch {
+      return false
+    }
+  }, [getAccessToken])
+
+  const addOut = useCallback(async (m: Omit<MoneyOut, 'id'>): Promise<MoneyOut> => {
+    const token = getAccessToken()
+    if (!token) throw new Error('Non authentifié')
+    const created = await apiFetch<MoneyOut>('/money/out', {
+      method: 'POST',
+      token,
+      body: JSON.stringify(m),
+    })
+    setOuts(prev => [created, ...prev])
+    return created
+  }, [getAccessToken])
+
+  const updateOut = useCallback(async (id: number, m: Partial<MoneyOut>): Promise<MoneyOut> => {
+    const token = getAccessToken()
+    if (!token) throw new Error('Non authentifié')
+    const updated = await apiFetch<MoneyOut>(`/money/out/${id}`, {
+      method: 'PUT',
+      token,
+      body: JSON.stringify(m),
+    })
+    setOuts(prev => prev.map(x => (x.id === id ? updated : x)))
+    return updated
+  }, [getAccessToken])
+
+  const removeOut = useCallback(async (id: number): Promise<boolean> => {
+    const token = getAccessToken()
+    if (!token) return false
+    try {
+      await apiFetch(`/money/out/${id}`, { method: 'DELETE', token })
+      setOuts(prev => prev.filter(x => x.id !== id))
+      return true
+    } catch {
+      return false
+    }
+  }, [getAccessToken])
 
   return (
-    <Context.Provider value={{ ins, outs, addIn, updateIn, removeIn, addOut, updateOut, removeOut }}>
+    <Context.Provider value={{ ins, outs, loading, addIn, updateIn, removeIn, addOut, updateOut, removeOut }}>
       {children}
     </Context.Provider>
   )

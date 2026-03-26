@@ -1,64 +1,108 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import type { TransactionFournisseur } from '@/types'
-
-const STORAGE_KEY = 'elmecano-transactions-fournisseurs'
-
-function loadFromStorage(): TransactionFournisseur[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed
-  } catch {
-    return []
-  }
-}
-
-function saveToStorage(data: TransactionFournisseur[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-  } catch {}
-}
+import { apiFetch } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface TransactionsFournisseursContextValue {
   transactions: TransactionFournisseur[]
-  addTransaction: (t: Omit<TransactionFournisseur, 'id'>) => void
-  updateTransaction: (id: number, t: Partial<TransactionFournisseur>) => void
-  removeTransaction: (id: number) => void
+  loading: boolean
+  addTransaction: (t: Omit<TransactionFournisseur, 'id'>) => Promise<TransactionFournisseur>
+  updateTransaction: (id: number, t: Partial<TransactionFournisseur>) => Promise<TransactionFournisseur>
+  removeTransaction: (id: number) => Promise<boolean>
 }
 
 const TransactionsFournisseursContext = createContext<TransactionsFournisseursContextValue | null>(null)
 
 export function TransactionsFournisseursProvider({ children }: { children: ReactNode }) {
-  const [transactions, setTransactions] = useState<TransactionFournisseur[]>(loadFromStorage)
+  const { getAccessToken, isAuthenticated } = useAuth()
+  const [transactions, setTransactions] = useState<TransactionFournisseur[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const fetchTransactions = useCallback(async () => {
+    const token = getAccessToken()
+    if (!token) {
+      setTransactions([])
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    try {
+      const list = await apiFetch<TransactionFournisseur[]>('/fournisseur-transactions', { token })
+      setTransactions(Array.isArray(list) ? list : [])
+    } catch {
+      setTransactions([])
+    } finally {
+      setLoading(false)
+    }
+  }, [getAccessToken])
 
   useEffect(() => {
-    saveToStorage(transactions)
-  }, [transactions])
+    if (isAuthenticated) fetchTransactions()
+    else {
+      setTransactions([])
+      setLoading(false)
+    }
+  }, [isAuthenticated, fetchTransactions])
 
-  const addTransaction = useCallback((t: Omit<TransactionFournisseur, 'id'>) => {
-    setTransactions(prev => {
-      const nextId = Math.max(0, ...prev.map(x => x.id)) + 1
-      return [...prev, { ...t, id: nextId }]
-    })
-  }, [])
+  const addTransaction = useCallback(
+    async (t: Omit<TransactionFournisseur, 'id'>): Promise<TransactionFournisseur> => {
+      const token = getAccessToken()
+      if (!token) throw new Error('Non authentifié')
+      const created = await apiFetch<TransactionFournisseur>('/fournisseur-transactions', {
+        method: 'POST',
+        token,
+        body: JSON.stringify(t),
+      })
+      setTransactions(prev => [...prev, created])
+      return created
+    },
+    [getAccessToken]
+  )
 
-  const updateTransaction = useCallback((id: number, t: Partial<TransactionFournisseur>) => {
-    setTransactions(prev => prev.map(x => (x.id === id ? { ...x, ...t } : x)))
-  }, [])
+  const updateTransaction = useCallback(
+    async (id: number, t: Partial<TransactionFournisseur>): Promise<TransactionFournisseur> => {
+      const token = getAccessToken()
+      if (!token) throw new Error('Non authentifié')
+      const updated = await apiFetch<TransactionFournisseur>(`/fournisseur-transactions/${id}`, {
+        method: 'PUT',
+        token,
+        body: JSON.stringify(t),
+      })
+      setTransactions(prev => prev.map(x => (x.id === id ? updated : x)))
+      return updated
+    },
+    [getAccessToken]
+  )
 
-  const removeTransaction = useCallback((id: number) => {
-    setTransactions(prev => prev.filter(x => x.id !== id))
-  }, [])
+  const removeTransaction = useCallback(
+    async (id: number): Promise<boolean> => {
+      const token = getAccessToken()
+      if (!token) return false
+      try {
+        await apiFetch(`/fournisseur-transactions/${id}`, { method: 'DELETE', token })
+        setTransactions(prev => prev.filter(x => x.id !== id))
+        return true
+      } catch {
+        return false
+      }
+    },
+    [getAccessToken]
+  )
 
   return (
-    <TransactionsFournisseursContext.Provider value={{ transactions, addTransaction, updateTransaction, removeTransaction }}>
+    <TransactionsFournisseursContext.Provider
+      value={{
+        transactions,
+        loading,
+        addTransaction,
+        updateTransaction,
+        removeTransaction,
+      }}
+    >
       {children}
     </TransactionsFournisseursContext.Provider>
   )
 }
-
 export function useTransactionsFournisseurs() {
   const ctx = useContext(TransactionsFournisseursContext)
   if (!ctx) throw new Error('useTransactionsFournisseurs must be used within TransactionsFournisseursProvider')

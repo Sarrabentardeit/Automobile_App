@@ -40,7 +40,7 @@ const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet'
 export default function TransactionsFournisseursPage() {
   const { user } = useAuth()
   const { fournisseurs } = useFournisseurs()
-  const { transactions, addTransaction, updateTransaction, removeTransaction } = useTransactionsFournisseurs()
+  const { transactions, loading, addTransaction, updateTransaction, removeTransaction } = useTransactionsFournisseurs()
   const toast = useToast()
   const [tab, setTab] = useState<TabType>('achat')
   const [search, setSearch] = useState('')
@@ -151,23 +151,28 @@ export default function TransactionsFournisseursPage() {
     setShowForm(true)
   }
 
-  const save = () => {
+  const save = async () => {
     if (!form.fournisseur.trim() || !form.date) return
     const payload = { ...form, vehicule: form.vehicule || undefined, pieces: form.pieces || undefined, numFacture: form.numFacture || undefined }
-    if (editingId) {
-      updateTransaction(editingId, payload)
-      toast.success('Transaction modifiée avec succès')
-    } else {
-      addTransaction(payload)
-      toast.success('Transaction ajoutée avec succès')
+    try {
+      if (editingId) {
+        await updateTransaction(editingId, payload)
+        toast.success('Transaction modifiée avec succès')
+      } else {
+        await addTransaction(payload)
+        toast.success('Transaction ajoutée avec succès')
+      }
+      setShowForm(false)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement')
     }
-    setShowForm(false)
   }
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (deleteId !== null) {
-      removeTransaction(deleteId)
-      toast.success('Transaction supprimée')
+      const ok = await removeTransaction(deleteId)
+      if (ok) toast.success('Transaction supprimée')
+      else toast.error('Erreur lors de la suppression')
       setDeleteId(null)
     }
   }
@@ -299,7 +304,9 @@ export default function TransactionsFournisseursPage() {
 
       {/* Contenu selon onglet */}
       <Card padding="none" className="overflow-hidden border border-gray-100">
-        {tab === 'synthese' && (
+        {loading ? (
+          <div className="px-4 py-12 text-center text-gray-500">Chargement des transactions...</div>
+        ) : tab === 'synthese' && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -331,7 +338,7 @@ export default function TransactionsFournisseursPage() {
             </table>
           </div>
         )}
-        {tab === 'achat' && (
+        {!loading && tab === 'achat' && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -377,7 +384,7 @@ export default function TransactionsFournisseursPage() {
             </table>
           </div>
         )}
-        {tab === 'revenue' && (
+        {!loading && tab === 'revenue' && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -419,7 +426,7 @@ export default function TransactionsFournisseursPage() {
             </table>
           </div>
         )}
-        {tab === 'paiement' && (
+        {!loading && tab === 'paiement' && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>

@@ -4,7 +4,7 @@ import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 
 export function useAchatsApi() {
-  const { getAccessToken } = useAuth()
+  const { getAccessToken, isAuthenticated } = useAuth()
   const [factures, setFactures] = useState<FactureFournisseur[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -37,8 +37,8 @@ export function useAchatsApi() {
   )
 
   useEffect(() => {
-    fetchAchats()
-  }, [fetchAchats])
+    if (isAuthenticated) fetchAchats()
+  }, [isAuthenticated, fetchAchats])
 
   const getNextNumero = useCallback(async (): Promise<string> => {
     const token = getAccessToken()

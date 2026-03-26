@@ -4,7 +4,7 @@ import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 
 export function useContactsImportantsApi() {
-  const { getAccessToken } = useAuth()
+  const { getAccessToken, isAuthenticated } = useAuth()
   const [contacts, setContacts] = useState<ContactImportant[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -37,8 +37,8 @@ export function useContactsImportantsApi() {
   )
 
   useEffect(() => {
-    fetchContacts()
-  }, [fetchContacts])
+    if (isAuthenticated) fetchContacts()
+  }, [isAuthenticated, fetchContacts])
 
   const addContact = useCallback(
     async (c: Omit<ContactImportant, 'id'>): Promise<ContactImportant> => {

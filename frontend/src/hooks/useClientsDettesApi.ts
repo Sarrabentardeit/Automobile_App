@@ -4,7 +4,7 @@ import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 
 export function useClientsDettesApi() {
-  const { getAccessToken } = useAuth()
+  const { getAccessToken, isAuthenticated } = useAuth()
   const [clients, setClients] = useState<ClientAvecDette[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -27,8 +27,8 @@ export function useClientsDettesApi() {
   }, [getAccessToken])
 
   useEffect(() => {
-    fetchClients()
-  }, [fetchClients])
+    if (isAuthenticated) fetchClients()
+  }, [isAuthenticated, fetchClients])
 
   const addClient = useCallback(
     async (c: Omit<ClientAvecDette, 'id'>): Promise<ClientAvecDette> => {

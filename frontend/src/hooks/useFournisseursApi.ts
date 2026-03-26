@@ -4,7 +4,7 @@ import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 
 export function useFournisseursApi() {
-  const { getAccessToken } = useAuth()
+  const { getAccessToken, isAuthenticated } = useAuth()
   const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -35,8 +35,8 @@ export function useFournisseursApi() {
   )
 
   useEffect(() => {
-    fetchFournisseurs()
-  }, [fetchFournisseurs])
+    if (isAuthenticated) fetchFournisseurs()
+  }, [isAuthenticated, fetchFournisseurs])
 
   const addFournisseur = useCallback(
     async (f: Omit<Fournisseur, 'id'>): Promise<Fournisseur> => {

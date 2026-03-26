@@ -218,6 +218,21 @@ model Fournisseur {
   achats    Achat[]
 }
 
+model FournisseurTransaction {
+  id              Int      @id @default(autoincrement())
+  type            String   // achat | revenue | paiement
+  date            String   // YYYY-MM-DD
+  montant         Float
+  fournisseur     String
+  vehicule        String?
+  pieces          String?
+  num_facture     String?
+  created_by_id   Int?
+  created_by_name String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
 model DemandeDevis {
   id               Int      @id @default(autoincrement())
   date             String   // YYYY-MM-DD
@@ -307,6 +322,72 @@ model MonthlyCharge {
   name      String
   amount    Float
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MoneyIn {
+  id             Int      @id @default(autoincrement())
+  date           String   // YYYY-MM-DD
+  amount         Float
+  type           String
+  description    String
+  payment_method String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model MoneyOut {
+  id          Int      @id @default(autoincrement())
+  date        String   // YYYY-MM-DD
+  amount      Float
+  category    String
+  description String
+  beneficiary String?
+  source_ref  String?  @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model OutilMohamedEntry {
+  id          Int      @id @default(autoincrement())
+  date        String   // YYYY-MM-DD
+  vehicule    String
+  outillage   String
+  prix_garage Float
+  prix_mohamed Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model OutilAhmedEntry {
+  id          Int      @id @default(autoincrement())
+  date        String   // YYYY-MM-DD
+  vehicule    String
+  type_travaux String
+  prix_garage Float?
+  prix_ahmed  Float
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model MouvementProduitManual {
+  id           Int      @id @default(autoincrement())
+  date         String   // YYYY-MM-DD
+  produit      String
+  vehicule     String
+  technicien   String
+  neuf_utilise String   @default("neuf") // neuf | occasion
+  statut       String   @default("en_cours") // fini | en_cours
+  prix         Float    @default(0)
+  fournisseur  String   @default("")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model AppSetting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     Json
   updatedAt DateTime @updatedAt
 }
 

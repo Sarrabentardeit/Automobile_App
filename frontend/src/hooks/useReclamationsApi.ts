@@ -4,7 +4,7 @@ import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 
 export function useReclamationsApi() {
-  const { getAccessToken } = useAuth()
+  const { getAccessToken, isAuthenticated } = useAuth()
   const [reclamations, setReclamations] = useState<Reclamation[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -27,8 +27,8 @@ export function useReclamationsApi() {
   }, [getAccessToken])
 
   useEffect(() => {
-    fetchReclamations()
-  }, [fetchReclamations])
+    if (isAuthenticated) fetchReclamations()
+  }, [isAuthenticated, fetchReclamations])
 
   const addReclamation = useCallback(
     async (r: Omit<Reclamation, 'id'>): Promise<Reclamation> => {

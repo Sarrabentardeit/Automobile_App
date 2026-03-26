@@ -12,7 +12,7 @@ interface CaisseContextValue {
 const Context = createContext<CaisseContextValue | null>(null)
 
 export function CaisseProvider({ children }: { children: ReactNode }) {
-  const { getAccessToken } = useAuth()
+  const { getAccessToken, isAuthenticated } = useAuth()
   const [days, setDaysState] = useState<TeamMoneyDayEntry[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -35,8 +35,8 @@ export function CaisseProvider({ children }: { children: ReactNode }) {
   }, [getAccessToken])
 
   useEffect(() => {
-    fetchDays()
-  }, [fetchDays])
+    if (isAuthenticated) fetchDays()
+  }, [isAuthenticated, fetchDays])
 
   const persistDays = useCallback(
     async (next: TeamMoneyDayEntry[]) => {
