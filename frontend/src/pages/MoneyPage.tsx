@@ -20,6 +20,7 @@ import {
   Sparkles,
   PlusCircle,
   Settings2,
+  Pencil,
   Trash2,
 } from 'lucide-react'
 
@@ -48,7 +49,7 @@ export default function MoneyPage() {
     return { year: now.getFullYear(), month: now.getMonth() + 1 }
   })
   const [tab, setTab] = useState<Tab>('all')
-  const { ins, outs, loading, addIn, addOut } = useMoney()
+  const { ins, outs, loading, addIn, updateIn, removeIn, addOut, updateOut, removeOut } = useMoney()
   const toast = useToast()
   const { charges, totalCharges } = useCharges()
   const [addingIn, setAddingIn] = useState(false)
@@ -76,6 +77,23 @@ export default function MoneyPage() {
   const [showParamsModal, setShowParamsModal] = useState(false)
   const [savingIn, setSavingIn] = useState(false)
   const [savingOut, setSavingOut] = useState(false)
+  const [editingInId, setEditingInId] = useState<number | null>(null)
+  const [editingOutId, setEditingOutId] = useState<number | null>(null)
+  const [editIn, setEditIn] = useState<Omit<MoneyIn, 'id'>>({
+    date: '',
+    amount: 0,
+    type: 'MECA',
+    description: '',
+    paymentMethod: 'ESPECE',
+  })
+  const [editOut, setEditOut] = useState<Omit<MoneyOut, 'id'>>({
+    date: '',
+    amount: 0,
+    category: 'GARAGE',
+    description: '',
+    beneficiary: '',
+  })
+  const [savingEdit, setSavingEdit] = useState(false)
 
   useEffect(() => {
     const token = getAccessToken()
@@ -311,6 +329,78 @@ export default function MoneyPage() {
     }
   }
 
+  const openEditActivity = (item: ActivityItem) => {
+    if (item.isCharge) return
+    const id = Number(item.id.split('-')[1] ?? '')
+    if (Number.isNaN(id)) return
+    if (item.type === 'in') {
+      const row = ins.find(x => x.id === id)
+      if (!row) return
+      setEditIn({
+        date: row.date,
+        amount: row.amount,
+        type: row.type,
+        description: row.description,
+        paymentMethod: row.paymentMethod ?? 'ESPECE',
+      })
+      setEditingInId(id)
+    } else {
+      const row = outs.find(x => x.id === id)
+      if (!row) return
+      setEditOut({
+        date: row.date,
+        amount: row.amount,
+        category: row.category,
+        description: row.description,
+        beneficiary: row.beneficiary ?? '',
+      })
+      setEditingOutId(id)
+    }
+  }
+
+  const saveEditIn = async () => {
+    if (editingInId == null || !editIn.date) return
+    setSavingEdit(true)
+    try {
+      await updateIn(editingInId, { ...editIn, amount: roundMoney(Number(editIn.amount) || 0) })
+      setEditingInId(null)
+      toast.success('Entrée modifiée')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la modification')
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  const saveEditOut = async () => {
+    if (editingOutId == null || !editOut.date) return
+    setSavingEdit(true)
+    try {
+      await updateOut(editingOutId, {
+        ...editOut,
+        amount: roundMoney(Number(editOut.amount) || 0),
+        beneficiary: editOut.beneficiary?.trim() || undefined,
+      })
+      setEditingOutId(null)
+      toast.success('Sortie modifiée')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la modification')
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  const deleteActivity = async (item: ActivityItem) => {
+    if (item.isCharge) return
+    const id = Number(item.id.split('-')[1] ?? '')
+    if (Number.isNaN(id)) return
+    const ok = window.confirm('Supprimer ce mouvement ?')
+    if (!ok) return
+    const deleted = item.type === 'in' ? await removeIn(id) : await removeOut(id)
+    if (deleted) toast.success('Mouvement supprimé')
+    else toast.error('Erreur lors de la suppression')
+  }
+
   const filteredActivity = useMemo(() => {
     if (tab === 'in') return activity.filter(a => a.type === 'in')
     if (tab === 'out') return activity.filter(a => a.type === 'out')
@@ -508,13 +598,33 @@ export default function MoneyPage() {
                       <p className="font-medium text-gray-900 truncate text-sm">{item.label || 'Sans libellé'}</p>
                       <p className="text-xs text-gray-500 truncate">{item.sublabel}</p>
                     </div>
-                    <div className="flex items-center gap-3 flex-shrink-0 text-xs">
+                    <div className="flex items-center gap-2 flex-shrink-0 text-xs">
                       <span className="text-gray-400">{formatDate(item.date)}</span>
                       <span className={`font-semibold tabular-nums w-20 text-right ${
                         item.type === 'in' ? 'text-emerald-600' : 'text-gray-700'
                       }`}>
                         {item.type === 'in' ? '+' : '−'}{formatAmount(item.amount)}
                       </span>
+                      {!item.isCharge && (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openEditActivity(item)}
+                            className="p-1.5 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                            title="Modifier"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void deleteActivity(item)}
+                            className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50"
+                            title="Supprimer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </li>
                 ))}
@@ -595,6 +705,61 @@ export default function MoneyPage() {
             <Button variant="outline" onClick={() => setAddingIn(false)} className="flex-1">Annuler</Button>
             <Button onClick={saveIn} className="flex-1" disabled={savingIn}>
               {savingIn ? 'Enregistrement...' : 'Enregistrer'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={editingInId !== null} onClose={() => setEditingInId(null)} title="Modifier entrée" subtitle="Encaissement">
+        <div className="space-y-4">
+          <Input label="Date" type="date" value={editIn.date} onChange={e => setEditIn(prev => ({ ...prev, date: e.target.value }))} />
+          <Input
+            label="Montant"
+            type="number"
+            min={0}
+            step={0.01}
+            value={editIn.amount || ''}
+            onChange={e => setEditIn(prev => ({ ...prev, amount: e.target.value === '' ? 0 : Number(e.target.value) }))}
+          />
+          <Input label="Type" value={editIn.type} onChange={e => setEditIn(prev => ({ ...prev, type: e.target.value }))} />
+          <Input label="Description" value={editIn.description} onChange={e => setEditIn(prev => ({ ...prev, description: e.target.value }))} />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Paiement</label>
+            <select
+              value={editIn.paymentMethod ?? 'ESPECE'}
+              onChange={e => setEditIn(prev => ({ ...prev, paymentMethod: e.target.value }))}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-gray-900 bg-white"
+            >
+              {MONEY_PAYMENT_METHODS.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button variant="outline" onClick={() => setEditingInId(null)} className="flex-1">Annuler</Button>
+            <Button onClick={saveEditIn} className="flex-1" disabled={savingEdit}>
+              {savingEdit ? 'Enregistrement...' : 'Enregistrer'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={editingOutId !== null} onClose={() => setEditingOutId(null)} title="Modifier sortie" subtitle="Dépense">
+        <div className="space-y-4">
+          <Input label="Date" type="date" value={editOut.date} onChange={e => setEditOut(prev => ({ ...prev, date: e.target.value }))} />
+          <Input
+            label="Montant"
+            type="number"
+            min={0}
+            step={0.01}
+            value={editOut.amount || ''}
+            onChange={e => setEditOut(prev => ({ ...prev, amount: e.target.value === '' ? 0 : Number(e.target.value) }))}
+          />
+          <Input label="Catégorie" value={editOut.category} onChange={e => setEditOut(prev => ({ ...prev, category: e.target.value }))} />
+          <Input label="Description" value={editOut.description} onChange={e => setEditOut(prev => ({ ...prev, description: e.target.value }))} />
+          <Input label="Bénéficiaire" value={editOut.beneficiary ?? ''} onChange={e => setEditOut(prev => ({ ...prev, beneficiary: e.target.value }))} />
+          <div className="flex gap-3 pt-2">
+            <Button variant="outline" onClick={() => setEditingOutId(null)} className="flex-1">Annuler</Button>
+            <Button onClick={saveEditOut} className="flex-1" disabled={savingEdit}>
+              {savingEdit ? 'Enregistrement...' : 'Enregistrer'}
             </Button>
           </div>
         </div>
