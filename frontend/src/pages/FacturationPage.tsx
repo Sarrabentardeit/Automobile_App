@@ -254,7 +254,7 @@ export default function FacturationPage() {
         }
       }
       const { totalTTC } = computeFactureTotals(payload.lignes, payload.timbre)
-      addIn({
+      await addIn({
         date: payload.date,
         amount: totalTTC,
         type: 'MECA',
@@ -266,21 +266,29 @@ export default function FacturationPage() {
       for (const l of lignesProduit) await incrementerStock(l.productId, l.qte)
     }
 
-    if (editingId) {
-      updateFacture(editingId, payload)
-      toast.success('Facture mise à jour')
-    } else {
-      addFacture(payload)
-      toast.success('Facture créée')
+    try {
+      if (editingId) {
+        await updateFacture(editingId, payload)
+        toast.success('Facture mise à jour')
+      } else {
+        await addFacture(payload)
+        toast.success('Facture créée')
+      }
+      setShowModal(false)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de l’enregistrement de la facture')
     }
-    setShowModal(false)
   }
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (deleteId !== null) {
-      removeFacture(deleteId)
-      toast.success('Facture supprimée')
-      setDeleteId(null)
+      const ok = await removeFacture(deleteId)
+      if (ok) {
+        toast.success('Facture supprimée')
+        setDeleteId(null)
+      } else {
+        toast.error('Erreur lors de la suppression')
+      }
     }
   }
 
@@ -301,9 +309,13 @@ export default function FacturationPage() {
       const lignesProduit = f.lignes.filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
       for (const l of lignesProduit) await incrementerStock(l.productId, l.qte)
     }
-    updateFacture(annulerId, { statut: 'annulee' })
-    toast.success('Facture annulée')
-    setAnnulerId(null)
+    try {
+      await updateFacture(annulerId, { statut: 'annulee' })
+      toast.success('Facture annulée')
+      setAnnulerId(null)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de l’annulation')
+    }
   }
 
   const runWorkflowAction = (f: Facture, newStatut: FactureStatut) => {
@@ -341,7 +353,7 @@ export default function FacturationPage() {
         }
       }
       const { totalTTC } = computeFactureTotals(f.lignes, f.timbre)
-      addIn({
+      await addIn({
         date: f.date,
         amount: totalTTC,
         type: 'MECA',
@@ -353,8 +365,12 @@ export default function FacturationPage() {
       const lignesProduit = f.lignes.filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
       for (const l of lignesProduit) await incrementerStock(l.productId, l.qte)
     }
-    updateFacture(f.id, { statut: newStatut })
-    toast.success(`Facture ${FACTURE_STATUT_CONFIG[newStatut].label.toLowerCase()}`)
+    try {
+      await updateFacture(f.id, { statut: newStatut })
+      toast.success(`Facture ${FACTURE_STATUT_CONFIG[newStatut].label.toLowerCase()}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors du changement de statut')
+    }
   }
 
   if (!user) return null
