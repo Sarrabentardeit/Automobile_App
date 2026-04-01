@@ -121,16 +121,17 @@ export default function VehiculesPage() {
       ? vehicules.filter(v => v.technicien_id === user.id)
       : []
 
-  const etats: EtatVehicule[] = ['orange', 'mauve', 'bleu', 'rouge', 'vert']
+  const etats: EtatVehicule[] = ['orange', 'mauve', 'bleu', 'rouge', 'vert', 'retour']
   const countByEtat = (etat: EtatVehicule) => stats?.byEtat?.[etat] ?? 0
   const totalAll = stats?.total ?? total
 
   const handleFilterEtat = (etat: EtatVehicule | 'tous') => {
     setFiltreEtat(etat)
     setCurrentPage(1)
-    if (etat === 'tous') searchParams.delete('etat')
-    else searchParams.set('etat', etat)
-    setSearchParams(searchParams)
+    const next = new URLSearchParams(searchParams)
+    if (etat === 'tous') next.delete('etat')
+    else next.set('etat', etat)
+    setSearchParams(next)
   }
 
   const handleTabChange = (t: VehiculeType) => {
@@ -139,6 +140,9 @@ export default function VehiculesPage() {
   }
 
   const totalPages = Math.ceil(total / limit) || 1
+  const visibleVehicules = filtreEtat === 'tous'
+    ? myVehicules
+    : myVehicules.filter(v => v.etat_actuel === filtreEtat)
 
   const handleDelete = async (v: Vehicule) => {
     const ok = await deleteVehicule(v.id)
@@ -288,14 +292,14 @@ export default function VehiculesPage() {
           <div className="bg-white rounded-2xl p-10 sm:p-16 text-center shadow-sm border border-gray-100">
             <p className="text-gray-500 font-medium text-sm sm:text-base">Chargement...</p>
           </div>
-        ) : myVehicules.length === 0 ? (
+        ) : visibleVehicules.length === 0 ? (
           <div className="bg-white rounded-2xl p-10 sm:p-16 text-center shadow-sm border border-gray-100">
             <Filter className="w-10 h-10 sm:w-12 sm:h-12 text-gray-200 mx-auto mb-3" />
             <p className="text-gray-500 font-medium text-sm sm:text-base">Aucun véhicule trouvé</p>
             <p className="text-xs sm:text-sm text-gray-400 mt-1">Essayez de modifier les filtres</p>
           </div>
         ) : (
-          myVehicules.map(v => (
+          visibleVehicules.map(v => (
             <VehiculeCard
               key={v.id}
               vehicule={v}
