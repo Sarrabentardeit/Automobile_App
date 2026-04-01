@@ -200,7 +200,7 @@ export default function VehiculesPage() {
             filtreEtat === 'tous' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
           )}
         >
-          Tous ({total})
+          Tous ({totalAll})
         </button>
         {etats.map(etat => {
           const cfg = ETAT_CONFIG[etat]
