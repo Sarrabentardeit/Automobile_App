@@ -56,7 +56,7 @@ export default function StockGeneralPage() {
     return list
   }, [produits, search, filterCategorie, sortQte])
 
-  const totalValeurStock = useMemo(() => produits.reduce((s, p) => s + p.valeurAchatTTC, 0), [produits])
+  const totalValeurStock = useMemo(() => filteredProduits.reduce((s, p) => s + p.valeurAchatTTC, 0), [filteredProduits])
 
   const derniersMouvements = useMemo(() => [...(mouvementsStock ?? [])].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id).slice(0, 15), [mouvementsStock])
 

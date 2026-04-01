@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/auth'
 
 const router = Router()
 const db = prisma as any
+const STATUTS = ['brouillon', 'envoyee', 'payee', 'annulee'] as const
 
 type FactureRow = {
   id: number
@@ -85,15 +86,29 @@ router.get('/', authenticate(), async (req, res) => {
         { client_telephone: { contains: q, mode: 'insensitive' } },
       ]
     }
-    if (statut) where.statut = statut
-    if (year || month) {
+    if (statut) {
+      if (!STATUTS.includes(statut as (typeof STATUTS)[number])) {
+        return res.status(400).json({ error: 'statut invalide' })
+      }
+      where.statut = statut
+    }
+    if (year !== undefined && (!Number.isInteger(year) || year < 2000 || year > 2100)) {
+      return res.status(400).json({ error: 'year invalide' })
+    }
+    if (month !== undefined && (!Number.isInteger(month) || month < 1 || month > 12)) {
+      return res.status(400).json({ error: 'month invalide' })
+    }
+    if (month !== undefined && year === undefined) {
+      return res.status(400).json({ error: 'year est requis quand month est fourni' })
+    }
+    if (year !== undefined || month !== undefined) {
       where.date = {}
-      if (year && month && month >= 1 && month <= 12) {
+      if (year !== undefined && month !== undefined) {
         const y = String(year)
         const m = String(month).padStart(2, '0')
         ;(where.date as Record<string, string>).gte = `${y}-${m}-01`
         ;(where.date as Record<string, string>).lte = `${y}-${m}-31`
-      } else if (year) {
+      } else if (year !== undefined) {
         ;(where.date as Record<string, string>).gte = `${year}-01-01`
         ;(where.date as Record<string, string>).lte = `${year}-12-31`
       }

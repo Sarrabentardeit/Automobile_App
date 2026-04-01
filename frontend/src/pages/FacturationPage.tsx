@@ -47,13 +47,14 @@ function ligneFromProduit(p: ProduitStock): FormLigne {
 
 export default function FacturationPage() {
   const { user, permissions } = useAuth()
-  const { factures, addFacture, updateFacture, removeFacture, getNextNumero } = useFacturation()
+  const { factures, fetchFactures, addFacture, updateFacture, removeFacture, getNextNumero } = useFacturation()
   const { clients } = useClients()
   const { produits, decrementerStock, incrementerStock } = useStockGeneral()
   const { addIn } = useMoney()
   const toast = useToast()
 
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [filterStatut, setFilterStatut] = useState<FactureStatut | 'a_encaisser' | ''>('')
   const [filterMonth, setFilterMonth] = useState<number | ''>('')
   const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear())
@@ -65,6 +66,20 @@ export default function FacturationPage() {
   const [openActionsId, setOpenActionsId] = useState<number | null>(null)
   const [pendingValidation, setPendingValidation] = useState<{ facture: Facture; newStatut: FactureStatut } | null>(null)
   const actionsRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300)
+    return () => clearTimeout(t)
+  }, [search])
+
+  useEffect(() => {
+    void fetchFactures({
+      q: debouncedSearch || undefined,
+      statut: filterStatut === 'a_encaisser' ? 'envoyee' : (filterStatut || undefined),
+      month: filterMonth === '' ? undefined : filterMonth,
+      year: filterYear || undefined,
+    })
+  }, [fetchFactures, debouncedSearch, filterStatut, filterMonth, filterYear])
 
   useEffect(() => {
     const fn = (e: MouseEvent) => {
@@ -91,27 +106,9 @@ export default function FacturationPage() {
 
   const filteredFactures = useMemo(() => {
     let list = factures
-    if (search.trim()) {
-      const q = search.toLowerCase()
-      list = list.filter(
-        f =>
-          f.numero.toLowerCase().includes(q) ||
-          f.clientNom.toLowerCase().includes(q) ||
-          f.clientTelephone.includes(q)
-      )
-    }
     if (filterStatut === 'a_encaisser') list = list.filter(f => f.statut === 'envoyee')
-    else if (filterStatut) list = list.filter(f => f.statut === filterStatut)
-    if (filterMonth !== '') {
-      list = list.filter(f => {
-        const [y, m] = f.date.split('-').map(Number)
-        return y === filterYear && m === filterMonth
-      })
-    } else if (filterYear) {
-      list = list.filter(f => f.date.startsWith(String(filterYear)))
-    }
     return list.sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
-  }, [factures, search, filterStatut, filterMonth, filterYear])
+  }, [factures, filterStatut])
 
   const statsFiltered = useMemo(() => {
     const list = filteredFactures

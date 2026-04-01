@@ -59,9 +59,9 @@ export default function DemandeDevisPage() {
   }, [demandes, filterStatut, search])
 
   const stats = useMemo(() => ({
-    enAttente: demandes.filter(d => d.statut === 'en_attente').length,
-    totalEstime: demandes.filter(d => d.statut === 'accepte' && d.montantEstime != null).reduce((s, d) => s + (d.montantEstime ?? 0), 0),
-  }), [demandes])
+    enAttente: filtered.filter(d => d.statut === 'en_attente').length,
+    totalEstime: filtered.filter(d => d.statut === 'accepte' && d.montantEstime != null).reduce((s, d) => s + (d.montantEstime ?? 0), 0),
+  }), [filtered])
 
   const openNew = () => {
     setForm({

@@ -122,8 +122,8 @@ export default function VehiculesPage() {
       : []
 
   const etats: EtatVehicule[] = ['orange', 'mauve', 'bleu', 'rouge', 'vert', 'retour']
-  const countByEtat = (etat: EtatVehicule) => stats?.byEtat?.[etat] ?? 0
-  const totalAll = stats?.total ?? total
+  const countByEtat = (etat: EtatVehicule) => myVehicules.filter(v => v.etat_actuel === etat).length
+  const totalAll = myVehicules.length
 
   const handleFilterEtat = (etat: EtatVehicule | 'tous') => {
     setFiltreEtat(etat)
@@ -162,7 +162,7 @@ export default function VehiculesPage() {
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Véhicules</h1>
           <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
             {permissions.vehiculeVisibility === 'all'
-              ? `${totalAll} véhicule(s) au total`
+              ? `${totalAll} véhicule(s) (vue filtrée)`
               : `${myVehicules.length} véhicule(s) assigné(s)`}
           </p>
         </div>
@@ -186,7 +186,9 @@ export default function VehiculesPage() {
               tab === type ? 'bg-gray-900 text-white shadow' : 'text-gray-500 hover:bg-gray-50 active:bg-gray-100',
             )}
           >
-            <Icon className="w-4 h-4" />{label} ({tab === type ? total : '—'})
+            <Icon className="w-4 h-4" />{label} ({type === 'voiture'
+              ? myVehicules.filter(v => v.type === 'voiture').length
+              : myVehicules.filter(v => v.type === 'moto').length})
           </button>
         ))}
       </div>

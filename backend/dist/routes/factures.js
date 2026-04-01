@@ -5,6 +5,7 @@ const prisma_1 = require("../lib/prisma");
 const auth_1 = require("../middleware/auth");
 const router = (0, express_1.Router)();
 const db = prisma_1.prisma;
+const STATUTS = ['brouillon', 'envoyee', 'payee', 'annulee'];
 function toFacture(f) {
     return {
         id: f.id,
@@ -59,17 +60,30 @@ router.get('/', (0, auth_1.authenticate)(), async (req, res) => {
                 { client_telephone: { contains: q, mode: 'insensitive' } },
             ];
         }
-        if (statut)
+        if (statut) {
+            if (!STATUTS.includes(statut)) {
+                return res.status(400).json({ error: 'statut invalide' });
+            }
             where.statut = statut;
-        if (year || month) {
+        }
+        if (year !== undefined && (!Number.isInteger(year) || year < 2000 || year > 2100)) {
+            return res.status(400).json({ error: 'year invalide' });
+        }
+        if (month !== undefined && (!Number.isInteger(month) || month < 1 || month > 12)) {
+            return res.status(400).json({ error: 'month invalide' });
+        }
+        if (month !== undefined && year === undefined) {
+            return res.status(400).json({ error: 'year est requis quand month est fourni' });
+        }
+        if (year !== undefined || month !== undefined) {
             where.date = {};
-            if (year && month && month >= 1 && month <= 12) {
+            if (year !== undefined && month !== undefined) {
                 const y = String(year);
                 const m = String(month).padStart(2, '0');
                 where.date.gte = `${y}-${m}-01`;
                 where.date.lte = `${y}-${m}-31`;
             }
-            else if (year) {
+            else if (year !== undefined) {
                 ;
                 where.date.gte = `${year}-01-01`;
                 where.date.lte = `${year}-12-31`;

@@ -9,26 +9,36 @@ import { daysSince } from '@/lib/utils'
 
 export default function DashboardPage() {
   const { user, permissions } = useAuth()
-  const { vehicules, historique } = useVehiculesContext()
+  const { vehicules, historique, stats, dashboardSummary } = useVehiculesContext()
   const { users } = useUsers()
   const navigate = useNavigate()
   if (!user || !permissions) return null
 
+  const isGlobalView = permissions.vehiculeVisibility === 'all'
   const myVehicules = permissions.vehiculeVisibility === 'all'
     ? vehicules
     : permissions.vehiculeVisibility === 'own'
       ? vehicules.filter(v => v.technicien_id === user.id)
       : []
+  const totalVehicules = isGlobalView ? (stats?.total ?? myVehicules.length) : myVehicules.length
 
-  const countByEtat = (etat: EtatVehicule) => myVehicules.filter(v => v.etat_actuel === etat).length
-  const urgents = myVehicules.filter(v => v.etat_actuel === 'rouge')
-  const anciens = myVehicules.filter(v => daysSince(v.date_entree) > 7 && v.etat_actuel !== 'vert')
+  const countByEtat = (etat: EtatVehicule) =>
+    isGlobalView ? (stats?.byEtat?.[etat] ?? 0) : myVehicules.filter(v => v.etat_actuel === etat).length
+  const urgents = isGlobalView
+    ? (dashboardSummary?.urgents ?? [])
+    : myVehicules.filter(v => v.etat_actuel === 'rouge')
+  const anciens = isGlobalView
+    ? (dashboardSummary?.anciens ?? [])
+    : myVehicules.filter(v => daysSince(v.date_entree) > 7 && v.etat_actuel !== 'vert')
+  const problemsCount = isGlobalView ? (dashboardSummary?.problemsCount ?? urgents.length) : urgents.length
 
-  const recentActivity = [...historique]
-    .sort((a, b) => new Date(b.date_changement).getTime() - new Date(a.date_changement).getTime())
-    .slice(0, 6)
+  const recentActivity = isGlobalView
+    ? (dashboardSummary?.recentActivity ?? []).slice(0, 6)
+    : [...historique]
+        .sort((a, b) => new Date(b.date_changement).getTime() - new Date(a.date_changement).getTime())
+        .slice(0, 6)
 
-  const etats: EtatVehicule[] = ['orange', 'mauve', 'bleu', 'rouge', 'vert']
+  const etats: EtatVehicule[] = ['orange', 'mauve', 'bleu', 'rouge', 'vert', 'retour']
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -70,7 +80,7 @@ export default function DashboardPage() {
               <Car className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
             </div>
             <div className="min-w-0">
-              <p className="text-lg sm:text-2xl font-extrabold text-gray-900">{myVehicules.length}</p>
+              <p className="text-lg sm:text-2xl font-extrabold text-gray-900">{totalVehicules}</p>
               <p className="text-[10px] sm:text-sm text-gray-500 truncate">{permissions.vehiculeVisibility === 'all' ? 'Total' : 'Mes véh.'}</p>
             </div>
           </div>
@@ -81,7 +91,7 @@ export default function DashboardPage() {
               <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
             </div>
             <div className="min-w-0">
-              <p className="text-lg sm:text-2xl font-extrabold text-gray-900">{urgents.length}</p>
+              <p className="text-lg sm:text-2xl font-extrabold text-gray-900">{problemsCount}</p>
               <p className="text-[10px] sm:text-sm text-gray-500">Problèmes</p>
             </div>
           </div>
@@ -163,7 +173,9 @@ export default function DashboardPage() {
                       <span className="font-semibold">{h.utilisateur_nom}</span>
                       {' → '}
                       <span className="font-semibold" style={{ color: cfg.color }}>{cfg.label}</span>
-                      {v && <span className="text-gray-500"> · {v.modele}</span>}
+                      {(isGlobalView ? (h as typeof h & { vehicleModel?: string }).vehicleModel : v?.modele) && (
+                        <span className="text-gray-500"> · {isGlobalView ? (h as typeof h & { vehicleModel?: string }).vehicleModel : v?.modele}</span>
+                      )}
                     </p>
                     <p className="text-xs text-gray-400 truncate">{h.commentaire}</p>
                   </div>
@@ -186,7 +198,9 @@ export default function DashboardPage() {
           </div>
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 sm:gap-3">
             {users.filter(u => u.statut === 'actif' && u.role === 'technicien').map(tech => {
-              const assignedCount = vehicules.filter(v => v.technicien_id === tech.id && v.etat_actuel !== 'vert').length
+              const assignedCount = isGlobalView
+                ? (dashboardSummary?.teamLoadByTechnicien?.[String(tech.id)] ?? 0)
+                : vehicules.filter(v => v.technicien_id === tech.id && v.etat_actuel !== 'vert').length
               return (
                 <div key={tech.id} className="bg-gray-50 rounded-xl p-2.5 sm:p-3 text-center">
                   <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-1.5 text-xs sm:text-sm font-bold text-gray-600">

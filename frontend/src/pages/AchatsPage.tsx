@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, type ChangeEvent } from 'react'
+import { useState, useMemo, useEffect, useCallback, type ChangeEvent } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAchats } from '@/contexts/AchatsContext'
 import { useFournisseurs } from '@/contexts/FournisseursContext'
@@ -46,18 +46,6 @@ export default function AchatsPage() {
     paye: false,
   })
 
-  const filtered = useMemo(() => {
-    let list = factures.sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
-    if (filtreStatut !== 'tous') {
-      list = list.filter(f => f.statut === filtreStatut)
-    }
-    if (search.trim()) {
-      const q = search.toLowerCase()
-      list = list.filter(f => f.numero.toLowerCase().includes(q) || f.fournisseurNom.toLowerCase().includes(q))
-    }
-    return list
-  }, [factures, search, filtreStatut])
-
   const totalLignes = (lignes: LigneAchat[]) => lignes.reduce((s, l) => s + l.quantite * l.prixUnitaire, 0)
 
   const now = new Date()
@@ -71,6 +59,26 @@ export default function AchatsPage() {
   const yearStart = `${year}-01-01`
   const yearEnd = `${year}-12-31`
 
+  const inPeriod = useCallback((d: string) => {
+    const today = now.toISOString().slice(0, 10)
+    if (period === 'semaine') return d >= weekStart && d <= today
+    if (period === 'mois') return d >= monthStart && d <= monthEnd
+    return d >= yearStart && d <= yearEnd
+  }, [period, weekStart, monthStart, monthEnd, yearStart, yearEnd, now])
+
+  const filtered = useMemo(() => {
+    let list = [...factures].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
+    list = list.filter(f => inPeriod(f.date))
+    if (filtreStatut !== 'tous') {
+      list = list.filter(f => f.statut === filtreStatut)
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      list = list.filter(f => f.numero.toLowerCase().includes(q) || f.fournisseurNom.toLowerCase().includes(q))
+    }
+    return list
+  }, [factures, search, filtreStatut, inPeriod])
+
   const stats = useMemo(() => {
     const sum = (l: LigneAchat[]) => l.reduce((s, x) => s + x.quantite * x.prixUnitaire, 0)
     const totalDuMois = factures
@@ -83,14 +91,8 @@ export default function AchatsPage() {
 
   const totalParPeriode = useMemo(() => {
     const sum = (l: LigneAchat[]) => l.reduce((s, x) => s + x.quantite * x.prixUnitaire, 0)
-    const today = now.toISOString().slice(0, 10)
-    const inRange = (d: string) => {
-      if (period === 'semaine') return d >= weekStart && d <= today
-      if (period === 'mois') return d >= monthStart && d <= monthEnd
-      return d >= yearStart && d <= yearEnd
-    }
-    return factures.filter(f => inRange(f.date)).reduce((s, f) => s + sum(f.lignes), 0)
-  }, [factures, period, weekStart, monthStart, monthEnd, yearStart, yearEnd])
+    return factures.filter(f => inPeriod(f.date)).reduce((s, f) => s + sum(f.lignes), 0)
+  }, [factures, inPeriod])
 
   const [topFournisseurs, setTopFournisseurs] = useState<FournisseurTopItem[]>([])
   useEffect(() => {

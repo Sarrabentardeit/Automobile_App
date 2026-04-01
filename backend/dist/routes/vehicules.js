@@ -139,6 +139,67 @@ router.get('/stats', (0, auth_1.authenticate)(), async (req, res) => {
         return res.status(500).json({ error: 'Internal server error' });
     }
 });
+router.get('/dashboard-summary', (0, auth_1.authenticate)(), async (_req, res) => {
+    try {
+        const today = new Date();
+        const seuil = new Date(today);
+        seuil.setDate(seuil.getDate() - 7);
+        const seuilStr = `${seuil.getFullYear()}-${String(seuil.getMonth() + 1).padStart(2, '0')}-${String(seuil.getDate()).padStart(2, '0')}`;
+        const [urgents, anciens, recentRaw, teamGrouped] = await Promise.all([
+            db.vehicule.findMany({
+                where: { etat_actuel: 'rouge' },
+                orderBy: { id: 'desc' },
+            }),
+            db.vehicule.findMany({
+                where: {
+                    etat_actuel: { notIn: ['vert', 'rouge'] },
+                    date_entree: { lt: seuilStr },
+                },
+                orderBy: { date_entree: 'asc' },
+            }),
+            db.vehiculeHistorique.findMany({
+                orderBy: [{ date_changement: 'desc' }, { id: 'desc' }],
+                take: 12,
+            }),
+            db.vehicule.groupBy({
+                by: ['technicien_id'],
+                where: {
+                    technicien_id: { not: null },
+                    etat_actuel: { not: 'vert' },
+                },
+                _count: { id: true },
+            }),
+        ]);
+        const vehicleIds = Array.from(new Set(recentRaw.map(r => Number(r.vehiculeId)).filter((v) => !Number.isNaN(v))));
+        const recentVehicles = vehicleIds.length
+            ? await db.vehicule.findMany({
+                where: { id: { in: vehicleIds } },
+                select: { id: true, modele: true },
+            })
+            : [];
+        const modelByVehiculeId = new Map(recentVehicles.map(v => [v.id, v.modele]));
+        const teamLoadByTechnicien = {};
+        for (const row of teamGrouped) {
+            if (row.technicien_id == null)
+                continue;
+            teamLoadByTechnicien[String(row.technicien_id)] = row._count.id;
+        }
+        return res.json({
+            problemsCount: urgents.length,
+            urgents: urgents.map(toVehicule),
+            anciens: anciens.map(toVehicule),
+            recentActivity: recentRaw.map(h => ({
+                ...toHistorique(h),
+                vehicleModel: modelByVehiculeId.get(Number(h.vehiculeId)) ?? '',
+            })),
+            teamLoadByTechnicien,
+        });
+    }
+    catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
 router.get('/', (0, auth_1.authenticate)(), async (req, res) => {
     try {
         const etat = req.query.etat;

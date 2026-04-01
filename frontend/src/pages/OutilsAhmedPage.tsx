@@ -42,7 +42,7 @@ export default function OutilsAhmedPage() {
     )
   }, [outilsAhmed, search])
 
-  const totalPrixAhmed = useMemo(() => outilsAhmed.reduce((s, o) => s + o.prixAhmed, 0), [outilsAhmed])
+  const totalPrixAhmed = useMemo(() => filtered.reduce((s, o) => s + o.prixAhmed, 0), [filtered])
 
   const openNew = () => {
     setForm({

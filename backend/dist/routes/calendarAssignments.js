@@ -22,11 +22,21 @@ router.get('/', (0, auth_1.authenticate)(), async (req, res) => {
         const year = req.query.year ? Number(req.query.year) : undefined;
         const month = req.query.month ? Number(req.query.month) : undefined;
         const where = {};
-        if (!Number.isNaN(year) && !Number.isNaN(month) && year && month && month >= 1 && month <= 12) {
-            const start = `${year}-${String(month).padStart(2, '0')}-01`;
-            const endDate = new Date(year, month, 0).getDate();
-            const end = `${year}-${String(month).padStart(2, '0')}-${String(endDate).padStart(2, '0')}`;
+        if (year !== undefined && (!Number.isInteger(year) || year < 2000 || year > 2100)) {
+            return res.status(400).json({ error: 'year invalide' });
+        }
+        if (month !== undefined && (!Number.isInteger(month) || month < 1 || month > 12)) {
+            return res.status(400).json({ error: 'month invalide' });
+        }
+        const effectiveYear = year ?? new Date().getFullYear();
+        if (month !== undefined) {
+            const start = `${effectiveYear}-${String(month).padStart(2, '0')}-01`;
+            const endDate = new Date(effectiveYear, month, 0).getDate();
+            const end = `${effectiveYear}-${String(month).padStart(2, '0')}-${String(endDate).padStart(2, '0')}`;
             where.date = { gte: start, lte: end };
+        }
+        else if (year !== undefined) {
+            where.date = { gte: `${year}-01-01`, lte: `${year}-12-31` };
         }
         const list = (await prisma_1.prisma.calendarAssignment.findMany({
             where: Object.keys(where).length ? where : undefined,

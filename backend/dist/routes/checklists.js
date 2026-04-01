@@ -247,6 +247,17 @@ function csvEscape(val) {
         return `"${s.replace(/"/g, '""')}"`;
     return s;
 }
+function parseOptionalInt(val) {
+    if (val === undefined || val === null)
+        return undefined;
+    const raw = String(val).trim();
+    if (!raw)
+        return undefined;
+    const n = Number(raw);
+    if (!Number.isInteger(n))
+        return undefined;
+    return n;
+}
 function canReview(userRole) {
     return ['admin', 'responsable'].includes((userRole ?? '').toLowerCase());
 }
@@ -647,8 +658,8 @@ router.get('/review/history', async (req, res) => {
         const from = String(req.query.from ?? '').slice(0, 10);
         const to = String(req.query.to ?? '').slice(0, 10);
         const status = String(req.query.status ?? '');
-        const userId = Number(req.query.userId);
-        const validatorId = Number(req.query.validatorId);
+        const userId = parseOptionalInt(req.query.userId);
+        const validatorId = parseOptionalInt(req.query.validatorId);
         const q = String(req.query.q ?? '').trim().toLowerCase();
         const sortBy = String(req.query.sortBy ?? 'date');
         const sortDir = String(req.query.sortDir ?? 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
@@ -666,9 +677,9 @@ router.get('/review/history', async (req, res) => {
         else if (date) {
             where.date = date;
         }
-        if (!isNaN(userId))
+        if (userId !== undefined)
             where.userId = userId;
-        if (!isNaN(validatorId))
+        if (validatorId !== undefined)
             where.validatorId = validatorId;
         const list = await db.dailyChecklist.findMany({
             where,
@@ -701,8 +712,8 @@ router.get('/review/history', async (req, res) => {
                 return a.userName.localeCompare(b.userName) * sortFactor;
             if (sortBy === 'status')
                 return a.status.localeCompare(b.status) * sortFactor;
-            const av = (a.validatedAt ?? a.updatedAt) || '';
-            const bv = (b.validatedAt ?? b.updatedAt) || '';
+            const av = a.date || '';
+            const bv = b.date || '';
             return av.localeCompare(bv) * sortFactor;
         });
         return res.json(mapped.slice(0, limit));

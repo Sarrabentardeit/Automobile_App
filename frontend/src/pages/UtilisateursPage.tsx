@@ -172,10 +172,11 @@ export default function UtilisateursPage() {
         <button onClick={() => setFiltreRole('tous')}
           className={cn('px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs font-bold border-2 transition-all whitespace-nowrap flex-shrink-0',
             filtreRole === 'tous' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200'
-          )}>Tous ({users.length})</button>
+          )}>Tous ({recherche ? filtered.length : users.length})</button>
         {ALL_ROLES.map(role => {
           const rc = ROLE_CONFIG[role]
-          const count = users.filter(u => u.role === role).length
+          const source = recherche ? filtered : users
+          const count = source.filter(u => u.role === role).length
           return (
             <button key={role} onClick={() => setFiltreRole(role)}
               className={cn('px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs font-bold border-2 transition-all whitespace-nowrap flex-shrink-0',

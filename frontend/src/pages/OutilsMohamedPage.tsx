@@ -39,7 +39,7 @@ export default function OutilsMohamedPage() {
     return list.filter(m => m.vehicule.toLowerCase().includes(q) || m.outillage.toLowerCase().includes(q))
   }, [outilsMohamed, search])
 
-  const totalPrixMohamed = useMemo(() => outilsMohamed.reduce((s, o) => s + (o.prixMohamed ?? o.prixGarage * TAUX_MOHAMED), 0), [outilsMohamed])
+  const totalPrixMohamed = useMemo(() => filtered.reduce((s, o) => s + (o.prixMohamed ?? o.prixGarage * TAUX_MOHAMED), 0), [filtered])
 
   const openNew = () => {
     setForm({ date: new Date().toISOString().slice(0, 10), vehicule: '', outillage: '', prixGarage: 0, prixMohamed: 0 })

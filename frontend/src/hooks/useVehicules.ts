@@ -29,6 +29,14 @@ export interface VehiculeStats {
   terminesCeMois: number
 }
 
+export interface DashboardSummary {
+  problemsCount: number
+  urgents: Vehicule[]
+  anciens: Vehicule[]
+  recentActivity: Array<HistoriqueEtat & { vehicleModel?: string }>
+  teamLoadByTechnicien: Record<string, number>
+}
+
 export function useVehicules() {
   const { user, getAccessToken } = useAuth()
   const [vehicules, setVehicules] = useState<Vehicule[]>([])
@@ -40,6 +48,7 @@ export function useVehicules() {
   const [vehiculeCache, setVehiculeCache] = useState<Record<number, Vehicule>>({})
   const [imagesByVehicule, setImagesByVehicule] = useState<Record<number, VehiculeImage[]>>({})
   const [stats, setStats] = useState<VehiculeStats | null>(null)
+  const [dashboardSummary, setDashboardSummary] = useState<DashboardSummary | null>(null)
 
   const fetchVehicules = useCallback(
     async (filters?: VehiculesFilters) => {
@@ -97,6 +106,17 @@ export function useVehicules() {
     [getAccessToken]
   )
 
+  const fetchDashboardSummary = useCallback(async () => {
+    const token = getAccessToken()
+    if (!token) return
+    try {
+      const data = await apiFetch<DashboardSummary>('/vehicules/dashboard-summary', { token })
+      setDashboardSummary(data)
+    } catch {
+      setDashboardSummary(null)
+    }
+  }, [getAccessToken])
+
   const fetchHistorique = useCallback(
     async (ids: number[]) => {
       const token = getAccessToken()
@@ -120,7 +140,8 @@ export function useVehicules() {
   useEffect(() => {
     fetchVehicules({ page: 1, limit: 20 })
     fetchStats()
-  }, [fetchVehicules, fetchStats])
+    fetchDashboardSummary()
+  }, [fetchVehicules, fetchStats, fetchDashboardSummary])
 
   useEffect(() => {
     if (vehicules.length > 0) fetchHistorique(vehicules.map(v => v.id))
@@ -368,8 +389,9 @@ export function useVehicules() {
     (filters?: VehiculesFilters) => {
       fetchVehicules(filters ?? { page, limit })
       fetchStats()
+      fetchDashboardSummary()
     },
-    [fetchVehicules, fetchStats, page, limit]
+    [fetchVehicules, fetchStats, fetchDashboardSummary, page, limit]
   )
 
   return {
@@ -381,6 +403,8 @@ export function useVehicules() {
     limit,
     stats,
     fetchStats,
+    dashboardSummary,
+    fetchDashboardSummary,
     addVehicule,
     editVehicule,
     deleteVehicule,

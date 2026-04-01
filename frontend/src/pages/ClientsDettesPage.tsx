@@ -41,7 +41,7 @@ export default function ClientsDettesPage() {
       .sort((a, b) => b.reste - a.reste)
   }, [clients, search])
 
-  const totalDettes = useMemo(() => clients.reduce((s, c) => s + c.reste, 0), [clients])
+  const totalDettes = useMemo(() => filtered.reduce((s, c) => s + c.reste, 0), [filtered])
 
   const openEdit = (c: ClientAvecDette) => {
     setForm({
