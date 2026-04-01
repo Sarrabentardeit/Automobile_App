@@ -29,6 +29,11 @@ export interface VehiculeStats {
   terminesCeMois: number
 }
 
+export interface VehiculeFilteredCounts {
+  total: number
+  byEtat: Record<string, number>
+}
+
 export interface DashboardSummary {
   problemsCount: number
   urgents: Vehicule[]
@@ -48,6 +53,7 @@ export function useVehicules() {
   const [vehiculeCache, setVehiculeCache] = useState<Record<number, Vehicule>>({})
   const [imagesByVehicule, setImagesByVehicule] = useState<Record<number, VehiculeImage[]>>({})
   const [stats, setStats] = useState<VehiculeStats | null>(null)
+  const [filteredCounts, setFilteredCounts] = useState<VehiculeFilteredCounts | null>(null)
   const [dashboardSummary, setDashboardSummary] = useState<DashboardSummary | null>(null)
 
   const fetchVehicules = useCallback(
@@ -116,6 +122,29 @@ export function useVehicules() {
       setDashboardSummary(null)
     }
   }, [getAccessToken])
+
+  const fetchFilteredCounts = useCallback(
+    async (filters?: VehiculesFilters, includeEtat = false) => {
+      const token = getAccessToken()
+      if (!token) return
+      try {
+        const params: Record<string, string | number | undefined> = {
+          includeEtat: includeEtat ? 'true' : 'false',
+        }
+        if (filters?.type) params.type = filters.type
+        if (filters?.etat) params.etat = filters.etat
+        if (filters?.technicien_id) params.technicien_id = filters.technicien_id
+        if (filters?.date_debut) params.date_debut = filters.date_debut
+        if (filters?.date_fin) params.date_fin = filters.date_fin
+        if (filters?.q) params.q = filters.q
+        const data = await apiFetch<VehiculeFilteredCounts>('/vehicules/counts', { token, params })
+        setFilteredCounts(data)
+      } catch {
+        setFilteredCounts(null)
+      }
+    },
+    [getAccessToken]
+  )
 
   const fetchHistorique = useCallback(
     async (ids: number[]) => {
@@ -372,6 +401,8 @@ export function useVehicules() {
     fetchStats,
     dashboardSummary,
     fetchDashboardSummary,
+    filteredCounts,
+    fetchFilteredCounts,
     addVehicule,
     editVehicule,
     deleteVehicule,

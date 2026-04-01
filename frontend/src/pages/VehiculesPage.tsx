@@ -49,6 +49,7 @@ export default function VehiculesPage() {
     page,
     limit,
     stats,
+    filteredCounts,
     loading,
     addVehicule,
     editVehicule,
@@ -56,6 +57,7 @@ export default function VehiculesPage() {
     changeEtat,
     uploadVehiculeImage,
     fetchVehicules,
+    fetchFilteredCounts,
   } = useVehiculesContext()
   const toast = useToast()
   const { addNotification } = useNotifications()
@@ -98,6 +100,7 @@ export default function VehiculesPage() {
       limit: PAGE_SIZE,
     }
     fetchVehicules(filters)
+    fetchFilteredCounts(filters, false)
   }, [
     tab,
     filtreEtat,
@@ -109,6 +112,7 @@ export default function VehiculesPage() {
     permissions.vehiculeVisibility,
     user?.id,
     fetchVehicules,
+    fetchFilteredCounts,
   ])
 
   useEffect(() => {
@@ -122,8 +126,8 @@ export default function VehiculesPage() {
       : []
 
   const etats: EtatVehicule[] = ['orange', 'mauve', 'bleu', 'rouge', 'vert', 'retour']
-  const countByEtat = (etat: EtatVehicule) => myVehicules.filter(v => v.etat_actuel === etat).length
-  const totalAll = myVehicules.length
+  const countByEtat = (etat: EtatVehicule) => filteredCounts?.byEtat?.[etat] ?? myVehicules.filter(v => v.etat_actuel === etat).length
+  const totalAll = filteredCounts?.total ?? myVehicules.length
 
   const handleFilterEtat = (etat: EtatVehicule | 'tous') => {
     setFiltreEtat(etat)

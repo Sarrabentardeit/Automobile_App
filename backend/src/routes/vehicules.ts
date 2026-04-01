@@ -112,6 +112,40 @@ function toHistorique(h: { id: number; vehiculeId: number; etat_precedent: strin
   }
 }
 
+function buildVehiculesWhere(query: {
+  etat?: string
+  technicien_id?: string
+  type?: string
+  date_debut?: string
+  date_fin?: string
+  q?: string
+}, includeEtat: boolean): Record<string, unknown> {
+  const where: Record<string, unknown> = {}
+  if (includeEtat && query.etat && ETATS.includes(query.etat as (typeof ETATS)[number])) {
+    where.etat_actuel = query.etat
+  }
+  if (query.technicien_id) {
+    const tid = parseInt(query.technicien_id, 10)
+    if (!isNaN(tid)) where.technicien_id = tid
+  }
+  if (query.type && TYPES.includes(query.type as (typeof TYPES)[number])) {
+    where.type = query.type
+  }
+  if (query.date_debut || query.date_fin) {
+    where.date_entree = {}
+    if (query.date_debut) (where.date_entree as Record<string, string>).gte = query.date_debut
+    if (query.date_fin) (where.date_entree as Record<string, string>).lte = query.date_fin
+  }
+  if (query.q) {
+    where.OR = [
+      { modele: { contains: query.q, mode: 'insensitive' } },
+      { immatriculation: { contains: query.q, mode: 'insensitive' } },
+      { defaut: { contains: query.q, mode: 'insensitive' } },
+    ]
+  }
+  return where
+}
+
 router.get('/stats', authenticate(), async (req, res) => {
   try {
     const month = parseInt(req.query.month as string, 10)
@@ -222,29 +256,7 @@ router.get('/', authenticate(), async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page as string, 10) || 1)
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string, 10) || 20))
 
-    const where: Record<string, unknown> = {}
-    if (etat && ETATS.includes(etat as (typeof ETATS)[number])) {
-      where.etat_actuel = etat
-    }
-    if (technicien_id) {
-      const tid = parseInt(technicien_id, 10)
-      if (!isNaN(tid)) where.technicien_id = tid
-    }
-    if (type && TYPES.includes(type as (typeof TYPES)[number])) {
-      where.type = type
-    }
-    if (date_debut || date_fin) {
-      where.date_entree = {}
-      if (date_debut) (where.date_entree as Record<string, string>).gte = date_debut
-      if (date_fin) (where.date_entree as Record<string, string>).lte = date_fin
-    }
-    if (q) {
-      where.OR = [
-        { modele: { contains: q, mode: 'insensitive' } },
-        { immatriculation: { contains: q, mode: 'insensitive' } },
-        { defaut: { contains: q, mode: 'insensitive' } },
-      ]
-    }
+    const where = buildVehiculesWhere({ etat, technicien_id, type, date_debut, date_fin, q }, true)
 
     const [list, total] = await Promise.all([
       db.vehicule.findMany({
@@ -258,6 +270,40 @@ router.get('/', authenticate(), async (req, res) => {
       }),
     ])
     return res.json({ data: list.map(toVehicule), total, page, limit })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+router.get('/counts', authenticate(), async (req, res) => {
+  try {
+    const etat = req.query.etat as string | undefined
+    const technicien_id = req.query.technicien_id as string | undefined
+    const type = req.query.type as string | undefined
+    const date_debut = req.query.date_debut as string | undefined
+    const date_fin = req.query.date_fin as string | undefined
+    const q = (req.query.q as string)?.trim()
+    const includeEtat = String(req.query.includeEtat ?? 'false').toLowerCase() === 'true'
+
+    const where = buildVehiculesWhere({ etat, technicien_id, type, date_debut, date_fin, q }, includeEtat)
+
+    const [total, grouped] = await Promise.all([
+      db.vehicule.count({ where: Object.keys(where).length ? where : undefined }),
+      db.vehicule.groupBy({
+        by: ['etat_actuel'],
+        where: Object.keys(where).length ? where : undefined,
+        _count: { id: true },
+      }),
+    ])
+
+    const byEtat: Record<string, number> = {}
+    for (const e of ETATS) byEtat[e] = 0
+    for (const row of grouped as Array<{ etat_actuel: string; _count: { id: number } }>) {
+      byEtat[row.etat_actuel] = row._count.id
+    }
+
+    return res.json({ total, byEtat })
   } catch (err) {
     console.error(err)
     return res.status(500).json({ error: 'Internal server error' })
