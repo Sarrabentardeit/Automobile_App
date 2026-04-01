@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react'
 import type { TeamMoneyDayEntry } from '@/types'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
@@ -15,6 +15,8 @@ export function CaisseProvider({ children }: { children: ReactNode }) {
   const { getAccessToken, isAuthenticated } = useAuth()
   const [days, setDaysState] = useState<TeamMoneyDayEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const [serverUpdatedAt, setServerUpdatedAt] = useState<string | null>(null)
+  const persistQueueRef = useRef<Promise<void>>(Promise.resolve())
 
   const fetchDays = useCallback(async () => {
     const token = getAccessToken()
@@ -25,10 +27,12 @@ export function CaisseProvider({ children }: { children: ReactNode }) {
     }
     setLoading(true)
     try {
-      const data = await apiFetch<TeamMoneyDayEntry[]>('/caisse', { token })
-      setDaysState(Array.isArray(data) ? data : [])
+      const res = await apiFetch<{ data: TeamMoneyDayEntry[]; updatedAt: string | null }>('/caisse', { token })
+      setDaysState(Array.isArray(res.data) ? res.data : [])
+      setServerUpdatedAt(typeof res.updatedAt === 'string' ? res.updatedAt : null)
     } catch {
       setDaysState([])
+      setServerUpdatedAt(null)
     } finally {
       setLoading(false)
     }
@@ -43,25 +47,26 @@ export function CaisseProvider({ children }: { children: ReactNode }) {
       const token = getAccessToken()
       if (!token) return
       try {
-        await apiFetch('/caisse', {
+        const res = await apiFetch<{ data: TeamMoneyDayEntry[]; updatedAt: string | null }>('/caisse', {
           method: 'PUT',
           token,
-          body: JSON.stringify(next),
+          body: JSON.stringify({ days: next, expectedUpdatedAt: serverUpdatedAt }),
         })
+        setServerUpdatedAt(typeof res.updatedAt === 'string' ? res.updatedAt : null)
       } catch (err) {
         console.error('Erreur sync caisse, rechargement depuis serveur', err)
         // En cas d'échec, on revient à l'état serveur pour éviter la divergence entre postes.
         await fetchDays()
       }
     },
-    [getAccessToken, fetchDays]
+    [getAccessToken, fetchDays, serverUpdatedAt]
   )
 
   const setDays: React.Dispatch<React.SetStateAction<TeamMoneyDayEntry[]>> = useCallback(
     (updater) => {
       setDaysState(prev => {
         const next = typeof updater === 'function' ? (updater as (p: TeamMoneyDayEntry[]) => TeamMoneyDayEntry[])(prev) : updater
-        void persistDays(next)
+        persistQueueRef.current = persistQueueRef.current.then(() => persistDays(next))
         return next
       })
     },

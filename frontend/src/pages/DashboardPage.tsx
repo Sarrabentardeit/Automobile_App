@@ -200,7 +200,7 @@ export default function DashboardPage() {
             {users.filter(u => u.statut === 'actif' && u.role === 'technicien').map(tech => {
               const assignedCount = isGlobalView
                 ? (dashboardSummary?.teamLoadByTechnicien?.[String(tech.id)] ?? 0)
-                : vehicules.filter(v => v.technicien_id === tech.id && v.etat_actuel !== 'vert').length
+                : myVehicules.filter(v => v.technicien_id === tech.id && v.etat_actuel !== 'vert').length
               return (
                 <div key={tech.id} className="bg-gray-50 rounded-xl p-2.5 sm:p-3 text-center">
                   <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-1.5 text-xs sm:text-sm font-bold text-gray-600">

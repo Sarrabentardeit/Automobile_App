@@ -60,7 +60,6 @@ export default function ChecklistsHistoryPage() {
   const navigate = useNavigate()
   const { user, getAccessToken } = useAuth()
   const toast = useToast()
-  const [date] = useState(todayDate())
   const [myHistory, setMyHistory] = useState<DailyChecklist[]>([])
   const [reviewHistory, setReviewHistory] = useState<ChecklistHistoryEntry[]>([])
   const [reviewSummary, setReviewSummary] = useState<ChecklistHistorySummaryRow[]>([])
@@ -95,7 +94,7 @@ export default function ChecklistsHistoryPage() {
     try {
       const list = await apiFetch<DailyChecklist[]>('/checklists/me/history', {
         token,
-        params: { limit: 60 },
+        params: { limit: 200, from: rangeFrom, to: rangeTo },
       })
       setMyHistory(Array.isArray(list) ? list : [])
     } catch {
@@ -165,12 +164,6 @@ export default function ChecklistsHistoryPage() {
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canReview, rangeFrom, rangeTo, reviewStatus, reviewSortBy, reviewSortDir, reviewQuery])
-
-  useEffect(() => {
-    const b = monthBounds(date)
-    setRangeFrom(b.from)
-    setRangeTo(b.to)
-  }, [date])
 
   const exportCsv = async () => {
     const token = getAccessToken()

@@ -313,9 +313,19 @@ router.get('/me/history', async (req, res) => {
         const user = req.user;
         if (!user)
             return res.status(401).json({ error: 'Authentification requise' });
-        const limit = Math.min(60, Math.max(1, Number(req.query.limit ?? 14)));
+        const limit = Math.min(200, Math.max(1, Number(req.query.limit ?? 60)));
+        const from = String(req.query.from ?? '').slice(0, 10);
+        const to = String(req.query.to ?? '').slice(0, 10);
+        const where = { userId: user.sub };
+        if (from || to) {
+            where.date = {};
+            if (from)
+                where.date.gte = from;
+            if (to)
+                where.date.lte = to;
+        }
         const list = await db.dailyChecklist.findMany({
-            where: { userId: user.sub },
+            where,
             orderBy: { date: 'desc' },
             take: limit,
             include: { user: true, validator: true },

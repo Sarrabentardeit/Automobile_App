@@ -52,6 +52,10 @@ export default function ChecklistsPage() {
   const [selectedChecklist, setSelectedChecklist] = useState<DailyChecklist | null>(null)
   const [selectedAudit, setSelectedAudit] = useState<ChecklistAuditLog[]>([])
   const [kpi, setKpi] = useState<ChecklistMonthlyKpi | null>(null)
+  const [reviewAction, setReviewAction] = useState<'validate' | 'reject' | null>(null)
+  const [reviewTargetId, setReviewTargetId] = useState<number | null>(null)
+  const [reviewComment, setReviewComment] = useState('')
+  const [reviewSubmitting, setReviewSubmitting] = useState(false)
 
   const canReview = user?.role === 'admin' || user?.role === 'responsable'
   const readOnly = checklist?.status === 'submitted' || checklist?.status === 'validated'
@@ -189,31 +193,50 @@ export default function ChecklistsPage() {
     }
   }
 
-  const reviewChecklist = async (id: number, action: 'validate' | 'reject') => {
+  const openReviewModal = (id: number, action: 'validate' | 'reject') => {
+    setReviewTargetId(id)
+    setReviewAction(action)
+    setReviewComment('')
+  }
+
+  const closeReviewModal = () => {
+    if (reviewSubmitting) return
+    setReviewTargetId(null)
+    setReviewAction(null)
+    setReviewComment('')
+  }
+
+  const reviewChecklist = async () => {
+    if (!reviewTargetId || !reviewAction) return
     const token = getAccessToken()
     if (!token) return
-    const comment =
-      action === 'reject'
-        ? window.prompt('Motif du rejet (visible par utilisateur):', '') ?? ''
-        : window.prompt('Commentaire validation (optionnel):', '') ?? ''
+    const comment = reviewComment.trim()
+    if (reviewAction === 'reject' && !comment) {
+      toast.error('Le motif est obligatoire pour rejeter la checklist')
+      return
+    }
     try {
-      await apiFetch<DailyChecklist>(`/checklists/${id}/review`, {
+      setReviewSubmitting(true)
+      await apiFetch<DailyChecklist>(`/checklists/${reviewTargetId}/review`, {
         method: 'POST',
         token,
-        body: JSON.stringify({ action, comment }),
+        body: JSON.stringify({ action: reviewAction, comment }),
       })
-      toast.success(action === 'validate' ? 'Checklist validée' : 'Checklist rejetée')
+      toast.success(reviewAction === 'validate' ? 'Checklist validée' : 'Checklist rejetée')
+      closeReviewModal()
       void loadPendingReview()
       void loadKpi()
-      if (checklist?.id === id) void loadChecklist()
-      if (selectedChecklist?.id === id) {
-        const refreshed = await apiFetch<DailyChecklist>(`/checklists/item/${id}`, { token })
+      if (checklist?.id === reviewTargetId) void loadChecklist()
+      if (selectedChecklist?.id === reviewTargetId) {
+        const refreshed = await apiFetch<DailyChecklist>(`/checklists/item/${reviewTargetId}`, { token })
         setSelectedChecklist(refreshed)
-        const logs = await apiFetch<ChecklistAuditLog[]>(`/checklists/audit/${id}`, { token })
+        const logs = await apiFetch<ChecklistAuditLog[]>(`/checklists/audit/${reviewTargetId}`, { token })
         setSelectedAudit(Array.isArray(logs) ? logs : [])
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur traitement checklist')
+    } finally {
+      setReviewSubmitting(false)
     }
   }
 
@@ -465,16 +488,48 @@ export default function ChecklistsPage() {
 
             {selectedChecklist.status === 'submitted' && canReview && (
               <div className="flex flex-wrap gap-2 pt-1">
-                <Button size="sm" onClick={() => void reviewChecklist(selectedChecklist.id, 'validate')}>
+                <Button size="sm" onClick={() => openReviewModal(selectedChecklist.id, 'validate')}>
                   Valider cette checklist
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => void reviewChecklist(selectedChecklist.id, 'reject')}>
+                <Button size="sm" variant="outline" onClick={() => openReviewModal(selectedChecklist.id, 'reject')}>
                   Rejeter avec motif
                 </Button>
               </div>
             )}
           </div>
         )}
+      </Modal>
+
+      <Modal
+        open={!!reviewAction && !!reviewTargetId}
+        onClose={closeReviewModal}
+        title={reviewAction === 'reject' ? 'Rejeter la checklist' : 'Valider la checklist'}
+        subtitle={
+          reviewAction === 'reject'
+            ? 'Le motif sera visible par l’utilisateur.'
+            : 'Commentaire optionnel visible dans l’historique.'
+        }
+      >
+        <div className="space-y-3">
+          <textarea
+            value={reviewComment}
+            onChange={e => setReviewComment(e.target.value)}
+            rows={4}
+            placeholder={reviewAction === 'reject' ? 'Motif du rejet (obligatoire)' : 'Commentaire de validation (optionnel)'}
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500"
+          />
+          {reviewAction === 'reject' && (
+            <p className="text-xs text-amber-700">Pour rejet, le commentaire est obligatoire.</p>
+          )}
+          <div className="flex justify-end gap-2 pt-1">
+            <Button size="sm" variant="outline" onClick={closeReviewModal} disabled={reviewSubmitting}>
+              Annuler
+            </Button>
+            <Button size="sm" onClick={() => void reviewChecklist()} disabled={reviewSubmitting}>
+              {reviewAction === 'reject' ? 'Confirmer rejet' : 'Confirmer validation'}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   )

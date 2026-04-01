@@ -9,11 +9,11 @@ router.get('/', authenticate(), async (_req, res) => {
   try {
     const state = await prisma.teamMoneyState.findUnique({ where: { id: 1 } })
     if (!state) {
-      return res.json([])
+      return res.json({ data: [], updatedAt: null })
     }
     const data = (state.data ?? []) as unknown
-    if (!Array.isArray(data)) return res.json([])
-    return res.json(data)
+    if (!Array.isArray(data)) return res.json({ data: [], updatedAt: state.updatedAt.toISOString() })
+    return res.json({ data, updatedAt: state.updatedAt.toISOString() })
   } catch (err) {
     console.error(err)
     if (typeof (prisma as any).teamMoneyState === 'undefined') {
@@ -28,9 +28,20 @@ router.get('/', authenticate(), async (_req, res) => {
 // PUT /caisse - remplace le tableau complet des jours
 router.put('/', authenticate(), async (req, res) => {
   try {
-    const days = req.body as unknown
+    const body = req.body as unknown
+    const isLegacyArray = Array.isArray(body)
+    const days = isLegacyArray ? body : (body as { days?: unknown }).days
+    const expectedUpdatedAt = !isLegacyArray ? (body as { expectedUpdatedAt?: string | null }).expectedUpdatedAt : undefined
     if (!Array.isArray(days)) {
-      return res.status(400).json({ error: 'Le corps doit être un tableau' })
+      return res.status(400).json({ error: 'Le corps doit contenir "days" (tableau)' })
+    }
+
+    const existing = await prisma.teamMoneyState.findUnique({ where: { id: 1 } })
+    if (expectedUpdatedAt !== undefined && existing) {
+      const current = existing.updatedAt.toISOString()
+      if (expectedUpdatedAt !== current) {
+        return res.status(409).json({ error: 'Conflit de version, rechargez les données caisse' })
+      }
     }
 
     const now = new Date()
@@ -40,7 +51,7 @@ router.put('/', authenticate(), async (req, res) => {
       create: { id: 1, data: days, updatedAt: now },
     })
 
-    return res.json(state.data)
+    return res.json({ data: state.data, updatedAt: state.updatedAt.toISOString() })
   } catch (err) {
     console.error(err)
     return res.status(500).json({ error: 'Internal server error' })

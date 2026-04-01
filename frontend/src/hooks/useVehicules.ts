@@ -170,25 +170,11 @@ export function useVehicules() {
         }),
       })
       setVehicules(prev => [v, ...prev])
-      setHistorique(prev => [
-        ...prev,
-        {
-          id: Date.now(),
-          vehicule_id: v.id,
-          etat_precedent: null,
-          etat_nouveau: data.etat_initial,
-          date_changement: new Date().toISOString(),
-          utilisateur_id: userId,
-          utilisateur_nom: userName,
-          commentaire: `Réception du véhicule - ${data.defaut}`,
-          duree_etat_precedent_minutes: null,
-          pieces_utilisees: '',
-        },
-      ])
       setTotal(prev => prev + 1)
+      fetchDashboardSummary()
       return v
     },
-    [getAccessToken]
+    [getAccessToken, fetchDashboardSummary]
   )
 
   const editVehicule = useCallback(
@@ -258,36 +244,17 @@ export function useVehicules() {
         })
         setVehicules(prev => prev.map(x => (x.id === vehiculeId ? v : x)))
         setVehiculeCache(prev => (prev[vehiculeId] ? { ...prev, [vehiculeId]: v } : prev))
-
-        const lastChange = historique
-          .filter(h => h.vehicule_id === vehiculeId)
-          .sort((a, b) => new Date(b.date_changement).getTime() - new Date(a.date_changement).getTime())[0]
-        const now = new Date().toISOString()
-        let duree: number | null = null
-        if (lastChange) {
-          duree = Math.round((new Date(now).getTime() - new Date(lastChange.date_changement).getTime()) / 60000)
+        const list = await apiFetch<HistoriqueEtat[]>(`/vehicules/${vehiculeId}/historique`, { token })
+        if (Array.isArray(list)) {
+          setHistorique(prev => [...prev.filter(h => h.vehicule_id !== vehiculeId), ...list])
         }
-        setHistorique(prev => [
-          ...prev,
-          {
-            id: Date.now(),
-            vehicule_id: vehiculeId,
-            etat_precedent: vehicule.etat_actuel,
-            etat_nouveau: nouvelEtat,
-            date_changement: now,
-            utilisateur_id: userId,
-            utilisateur_nom: userName,
-            commentaire,
-            duree_etat_precedent_minutes: duree,
-            pieces_utilisees: piecesUtilisees,
-          },
-        ])
+        fetchDashboardSummary()
         return true
       } catch {
         return false
       }
     },
-    [vehicules, vehiculeCache, historique, getAccessToken]
+    [vehicules, vehiculeCache, getAccessToken, fetchDashboardSummary]
   )
 
   const getHistorique = useCallback(
