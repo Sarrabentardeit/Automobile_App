@@ -437,7 +437,13 @@ export const PRIX_MAIN_OEUVRE_GROUPES: Record<PrixMainOeuvreGroupe, { label: str
 }
 
 // ==================== HUILE (STOCK) ====================
-export type HuileType = 'moteur' | 'boite' | 'liquide_refroidissement' | 'hydraulique' | 'autre'
+export type HuileType =
+  | 'moteur'
+  | 'boite'
+  | 'liquide_refroidissement'
+  | 'liquide_rincage'
+  | 'hydraulique'
+  | 'autre'
 
 export interface HuileProduct {
   id: number
@@ -453,7 +459,8 @@ export interface HuileProduct {
 export const HUILE_TYPES: Record<HuileType, { label: string; color: string }> = {
   moteur: { label: 'Huile moteur', color: 'bg-amber-100 text-amber-800 border-amber-200' },
   boite: { label: 'Huile boîte', color: 'bg-blue-100 text-blue-800 border-blue-200' },
-  liquide_refroidissement: { label: 'Liquide refroidissement', color: 'bg-cyan-100 text-cyan-800 border-cyan-200' },
+  liquide_refroidissement: { label: 'Liquide de refroidissement', color: 'bg-cyan-100 text-cyan-800 border-cyan-200' },
+  liquide_rincage: { label: 'Liquide rinçage', color: 'bg-sky-100 text-sky-800 border-sky-200' },
   hydraulique: { label: 'Hydraulique', color: 'bg-violet-100 text-violet-800 border-violet-200' },
   autre: { label: 'Autre', color: 'bg-gray-100 text-gray-700 border-gray-200' },
 }
@@ -575,6 +582,34 @@ export function isHuilesCategorieStock(c: string | undefined | null): boolean {
   const t = c.trim().toLowerCase()
   if (t === 'huiles' || t === 'liquides') return true
   return isLegacyHuilesLiquidesCombinedLabel(c)
+}
+
+/** Types de fluide proposés pour la catégorie « Huiles » (et ancien libellé combiné). */
+export const FLUIDE_TYPES_HUILES: readonly HuileType[] = ['moteur', 'boite', 'hydraulique', 'autre']
+
+/** Types de fluide proposés pour la catégorie « Liquides ». */
+export const FLUIDE_TYPES_LIQUIDES: readonly HuileType[] = [
+  'liquide_refroidissement',
+  'liquide_rincage',
+  'autre',
+]
+
+/** Liste des clés `fluideType` selon la catégorie produit (formulaire catalogue). */
+export function fluideTypesForCategorieProduit(categorie: string | undefined | null): HuileType[] {
+  const t = categorie?.trim().toLowerCase() ?? ''
+  if (t === 'liquides') return [...FLUIDE_TYPES_LIQUIDES]
+  if (t === 'huiles' || isLegacyHuilesLiquidesCombinedLabel(categorie)) return [...FLUIDE_TYPES_HUILES]
+  return [...new Set<HuileType>([...FLUIDE_TYPES_HUILES, ...FLUIDE_TYPES_LIQUIDES])]
+}
+
+/** Valeur stockée cohérente avec la catégorie (édition / affichage). */
+export function normalizeFluideTypeForCategorie(
+  categorie: string | undefined | null,
+  fluideType: string | undefined | null
+): HuileType {
+  const allowed = fluideTypesForCategorieProduit(categorie)
+  if (fluideType && allowed.includes(fluideType as HuileType)) return fluideType as HuileType
+  return allowed[0] ?? 'moteur'
 }
 
 export interface ProduitStock {

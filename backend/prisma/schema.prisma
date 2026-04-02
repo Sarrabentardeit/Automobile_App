@@ -106,7 +106,7 @@ model ProduitStock {
   reference       String    @default("")
   unite           String    @default("unité")
   seuil_alerte    Int?
-  fluide_type     String?   // moteur | boite | liquide_refroidissement | hydraulique | autre — null = article général
+  fluide_type     String?   // moteur | boite | hydraulique | autre (Huiles) ; liquide_refroidissement | liquide_rincage (Liquides) — null = article général
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   mouvements      MouvementStock[]

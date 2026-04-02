@@ -32,9 +32,12 @@ export default function DashboardPage() {
     : myVehicules.filter(v => daysSince(v.date_entree) > 7 && v.etat_actuel !== 'vert')
   const problemsCount = isGlobalView ? (dashboardSummary?.problemsCount ?? urgents.length) : urgents.length
 
+  const myVehiculeIds = new Set(myVehicules.map(v => v.id))
+
   const recentActivity = isGlobalView
     ? (dashboardSummary?.recentActivity ?? []).slice(0, 6)
     : [...historique]
+        .filter(h => myVehiculeIds.has(h.vehicule_id))
         .sort((a, b) => new Date(b.date_changement).getTime() - new Date(a.date_changement).getTime())
         .slice(0, 6)
 

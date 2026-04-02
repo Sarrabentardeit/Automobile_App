@@ -167,10 +167,15 @@ export function useVehicules() {
   )
 
   useEffect(() => {
-    fetchVehicules({ page: 1, limit: 20 })
+    const ownOnly = user?.permissions?.vehiculeVisibility === 'own'
+    fetchVehicules({
+      page: 1,
+      limit: 20,
+      ...(ownOnly && user ? { technicien_id: user.id } : {}),
+    })
     fetchStats()
     fetchDashboardSummary()
-  }, [fetchVehicules, fetchStats, fetchDashboardSummary])
+  }, [fetchVehicules, fetchStats, fetchDashboardSummary, user])
 
   useEffect(() => {
     if (vehicules.length > 0) fetchHistorique(vehicules.map(v => v.id))

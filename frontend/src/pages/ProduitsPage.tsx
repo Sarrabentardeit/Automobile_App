@@ -6,8 +6,10 @@ import type { HuileType, ProduitStock } from '@/types'
 import {
   HUILE_TYPES,
   PRODUIT_CATEGORIES_PRESET,
+  fluideTypesForCategorieProduit,
   isHuilesCategorieStock,
   isLegacyHuilesLiquidesCombinedLabel,
+  normalizeFluideTypeForCategorie,
 } from '@/types'
 import { useStockGeneral } from '@/contexts/StockGeneralContext'
 import { apiFetch } from '@/lib/api'
@@ -17,14 +19,6 @@ import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import { Package, Plus, AlertTriangle, Pencil, PackageOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
-
-const TYPE_KEYS: HuileType[] = ['moteur', 'boite', 'liquide_refroidissement', 'hydraulique', 'autre']
-
-function fluideTypeOf(p: ProduitStock): HuileType {
-  const t = p.fluideType
-  if (t && TYPE_KEYS.includes(t as HuileType)) return t as HuileType
-  return 'autre'
-}
 
 type FormProduit = {
   categorie: string
@@ -193,7 +187,7 @@ export default function ProduitsPage() {
       valeurAchatTTC: val,
       prixVente: prixV,
       seuilAlerte: p.seuilAlerte,
-      fluideType: fluideTypeOf(p),
+      fluideType: normalizeFluideTypeForCategorie(p.categorie, p.fluideType),
     })
     setEditingId(p.id)
   }
@@ -244,6 +238,20 @@ export default function ProduitsPage() {
   }
 
   const huileForm = isHuilesCategorieStock(form.categorie)
+
+  const fluideTypeKeys = useMemo(
+    () => fluideTypesForCategorieProduit(form.categorie),
+    [form.categorie]
+  )
+
+  useEffect(() => {
+    if (!huileForm) return
+    const allowed = fluideTypesForCategorieProduit(form.categorie)
+    setForm(f => {
+      if (allowed.includes(f.fluideType)) return f
+      return { ...f, fluideType: allowed[0] ?? 'moteur' }
+    })
+  }, [form.categorie, huileForm])
 
   const catTrim = form.categorie.trim()
   const isCustomCategorie =
@@ -366,7 +374,7 @@ export default function ProduitsPage() {
           <div className="grid gap-3">
             {filtered.map(p => {
               const huile = isHuilesCategorieStock(p.categorie) || !!p.fluideType
-              const t = fluideTypeOf(p)
+              const t = normalizeFluideTypeForCategorie(p.categorie, p.fluideType)
               return (
                 <Card
                   key={p.id}
@@ -440,7 +448,15 @@ export default function ProduitsPage() {
               onChange={e => {
                 const v = e.target.value
                 if (v === '__autre__') setForm(f => ({ ...f, categorie: '' }))
-                else setForm(f => ({ ...f, categorie: v }))
+                else
+                  setForm(f => {
+                    const next = { ...f, categorie: v }
+                    if (isHuilesCategorieStock(v)) {
+                      const allowed = fluideTypesForCategorieProduit(v)
+                      if (!allowed.includes(f.fluideType)) next.fluideType = allowed[0] ?? 'moteur'
+                    }
+                    return next
+                  })
               }}
               className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm bg-white"
             >
@@ -499,7 +515,7 @@ export default function ProduitsPage() {
                   onChange={e => setForm(f => ({ ...f, fluideType: e.target.value as HuileType }))}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500"
                 >
-                  {TYPE_KEYS.map(t => (
+                  {fluideTypeKeys.map(t => (
                     <option key={t} value={t}>{HUILE_TYPES[t].label}</option>
                   ))}
                 </select>
