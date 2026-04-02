@@ -1,10 +1,11 @@
-import { useState, useMemo, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useMemo, useRef, useEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useStockGeneral } from '@/contexts/StockGeneralContext'
 import { useFacturation } from '@/contexts/FacturationContext'
 import { useToast } from '@/contexts/ToastContext'
 import type { ProduitStock } from '@/types'
+import { PRODUIT_CATEGORIES_PRESET, isLegacyHuilesLiquidesCombinedLabel } from '@/types'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
@@ -18,8 +19,9 @@ function formatMontant(n: number): string {
 }
 
 export default function StockGeneralPage() {
+  const navigate = useNavigate()
   const { user, permissions } = useAuth()
-  const { produits, mouvementsStock, loading, addProduit, updateProduit, removeProduit } = useStockGeneral()
+  const { produits, mouvementsStock, loading, updateProduit, removeProduit } = useStockGeneral()
   const { factures } = useFacturation()
   const toast = useToast()
   const [search, setSearch] = useState('')
@@ -34,21 +36,51 @@ export default function StockGeneralPage() {
     quantite: 0,
     valeurAchatTTC: 0,
     categorie: '',
+    reference: '',
+    unite: 'unité',
   })
   // Mémorise le dernier prix unitaire pour recalculer la valeur totale quand la qté repasse de 0 à > 0
   const lastUnitPriceRef = useRef<number>(0)
 
-  const categories = useMemo(() => {
+  const categoriesFromData = useMemo(() => {
     const set = new Set<string>()
     for (const p of produits) if (p.categorie?.trim()) set.add(p.categorie!.trim())
     return [...set].sort()
   }, [produits])
 
+  /** Même logique que la page Produits : préréglages d’abord, puis hors préset (tri FR), sans « Huiles & liquides ». */
+  const filterSelectCategories = useMemo(() => {
+    const merged = new Set<string>([...PRODUIT_CATEGORIES_PRESET, ...categoriesFromData])
+    const filtered = [...merged].filter(c => !isLegacyHuilesLiquidesCombinedLabel(c))
+    const presetSet = new Set<string>([...PRODUIT_CATEGORIES_PRESET])
+    const presetInOrder = [...PRODUIT_CATEGORIES_PRESET].filter(p => filtered.includes(p))
+    const extras = filtered
+      .filter(c => !presetSet.has(c))
+      .sort((a, b) => a.localeCompare(b, 'fr'))
+    return [...presetInOrder, ...extras]
+  }, [categoriesFromData])
+
+  useEffect(() => {
+    if (!filterCategorie) return
+    if (isLegacyHuilesLiquidesCombinedLabel(filterCategorie)) {
+      setFilterCategorie('')
+      return
+    }
+    if (!filterSelectCategories.includes(filterCategorie)) {
+      setFilterCategorie('')
+    }
+  }, [filterCategorie, filterSelectCategories])
+
   const filteredProduits = useMemo(() => {
     let list = produits
     if (search.trim()) {
       const q = search.toLowerCase()
-      list = list.filter(p => p.nom.toLowerCase().includes(q) || (p.categorie ?? '').toLowerCase().includes(q))
+      list = list.filter(
+        p =>
+          p.nom.toLowerCase().includes(q) ||
+          (p.categorie ?? '').toLowerCase().includes(q) ||
+          (p.reference ?? '').toLowerCase().includes(q)
+      )
     }
     if (filterCategorie) list = list.filter(p => (p.categorie ?? '') === filterCategorie)
     if (sortQte === 'asc') list = [...list].sort((a, b) => (a.quantite ?? 0) - (b.quantite ?? 0))
@@ -85,13 +117,6 @@ export default function StockGeneralPage() {
     return [...map.entries()].map(([id, v]) => ({ productId: id, ...v })).sort((a, b) => b.qte - a.qte).slice(0, 5)
   }, [factures, ceMois])
 
-  const openNewProduit = () => {
-    lastUnitPriceRef.current = 0
-    setFormProduit({ nom: '', quantite: 0, valeurAchatTTC: 0, categorie: '' })
-    setEditingProduitId(null)
-    setShowFormProduit(true)
-  }
-
   const openEditProduit = (p: ProduitStock, e?: React.MouseEvent) => {
     e?.stopPropagation()
     const produit = produits.find(pr => pr.id === p.id) ?? p
@@ -99,21 +124,26 @@ export default function StockGeneralPage() {
     const val = typeof produit.valeurAchatTTC === 'number' ? produit.valeurAchatTTC : 0
     if (qte > 0 && val > 0) lastUnitPriceRef.current = val / qte
     else lastUnitPriceRef.current = 0
-    setFormProduit({ nom: produit.nom, quantite: qte, valeurAchatTTC: val, categorie: produit.categorie ?? '' })
+    setFormProduit({
+      nom: produit.nom,
+      quantite: qte,
+      valeurAchatTTC: val,
+      categorie: produit.categorie ?? '',
+      reference: produit.reference ?? '',
+      unite: produit.unite ?? 'unité',
+      seuilAlerte: produit.seuilAlerte,
+      prixVente: produit.prixVente,
+      fluideType: produit.fluideType,
+    })
     setEditingProduitId(produit.id)
     setShowFormProduit(true)
   }
 
   const saveProduit = async () => {
-    if (!formProduit.nom.trim()) return
+    if (!formProduit.nom.trim() || !editingProduitId) return
     try {
-      if (editingProduitId) {
-        await updateProduit(editingProduitId, formProduit)
-        toast.success('Produit modifié')
-      } else {
-        await addProduit(formProduit)
-        toast.success('Produit ajouté')
-      }
+      await updateProduit(editingProduitId, formProduit)
+      toast.success('Produit modifié')
       setShowFormProduit(false)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur')
@@ -170,7 +200,11 @@ export default function StockGeneralPage() {
               Entrée stock (Achats)
             </Button>
           </Link>
-          <Button onClick={openNewProduit} size="sm" icon={<Plus className="w-4 h-4" />}>
+          <Button
+            onClick={() => navigate('/produits', { state: { openNewProduct: true } })}
+            size="sm"
+            icon={<Plus className="w-4 h-4" />}
+          >
             Nouveau produit
           </Button>
         </div>
@@ -261,14 +295,14 @@ export default function StockGeneralPage() {
               className="w-full pl-9 pr-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm"
             />
           </div>
-          {categories.length > 0 && (
+          {filterSelectCategories.length > 0 && (
             <select
               value={filterCategorie}
               onChange={e => setFilterCategorie(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white max-w-[180px]"
+              className="px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white max-w-[200px]"
             >
               <option value="">Toutes catégories</option>
-              {categories.map(c => (
+              {filterSelectCategories.map(c => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
@@ -415,7 +449,7 @@ export default function StockGeneralPage() {
       )}
 
       {/* Modal Produit */}
-      <Modal open={showFormProduit} onClose={() => setShowFormProduit(false)} title={editingProduitId ? 'Modifier le produit' : 'Nouveau produit'} maxWidth="sm">
+      <Modal open={showFormProduit} onClose={() => setShowFormProduit(false)} title="Modifier le produit" maxWidth="sm">
         <div className="space-y-4">
           <Input label="Nom du produit" value={formProduit.nom} onChange={e => setFormProduit(f => ({ ...f, nom: e.target.value }))} placeholder="Ex: HUILE 5W30" />
           <div>
@@ -429,7 +463,7 @@ export default function StockGeneralPage() {
               className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm"
             />
             <datalist id="categories-list">
-              {['Huiles', 'Pièces', 'Consommables', 'Liquides', 'Filtres'].map(c => (
+              {[...PRODUIT_CATEGORIES_PRESET].map(c => (
                 <option key={c} value={c} />
               ))}
             </datalist>

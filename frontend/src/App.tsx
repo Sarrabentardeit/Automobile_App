@@ -12,7 +12,6 @@ import { ClientsDettesProvider } from '@/contexts/ClientsDettesContext'
 import { ContactsImportantsProvider } from '@/contexts/ContactsImportantsContext'
 import { DemandesDevisProvider } from '@/contexts/DemandesDevisContext'
 import { ReclamationsProvider } from '@/contexts/ReclamationsContext'
-import { HuileProvider } from '@/contexts/HuileContext'
 import { CalendarProvider } from '@/contexts/CalendarContext'
 import { MoneyProvider } from '@/contexts/MoneyContext'
 import { CaisseProvider } from '@/contexts/CaisseContext'
@@ -33,7 +32,7 @@ import EquipeMembresPage from '@/pages/EquipeMembresPage'
 import MoneyPage from '@/pages/MoneyPage'
 import CalendarPage from '@/pages/CalendarPage'
 import ReclamationPage from '@/pages/ReclamationPage'
-import HuilePage from '@/pages/HuilePage'
+import ProduitsPage from '@/pages/ProduitsPage'
 import ClientsPage from '@/pages/ClientsPage'
 import ClientsDettesPage from '@/pages/ClientsDettesPage'
 import ContactsImportantsPage from '@/pages/ContactsImportantsPage'
@@ -68,7 +67,6 @@ export default function App() {
               <ContactsImportantsProvider>
               <DemandesDevisProvider>
               <ReclamationsProvider>
-              <HuileProvider>
               <CalendarProvider>
               <MoneyProvider>
               <ChargesProvider>
@@ -91,7 +89,8 @@ export default function App() {
               <Route path="/money" element={<MoneyPage />} />
               <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/reclamation" element={<ReclamationPage />} />
-              <Route path="/huile" element={<HuilePage />} />
+              <Route path="/produits" element={<ProduitsPage />} />
+              <Route path="/huile" element={<Navigate to="/produits" replace />} />
               <Route path="/clients" element={<ClientsPage />} />
               <Route path="/clients/dettes" element={<ClientsDettesPage />} />
               <Route path="/contacts-importants" element={<ContactsImportantsPage />} />
@@ -113,7 +112,6 @@ export default function App() {
               </ChargesProvider>
               </MoneyProvider>
               </CalendarProvider>
-              </HuileProvider>
               </ReclamationsProvider>
               </DemandesDevisProvider>
               </ContactsImportantsProvider>

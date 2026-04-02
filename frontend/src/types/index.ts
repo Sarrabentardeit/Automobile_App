@@ -47,7 +47,7 @@ export const TOGGLE_PERMISSION_LABELS: Record<TogglePermissionKey, { label: stri
   canAssignTechnicien: { label: 'Assigner technicien', description: 'Affecter un technicien à un véhicule', icon: '👤' },
   canManageUsers: { label: 'Gérer les utilisateurs', description: 'Créer, modifier et désactiver des comptes', icon: '🔑' },
   canViewFinance: { label: 'Accès finance', description: 'Consulter les données financières', icon: '💰' },
-  canViewInventory: { label: 'Accès inventaire', description: 'Stock général et huiles', icon: '📦' },
+  canViewInventory: { label: 'Accès inventaire', description: 'Stock général et catalogue produits', icon: '📦' },
   canViewEquipeOutils: { label: 'Accès outils équipe', description: 'Outils Mohamed / Ahmed', icon: '🔧' },
 }
 
@@ -553,6 +553,30 @@ export interface MouvementProduit {
   fournisseur: string
 }
 
+/** Catégories proposées à la création (catalogue / page Produits). — Huiles / Liquides : champs fluide dédiés. */
+export const PRODUIT_CATEGORIES_PRESET = [
+  'Huiles',
+  'Liquides',
+  'Pièces',
+  'Consommables',
+  'Filtres',
+] as const
+
+/** Ancien libellé combiné — ne plus proposer dans les listes déroulantes (données historiques possibles). */
+export function isLegacyHuilesLiquidesCombinedLabel(c: string | undefined | null): boolean {
+  if (!c?.trim()) return false
+  const t = c.trim().toLowerCase()
+  return t === 'huiles & liquides' || t === 'huiles et liquides'
+}
+
+/** Affiche les champs « fluide » (type, prix unitaire) pour cette catégorie. */
+export function isHuilesCategorieStock(c: string | undefined | null): boolean {
+  if (!c?.trim()) return false
+  const t = c.trim().toLowerCase()
+  if (t === 'huiles' || t === 'liquides') return true
+  return isLegacyHuilesLiquidesCombinedLabel(c)
+}
+
 export interface ProduitStock {
   id: number
   nom: string
@@ -560,6 +584,11 @@ export interface ProduitStock {
   valeurAchatTTC: number
   prixVente?: number // prix de vente conseillé (HT ou TTC selon usage)
   categorie?: string // ex: Huiles, Pièces, Consommables
+  reference?: string
+  unite?: string
+  seuilAlerte?: number
+  /** Présent pour huiles / liquides (moteur, boîte, etc.) ; null côté API pour effacer */
+  fluideType?: string | null
 }
 
 /** Mouvement simple entrée/sortie stock (achat ou facture) */

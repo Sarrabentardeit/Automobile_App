@@ -22,7 +22,6 @@ import notificationsRouter from './routes/notifications'
 import teamMembersRouter from './routes/teamMembers'
 import calendarAssignmentsRouter from './routes/calendarAssignments'
 import caisseRouter from './routes/caisse'
-import huilesRouter from './routes/huiles'
 import monthlyChargesRouter from './routes/monthlyCharges'
 import moneyRouter from './routes/money'
 import outilsRouter from './routes/outils'
@@ -96,7 +95,6 @@ app.use('/notifications', notificationsRouter)
 app.use('/team-members', teamMembersRouter)
 app.use('/calendar-assignments', calendarAssignmentsRouter)
 app.use('/caisse', caisseRouter)
-app.use('/huiles', huilesRouter)
 app.use('/charges-mensuelles', monthlyChargesRouter)
 app.use('/money', moneyRouter)
 app.use('/outils', outilsRouter)

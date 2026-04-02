@@ -59,6 +59,10 @@ export function useStockGeneral() {
           valeurAchatTTC: p.valeurAchatTTC ?? 0,
           categorie: p.categorie ?? '',
           prixVente: p.prixVente,
+          reference: p.reference ?? '',
+          unite: p.unite ?? 'unité',
+          seuilAlerte: p.seuilAlerte,
+          fluideType: p.fluideType,
         }),
       })
       setProduits(prev => [...prev, created])

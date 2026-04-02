@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import type { Permissions, TogglePermissionKey } from '@/types'
 import { ROLE_CONFIG } from '@/types'
 import { useState, useRef, useEffect } from 'react'
-import { LayoutDashboard, Car, Users, Wallet, X, LogOut, Package, DollarSign, Wrench, UsersRound, CalendarDays, AlertCircle, UserCircle, CreditCard, ClipboardList, Droplets, Phone, BarChart2, Truck, Receipt, Bell, Shield, FileText, ShoppingCart } from 'lucide-react'
+import { LayoutDashboard, Car, Users, Wallet, X, LogOut, Package, DollarSign, Wrench, UsersRound, CalendarDays, AlertCircle, UserCircle, CreditCard, ClipboardList, Layers, Phone, BarChart2, Truck, Receipt, Bell, Shield, FileText, ShoppingCart } from 'lucide-react'
 import { useNotifications } from '@/contexts/NotificationsContext'
 import { cn } from '@/lib/utils'
 
@@ -34,7 +34,7 @@ const NAV_STRUCTURE: NavCategory[] = [
     label: 'INVENTAIRE',
     items: [
       { name: 'Stock Général', href: '/stock-general', icon: Package, requiredPermission: 'canViewInventory' },
-      { name: 'Huiles', href: '/huile', icon: Droplets, requiredPermission: 'canViewInventory' },
+      { name: 'Produits', href: '/produits', icon: Layers, requiredPermission: 'canViewInventory' },
     ],
   },
   {

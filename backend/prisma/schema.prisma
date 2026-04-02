@@ -103,6 +103,10 @@ model ProduitStock {
   valeur_achat_ttc Float    @default(0)
   categorie       String?   @default("")
   prix_vente      Float?    // prix de vente conseillé
+  reference       String    @default("")
+  unite           String    @default("unité")
+  seuil_alerte    Int?
+  fluide_type     String?   // moteur | boite | liquide_refroidissement | hydraulique | autre — null = article général
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   mouvements      MouvementStock[]
@@ -283,19 +287,6 @@ model ReclamationTechnicien {
   userId           Int
   user_full_name   String
   createdAt        DateTime     @default(now())
-}
-
-model ProduitHuile {
-  id           Int     @id @default(autoincrement())
-  designation  String
-  reference    String  @default("")
-  type         String  @default("moteur") // moteur | boite | liquide_refroidissement | hydraulique | autre
-  quantite     Int     @default(0)
-  unite        String  @default("L")
-  seuil_alerte Int?
-  prix         Float?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
 }
 
 model CalendarAssignment {

@@ -5,7 +5,20 @@ import { authenticate } from '../middleware/auth'
 const router = Router()
 const db = prisma as any
 
-function toProduit(p: { id: number; nom: string; quantite: number; valeur_achat_ttc: number; categorie: string | null; prix_vente: number | null }) {
+type ProduitRow = {
+  id: number
+  nom: string
+  quantite: number
+  valeur_achat_ttc: number
+  categorie: string | null
+  prix_vente: number | null
+  reference: string
+  unite: string
+  seuil_alerte: number | null
+  fluide_type: string | null
+}
+
+function toProduit(p: ProduitRow) {
   return {
     id: p.id,
     nom: p.nom,
@@ -13,6 +26,10 @@ function toProduit(p: { id: number; nom: string; quantite: number; valeur_achat_
     valeurAchatTTC: p.valeur_achat_ttc,
     categorie: p.categorie ?? undefined,
     prixVente: p.prix_vente ?? undefined,
+    reference: p.reference ?? '',
+    unite: p.unite ?? 'unité',
+    seuilAlerte: p.seuil_alerte ?? undefined,
+    fluideType: p.fluide_type ?? undefined,
   }
 }
 
@@ -43,25 +60,42 @@ function toMouvementManual(m: { id: number; date: string; produit: string; vehic
   }
 }
 
-// GET /stock/produits - liste des produits
+// GET /stock/produits - liste des produits (?fluidesOnly=1 = catégories Huiles/Liquides ou fluide_type renseigné)
 router.get('/produits', authenticate(), async (req, res) => {
   try {
     const q = (req.query.q as string)?.trim()
     const categorie = (req.query.categorie as string)?.trim()
-    const where: Record<string, unknown> = {}
+    const fluidesOnly =
+      req.query.fluidesOnly === '1' || String(req.query.fluidesOnly ?? '').toLowerCase() === 'true'
+
+    const and: Record<string, unknown>[] = []
     if (q) {
-      where.OR = [
-        { nom: { contains: q, mode: 'insensitive' } },
-        { categorie: { contains: q, mode: 'insensitive' } },
-      ]
+      and.push({
+        OR: [
+          { nom: { contains: q, mode: 'insensitive' } },
+          { categorie: { contains: q, mode: 'insensitive' } },
+          { reference: { contains: q, mode: 'insensitive' } },
+        ],
+      })
     }
-    if (categorie) where.categorie = categorie
+    if (categorie) and.push({ categorie })
+    if (fluidesOnly) {
+      and.push({
+        OR: [
+          { fluide_type: { not: null } },
+          { categorie: { contains: 'Huile', mode: 'insensitive' } },
+          { categorie: { contains: 'Liquide', mode: 'insensitive' } },
+        ],
+      })
+    }
+
+    const where = and.length ? { AND: and } : undefined
 
     const list = await db.produitStock.findMany({
-      where: Object.keys(where).length ? where : undefined,
+      where,
       orderBy: { nom: 'asc' },
     })
-    return res.json(list.map(toProduit))
+    return res.json(list.map((p: ProduitRow) => toProduit(p)))
   } catch (err) {
     console.error(err)
     return res.status(500).json({ error: 'Internal server error' })
@@ -75,7 +109,7 @@ router.get('/produits/:id', authenticate(), async (req, res) => {
     if (isNaN(id)) return res.status(400).json({ error: 'ID invalide' })
     const p = await db.produitStock.findUnique({ where: { id } })
     if (!p) return res.status(404).json({ error: 'Produit introuvable' })
-    return res.json(toProduit(p))
+    return res.json(toProduit(p as ProduitRow))
   } catch (err) {
     console.error(err)
     return res.status(500).json({ error: 'Internal server error' })
@@ -85,8 +119,19 @@ router.get('/produits/:id', authenticate(), async (req, res) => {
 // POST /stock/produits - créer produit
 router.post('/produits', authenticate(), async (req, res) => {
   try {
-    const body = req.body as { nom?: string; quantite?: number; valeurAchatTTC?: number; categorie?: string; prixVente?: number }
+    const body = req.body as {
+      nom?: string
+      quantite?: number
+      valeurAchatTTC?: number
+      categorie?: string
+      prixVente?: number
+      reference?: string
+      unite?: string
+      seuilAlerte?: number | null
+      fluideType?: string | null
+    }
     if (!body.nom?.trim()) return res.status(400).json({ error: 'nom est requis' })
+    const fluide = body.fluideType?.trim()
     const p = await db.produitStock.create({
       data: {
         nom: body.nom.trim(),
@@ -94,9 +139,13 @@ router.post('/produits', authenticate(), async (req, res) => {
         valeur_achat_ttc: Math.max(0, Number(body.valeurAchatTTC) || 0),
         categorie: (body.categorie ?? '').trim() || null,
         prix_vente: body.prixVente != null ? Number(body.prixVente) : null,
+        reference: (body.reference ?? '').toString().trim(),
+        unite: (body.unite ?? 'unité').toString().trim() || 'unité',
+        seuil_alerte: body.seuilAlerte != null ? Number(body.seuilAlerte) : null,
+        fluide_type: fluide && fluide.length ? fluide : null,
       },
     })
-    return res.status(201).json(toProduit(p))
+    return res.status(201).json(toProduit(p as ProduitRow))
   } catch (err) {
     console.error(err)
     return res.status(500).json({ error: 'Internal server error' })
@@ -108,7 +157,17 @@ router.put('/produits/:id', authenticate(), async (req, res) => {
   try {
     const id = Number(req.params.id)
     if (isNaN(id)) return res.status(400).json({ error: 'ID invalide' })
-    const body = req.body as Partial<{ nom: string; quantite: number; valeurAchatTTC: number; categorie: string; prixVente: number }>
+    const body = req.body as Partial<{
+      nom: string
+      quantite: number
+      valeurAchatTTC: number
+      categorie: string
+      prixVente: number
+      reference: string
+      unite: string
+      seuilAlerte: number | null
+      fluideType: string | null
+    }>
     const existing = await db.produitStock.findUnique({ where: { id } })
     if (!existing) return res.status(404).json({ error: 'Produit introuvable' })
 
@@ -118,9 +177,16 @@ router.put('/produits/:id', authenticate(), async (req, res) => {
     if (body.valeurAchatTTC !== undefined) data.valeur_achat_ttc = Math.max(0, Number(body.valeurAchatTTC) || 0)
     if (body.categorie !== undefined) data.categorie = (body.categorie ?? '').trim() || null
     if (body.prixVente !== undefined) data.prix_vente = body.prixVente != null ? Number(body.prixVente) : null
+    if (body.reference !== undefined) data.reference = (body.reference ?? '').toString().trim()
+    if (body.unite !== undefined) data.unite = (body.unite ?? 'unité').toString().trim() || 'unité'
+    if (body.seuilAlerte !== undefined) data.seuil_alerte = body.seuilAlerte != null ? Number(body.seuilAlerte) : null
+    if (body.fluideType !== undefined) {
+      const f = body.fluideType?.toString().trim()
+      data.fluide_type = f && f.length ? f : null
+    }
 
     const p = await db.produitStock.update({ where: { id }, data })
-    return res.json(toProduit(p))
+    return res.json(toProduit(p as ProduitRow))
   } catch (err) {
     console.error(err)
     return res.status(500).json({ error: 'Internal server error' })
@@ -294,7 +360,7 @@ router.post('/produits/:id/increment', authenticate(), async (req, res) => {
         },
       }),
     ])
-    return res.json(toProduit(updated))
+    return res.json(toProduit(updated as ProduitRow))
   } catch (err) {
     console.error(err)
     return res.status(500).json({ error: 'Internal server error' })
