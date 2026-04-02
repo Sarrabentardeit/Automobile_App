@@ -17,7 +17,7 @@ import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
-import { Package, Plus, AlertTriangle, Pencil, PackageOpen } from 'lucide-react'
+import { Package, Plus, AlertTriangle, Pencil, PackageOpen, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type FormProduit = {
@@ -52,7 +52,7 @@ export default function ProduitsPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const { user, permissions, getAccessToken } = useAuth()
-  const { addProduit, updateProduit, refetch: refetchStock } = useStockGeneral()
+  const { addProduit, updateProduit, removeProduit, refetch: refetchStock } = useStockGeneral()
   const toast = useToast()
   const [products, setProducts] = useState<ProduitStock[]>([])
   const [loading, setLoading] = useState(true)
@@ -61,6 +61,7 @@ export default function ProduitsPage() {
   const [showAlertsOnly, setShowAlertsOnly] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [showAdd, setShowAdd] = useState(false)
+  const [deleteProductId, setDeleteProductId] = useState<number | null>(null)
   const [form, setForm] = useState<FormProduit>(emptyForm)
 
   const loadProducts = useCallback(async () => {
@@ -234,6 +235,24 @@ export default function ProduitsPage() {
       refetchStock()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement')
+    }
+  }
+
+  const confirmDeleteProduct = async () => {
+    if (deleteProductId == null) return
+    const id = deleteProductId
+    try {
+      await removeProduit(id)
+      toast.success('Produit supprimé')
+      setDeleteProductId(null)
+      if (editingId === id) {
+        setEditingId(null)
+        setShowAdd(false)
+      }
+      await loadProducts()
+      refetchStock()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la suppression')
     }
   }
 
@@ -416,14 +435,24 @@ export default function ProduitsPage() {
                           <p className="text-xs text-gray-600 mt-1">{p.prixVente.toFixed(2)} DT / {p.unite ?? 'u.'}</p>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => openEdit(p)}
-                        className="p-2.5 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
-                        title="Modifier"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() => openEdit(p)}
+                          className="p-2.5 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+                          title="Modifier"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteProductId(p.id)}
+                          className="p-2.5 rounded-xl text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                          title="Supprimer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </Card>
@@ -581,6 +610,37 @@ export default function ProduitsPage() {
               Enregistrer
             </Button>
           </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={deleteProductId !== null}
+        onClose={() => setDeleteProductId(null)}
+        title="Supprimer le produit"
+        maxWidth="sm"
+      >
+        <p className="text-gray-600 text-sm">
+          {deleteProductId != null && (
+            <>
+              Supprimer «{' '}
+              <span className="font-semibold text-gray-800">
+                {products.find(x => x.id === deleteProductId)?.nom ?? 'ce produit'}
+              </span>
+              » du catalogue ? Cette action est définitive.
+            </>
+          )}
+        </p>
+        <div className="flex justify-end gap-2 mt-6">
+          <Button variant="outline" onClick={() => setDeleteProductId(null)}>
+            Annuler
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => void confirmDeleteProduct()}
+            className="text-red-600 border-red-200 hover:bg-red-50"
+          >
+            Supprimer
+          </Button>
         </div>
       </Modal>
     </div>

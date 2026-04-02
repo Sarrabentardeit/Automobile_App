@@ -214,6 +214,8 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                             markAsRead(n.id)
                             setShowNotif(false)
                             if (n.reclamationId != null) navigate('/reclamation')
+                            else if (n.vehiculeId != null) navigate(`/vehicules/${n.vehiculeId}`)
+                            else if (n.type?.startsWith('vehicule_')) navigate('/vehicules')
                           }}
                         >
                           {n.title && <p className="text-xs font-semibold text-orange-600">{n.title}</p>}

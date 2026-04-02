@@ -15,6 +15,7 @@ router.post('/', authenticate(), async (req: AuthRequest, res) => {
       message?: string
       type?: string
       reclamationId?: number
+      vehiculeId?: number
       title?: string
     }
     if (!body.userId || !body.message?.trim()) {
@@ -27,6 +28,7 @@ router.post('/', authenticate(), async (req: AuthRequest, res) => {
         message: body.message.trim(),
         type: body.type?.trim() || 'manual',
         reclamationId: body.reclamationId ?? null,
+        vehiculeId: body.vehiculeId ?? null,
         title: body.title?.trim() || null,
         read: false,
       },
@@ -37,6 +39,7 @@ router.post('/', authenticate(), async (req: AuthRequest, res) => {
       userId: created.userId,
       type: created.type,
       reclamationId: created.reclamationId ?? undefined,
+      vehiculeId: created.vehiculeId ?? undefined,
       title: created.title ?? undefined,
       message: created.message,
       date: created.createdAt.toISOString(),
@@ -65,6 +68,7 @@ router.get('/', authenticate(), async (req: AuthRequest, res) => {
       userId: n.userId,
       type: n.type,
       reclamationId: n.reclamationId ?? undefined,
+      vehiculeId: n.vehiculeId ?? undefined,
       title: n.title ?? undefined,
       message: n.message,
       date: n.createdAt.toISOString(),

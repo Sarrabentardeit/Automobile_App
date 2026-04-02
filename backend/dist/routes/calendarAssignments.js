@@ -4,6 +4,17 @@ const express_1 = require("express");
 const prisma_1 = require("../lib/prisma");
 const auth_1 = require("../middleware/auth");
 const router = (0, express_1.Router)();
+/** Seuls admin / responsable / financier gèrent les affectations ; les techniciens consultent leur planning uniquement */
+function canManageAssignments(role) {
+    return role !== 'technicien';
+}
+function denyIfTechnicien(req, res) {
+    if (!canManageAssignments(req.user?.role)) {
+        res.status(403).json({ error: 'Action réservée aux administrateurs et responsables' });
+        return true;
+    }
+    return false;
+}
 function toAssignment(r) {
     return {
         id: r.id,
@@ -38,6 +49,12 @@ router.get('/', (0, auth_1.authenticate)(), async (req, res) => {
         else if (year !== undefined) {
             where.date = { gte: `${year}-01-01`, lte: `${year}-12-31` };
         }
+        if (req.user?.role === 'technicien') {
+            const name = req.user.fullName?.trim();
+            if (!name)
+                return res.json([]);
+            where.member_name = { equals: name, mode: 'insensitive' };
+        }
         const list = (await prisma_1.prisma.calendarAssignment.findMany({
             where: Object.keys(where).length ? where : undefined,
             orderBy: [{ date: 'asc' }, { id: 'asc' }],
@@ -57,6 +74,8 @@ router.get('/', (0, auth_1.authenticate)(), async (req, res) => {
 // POST /calendar-assignments - créer
 router.post('/', (0, auth_1.authenticate)(), async (req, res) => {
     try {
+        if (denyIfTechnicien(req, res))
+            return;
         const body = req.body;
         if (!body.date?.trim())
             return res.status(400).json({ error: 'date est requise' });
@@ -88,6 +107,8 @@ router.post('/', (0, auth_1.authenticate)(), async (req, res) => {
 // PUT /calendar-assignments/:id - mise à jour
 router.put('/:id', (0, auth_1.authenticate)(), async (req, res) => {
     try {
+        if (denyIfTechnicien(req, res))
+            return;
         const id = Number(req.params.id);
         if (isNaN(id))
             return res.status(400).json({ error: 'ID invalide' });
@@ -129,6 +150,8 @@ router.put('/:id', (0, auth_1.authenticate)(), async (req, res) => {
 // DELETE /calendar-assignments/:id - suppression
 router.delete('/:id', (0, auth_1.authenticate)(), async (req, res) => {
     try {
+        if (denyIfTechnicien(req, res))
+            return;
         const id = Number(req.params.id);
         if (isNaN(id))
             return res.status(400).json({ error: 'ID invalide' });

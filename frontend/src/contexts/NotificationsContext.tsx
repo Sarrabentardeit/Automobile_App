@@ -26,7 +26,19 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       return
     }
     try {
-      const list = await apiFetch<Array<{ id: number; userId: number; type?: string; reclamationId?: number; title?: string; message: string; date: string; read: boolean }>>(
+      const list = await apiFetch<
+        Array<{
+          id: number
+          userId: number
+          type?: string
+          reclamationId?: number
+          vehiculeId?: number
+          title?: string
+          message: string
+          date: string
+          read: boolean
+        }>
+      >(
         '/notifications',
         { token }
       )

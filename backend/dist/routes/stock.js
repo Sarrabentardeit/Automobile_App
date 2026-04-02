@@ -13,6 +13,10 @@ function toProduit(p) {
         valeurAchatTTC: p.valeur_achat_ttc,
         categorie: p.categorie ?? undefined,
         prixVente: p.prix_vente ?? undefined,
+        reference: p.reference ?? '',
+        unite: p.unite ?? 'unité',
+        seuilAlerte: p.seuil_alerte ?? undefined,
+        fluideType: p.fluide_type ?? undefined,
     };
 }
 function toMouvement(m) {
@@ -40,25 +44,39 @@ function toMouvementManual(m) {
         fournisseur: m.fournisseur,
     };
 }
-// GET /stock/produits - liste des produits
+// GET /stock/produits - liste des produits (?fluidesOnly=1 = catégories Huiles/Liquides ou fluide_type renseigné)
 router.get('/produits', (0, auth_1.authenticate)(), async (req, res) => {
     try {
         const q = req.query.q?.trim();
         const categorie = req.query.categorie?.trim();
-        const where = {};
+        const fluidesOnly = req.query.fluidesOnly === '1' || String(req.query.fluidesOnly ?? '').toLowerCase() === 'true';
+        const and = [];
         if (q) {
-            where.OR = [
-                { nom: { contains: q, mode: 'insensitive' } },
-                { categorie: { contains: q, mode: 'insensitive' } },
-            ];
+            and.push({
+                OR: [
+                    { nom: { contains: q, mode: 'insensitive' } },
+                    { categorie: { contains: q, mode: 'insensitive' } },
+                    { reference: { contains: q, mode: 'insensitive' } },
+                ],
+            });
         }
         if (categorie)
-            where.categorie = categorie;
+            and.push({ categorie });
+        if (fluidesOnly) {
+            and.push({
+                OR: [
+                    { fluide_type: { not: null } },
+                    { categorie: { contains: 'Huile', mode: 'insensitive' } },
+                    { categorie: { contains: 'Liquide', mode: 'insensitive' } },
+                ],
+            });
+        }
+        const where = and.length ? { AND: and } : undefined;
         const list = await db.produitStock.findMany({
-            where: Object.keys(where).length ? where : undefined,
+            where,
             orderBy: { nom: 'asc' },
         });
-        return res.json(list.map(toProduit));
+        return res.json(list.map((p) => toProduit(p)));
     }
     catch (err) {
         console.error(err);
@@ -87,6 +105,7 @@ router.post('/produits', (0, auth_1.authenticate)(), async (req, res) => {
         const body = req.body;
         if (!body.nom?.trim())
             return res.status(400).json({ error: 'nom est requis' });
+        const fluide = body.fluideType?.trim();
         const p = await db.produitStock.create({
             data: {
                 nom: body.nom.trim(),
@@ -94,6 +113,10 @@ router.post('/produits', (0, auth_1.authenticate)(), async (req, res) => {
                 valeur_achat_ttc: Math.max(0, Number(body.valeurAchatTTC) || 0),
                 categorie: (body.categorie ?? '').trim() || null,
                 prix_vente: body.prixVente != null ? Number(body.prixVente) : null,
+                reference: (body.reference ?? '').toString().trim(),
+                unite: (body.unite ?? 'unité').toString().trim() || 'unité',
+                seuil_alerte: body.seuilAlerte != null ? Number(body.seuilAlerte) : null,
+                fluide_type: fluide && fluide.length ? fluide : null,
             },
         });
         return res.status(201).json(toProduit(p));
@@ -124,6 +147,16 @@ router.put('/produits/:id', (0, auth_1.authenticate)(), async (req, res) => {
             data.categorie = (body.categorie ?? '').trim() || null;
         if (body.prixVente !== undefined)
             data.prix_vente = body.prixVente != null ? Number(body.prixVente) : null;
+        if (body.reference !== undefined)
+            data.reference = (body.reference ?? '').toString().trim();
+        if (body.unite !== undefined)
+            data.unite = (body.unite ?? 'unité').toString().trim() || 'unité';
+        if (body.seuilAlerte !== undefined)
+            data.seuil_alerte = body.seuilAlerte != null ? Number(body.seuilAlerte) : null;
+        if (body.fluideType !== undefined) {
+            const f = body.fluideType?.toString().trim();
+            data.fluide_type = f && f.length ? f : null;
+        }
         const p = await db.produitStock.update({ where: { id }, data });
         return res.json(toProduit(p));
     }

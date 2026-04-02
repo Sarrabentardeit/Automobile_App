@@ -376,6 +376,8 @@ export interface Notification {
   type?: string
   /** ID réclamation si type reclamation_assigned - pour lien vers la page */
   reclamationId?: number
+  /** ID véhicule si notification liée à un véhicule / état */
+  vehiculeId?: number
   title?: string
 }
 

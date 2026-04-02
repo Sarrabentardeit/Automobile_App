@@ -22,6 +22,53 @@ const TRANSITIONS: Record<string, string[]> = {
   retour: [],
 }
 
+const ETAT_LABELS: Record<string, string> = {
+  orange: 'Orange',
+  mauve: 'Mauve',
+  bleu: 'Bleu',
+  rouge: 'Problème',
+  vert: 'Validé',
+  retour: 'Retour',
+}
+
+function etatLabel(e: string): string {
+  return ETAT_LABELS[e] ?? e
+}
+
+/** Notifie les administrateurs / responsables (sauf l’auteur de l’action). */
+async function notifyAdminsVehicule(opts: {
+  actorId: number
+  vehiculeId: number
+  type: 'vehicule_etat' | 'vehicule_update'
+  title: string
+  message: string
+}): Promise<void> {
+  try {
+    if (typeof db.notification === 'undefined') return
+    const recipients = await db.user.findMany({
+      where: {
+        statut: 'actif',
+        role: { in: ['admin', 'responsable'] },
+        id: { not: opts.actorId },
+      },
+      select: { id: true },
+    })
+    for (const u of recipients) {
+      await db.notification.create({
+        data: {
+          userId: u.id,
+          type: opts.type,
+          title: opts.title,
+          message: opts.message,
+          vehiculeId: opts.vehiculeId,
+        },
+      })
+    }
+  } catch (e) {
+    console.error('[vehicules] notifyAdminsVehicule:', e)
+  }
+}
+
 function toVehiculeImage(i: {
   id: number
   vehiculeId: number
@@ -550,6 +597,17 @@ router.put('/:id', authenticate(), async (req: AuthRequest, res) => {
     if (body.date_entree != null) data.date_entree = body.date_entree
 
     const v = await db.vehicule.update({ where: { id }, data })
+    const actor = req.user
+    if (actor) {
+      const who = actor.fullName ?? actor.email
+      await notifyAdminsVehicule({
+        actorId: actor.sub,
+        vehiculeId: id,
+        type: 'vehicule_update',
+        title: 'Véhicule modifié',
+        message: `${v.modele} (${(v.immatriculation ?? '').trim() || 'sans immat.'}) — fiche modifiée par ${who}.`,
+      })
+    }
     return res.json(toVehicule(v))
   } catch (err) {
     console.error(err)
@@ -626,6 +684,16 @@ router.post('/:id/changer-etat', authenticate(), async (req: AuthRequest, res) =
         },
       }),
     ])
+
+    const who = user.fullName ?? user.email
+    const ref = `${vehicule.modele} (${(vehicule.immatriculation ?? '').trim() || 'sans immat.'})`
+    await notifyAdminsVehicule({
+      actorId: user.sub,
+      vehiculeId: id,
+      type: 'vehicule_etat',
+      title: 'Changement d’état véhicule',
+      message: `${ref} : ${etatLabel(vehicule.etat_actuel)} → ${etatLabel(body.nouvel_etat)} — par ${who}.`,
+    })
 
     const updated = await db.vehicule.findUnique({ where: { id } })
     return res.json(toVehicule(updated!))

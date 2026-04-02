@@ -29,8 +29,10 @@ model Notification {
   id             Int       @id @default(autoincrement())
   userId         Int
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type           String    @default("reclamation_assigned") // reclamation_assigned | ...
+  type           String    @default("reclamation_assigned") // reclamation_assigned | vehicule_etat | ...
   reclamationId  Int?
+  vehiculeId     Int?
+  vehicule       Vehicule? @relation(fields: [vehiculeId], references: [id], onDelete: SetNull)
   title          String?   @default("")
   message        String
   read           Boolean   @default(false)
@@ -65,6 +67,7 @@ model Vehicule {
   updatedAt           DateTime  @updatedAt
   historique           VehiculeHistorique[]
   images               VehiculeImage[]
+  notifications        Notification[]
 }
 
 model VehiculeHistorique {
