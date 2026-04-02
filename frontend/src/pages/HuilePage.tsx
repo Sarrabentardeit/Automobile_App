@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils'
 const TYPE_KEYS: HuileType[] = ['moteur', 'boite', 'liquide_refroidissement', 'hydraulique', 'autre']
 
 export default function HuilePage() {
-  const { user } = useAuth()
+  const { user, permissions } = useAuth()
   const { products, loading, addProduct, updateProduct } = useHuile()
   const toast = useToast()
   const [filterType, setFilterType] = useState<HuileType | 'tous'>('tous')
@@ -103,6 +103,15 @@ export default function HuilePage() {
   }
 
   if (!user) return null
+
+  if (!permissions?.canViewInventory) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16">
+        <Droplets className="w-12 h-12 text-gray-300 mb-4" />
+        <p className="text-gray-500 font-medium">Vous n'avez pas accès au stock huiles.</p>
+      </div>
+    )
+  }
 
   if (loading) {
     return (

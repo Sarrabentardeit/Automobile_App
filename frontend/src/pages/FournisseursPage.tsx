@@ -11,7 +11,7 @@ import { Truck, Plus, Pencil, Trash2, Phone, Mail, MapPin } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function FournisseursPage() {
-  const { user } = useAuth()
+  const { user, permissions } = useAuth()
   const { fournisseurs, loading, addFournisseur, updateFournisseur, removeFournisseur } = useFournisseurs()
   const toast = useToast()
   const [search, setSearch] = useState('')
@@ -90,6 +90,15 @@ export default function FournisseursPage() {
   }
 
   if (!user) return null
+
+  if (!permissions?.canViewFinance) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16">
+        <Truck className="w-12 h-12 text-gray-300 mb-4" />
+        <p className="text-gray-500 font-medium">Vous n'avez pas accès aux fournisseurs.</p>
+      </div>
+    )
+  }
 
   if (loading) {
     return (

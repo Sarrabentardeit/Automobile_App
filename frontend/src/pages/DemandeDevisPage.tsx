@@ -24,7 +24,7 @@ const STATUT_STYLES: Record<DemandeDevisStatut, string> = {
 }
 
 export default function DemandeDevisPage() {
-  const { user } = useAuth()
+  const { user, permissions } = useAuth()
   const { demandes, loading, addDemande, updateDemande } = useDemandesDevis()
   const toast = useToast()
   const [filterStatut, setFilterStatut] = useState<DemandeDevisStatut | 'toutes'>('toutes')
@@ -249,6 +249,15 @@ export default function DemandeDevisPage() {
   }
 
   if (!user) return null
+
+  if (!permissions?.canViewFinance) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16">
+        <ClipboardList className="w-12 h-12 text-gray-300 mb-4" />
+        <p className="text-gray-500 font-medium">Vous n'avez pas accès aux demandes de devis.</p>
+      </div>
+    )
+  }
 
   if (loading) {
     return (

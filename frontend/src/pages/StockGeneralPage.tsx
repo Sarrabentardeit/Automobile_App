@@ -18,7 +18,7 @@ function formatMontant(n: number): string {
 }
 
 export default function StockGeneralPage() {
-  const { user } = useAuth()
+  const { user, permissions } = useAuth()
   const { produits, mouvementsStock, loading, addProduit, updateProduit, removeProduit } = useStockGeneral()
   const { factures } = useFacturation()
   const toast = useToast()
@@ -133,6 +133,15 @@ export default function StockGeneralPage() {
   }
 
   if (!user) return null
+
+  if (!permissions?.canViewInventory) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16">
+        <Package className="w-12 h-12 text-gray-300 mb-4" />
+        <p className="text-gray-500 font-medium">Vous n'avez pas accès au stock général.</p>
+      </div>
+    )
+  }
 
   if (loading) {
     return (

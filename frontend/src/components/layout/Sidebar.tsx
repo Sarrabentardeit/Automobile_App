@@ -33,8 +33,8 @@ const NAV_STRUCTURE: NavCategory[] = [
   {
     label: 'INVENTAIRE',
     items: [
-      { name: 'Stock Général', href: '/stock-general', icon: Package },
-      { name: 'Huiles', href: '/huile', icon: Droplets },
+      { name: 'Stock Général', href: '/stock-general', icon: Package, requiredPermission: 'canViewInventory' },
+      { name: 'Huiles', href: '/huile', icon: Droplets, requiredPermission: 'canViewInventory' },
     ],
   },
   {
@@ -52,11 +52,11 @@ const NAV_STRUCTURE: NavCategory[] = [
       { name: 'Facturation', href: '/facturation', icon: FileText, requiredPermission: 'canViewFinance' },
       { name: 'Achats (entrée stock)', href: '/achats', icon: ShoppingCart, requiredPermission: 'canViewFinance' },
       { name: 'Suivi Argent Équipe', href: '/caisse', icon: Wallet, requiredPermission: 'canViewFinance' },
-      { name: 'Transactions Fournisseurs', href: '/fournisseurs/transactions', icon: Receipt },
-      { name: 'Fournisseurs', href: '/fournisseurs', icon: Truck },
-      { name: 'Demandes Devis', href: '/devis', icon: ClipboardList },
+      { name: 'Transactions Fournisseurs', href: '/fournisseurs/transactions', icon: Receipt, requiredPermission: 'canViewFinance' },
+      { name: 'Fournisseurs', href: '/fournisseurs', icon: Truck, requiredPermission: 'canViewFinance' },
+      { name: 'Demandes Devis', href: '/devis', icon: ClipboardList, requiredPermission: 'canViewFinance' },
       { name: 'Détails Money', href: '/money', icon: Wallet, requiredPermission: 'canViewFinance' },
-      { name: 'Clients avec Dettes', href: '/clients/dettes', icon: CreditCard },
+      { name: 'Clients avec Dettes', href: '/clients/dettes', icon: CreditCard, requiredPermission: 'canViewFinance' },
 
     ],
   },
@@ -65,8 +65,8 @@ const NAV_STRUCTURE: NavCategory[] = [
     items: [
       { name: 'Utilisateurs', href: '/utilisateurs', icon: Users, requiredPermission: 'canManageUsers' },
       { name: 'Membres équipe', href: '/equipe/membres', icon: UsersRound, requiredPermission: 'canManageUsers' },
-      { name: 'Outils Mohamed', href: '/outils/mohamed', icon: Wrench },
-      { name: 'Outils Ahmed', href: '/outils/ahmed', icon: Wrench },
+      { name: 'Outils Mohamed', href: '/outils/mohamed', icon: Wrench, requiredPermission: 'canViewEquipeOutils' },
+      { name: 'Outils Ahmed', href: '/outils/ahmed', icon: Wrench, requiredPermission: 'canViewEquipeOutils' },
     ],
   },
   {

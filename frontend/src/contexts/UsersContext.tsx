@@ -13,6 +13,8 @@ const DEFAULT_PERMISSIONS: Permissions = {
   canManageUsers: false,
   canViewDashboard: true,
   canViewFinance: false,
+  canViewInventory: false,
+  canViewEquipeOutils: false,
 }
 
 function mergePermissions(role: string, raw: unknown): Permissions {
@@ -29,6 +31,8 @@ function mergePermissions(role: string, raw: unknown): Permissions {
     canManageUsers: Boolean(p.canManageUsers ?? base.canManageUsers),
     canViewDashboard: Boolean(p.canViewDashboard ?? base.canViewDashboard),
     canViewFinance: Boolean(p.canViewFinance ?? base.canViewFinance),
+    canViewInventory: Boolean(p.canViewInventory ?? base.canViewInventory),
+    canViewEquipeOutils: Boolean(p.canViewEquipeOutils ?? base.canViewEquipeOutils),
   }
 }
 

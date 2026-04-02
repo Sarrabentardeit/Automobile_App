@@ -14,7 +14,7 @@ function formatMontant(n: number): string {
 }
 
 export default function ClientsDettesPage() {
-  const { user } = useAuth()
+  const { user, permissions } = useAuth()
   const { clients, loading, addClient, updateClient } = useClientsDettes()
   const toast = useToast()
   const [search, setSearch] = useState('')
@@ -85,6 +85,15 @@ export default function ClientsDettesPage() {
   }
 
   if (!user) return null
+
+  if (!permissions?.canViewFinance) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16">
+        <CreditCard className="w-12 h-12 text-gray-300 mb-4" />
+        <p className="text-gray-500 font-medium">Vous n'avez pas accès aux clients avec dettes.</p>
+      </div>
+    )
+  }
 
   if (loading) {
     return (

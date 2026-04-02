@@ -260,6 +260,8 @@ export default function CalendarPage() {
 
   if (!user) return null
 
+  const canManageCalendar = user.role !== 'technicien'
+
   return (
     <div className="max-w-6xl mx-auto pb-12">
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
@@ -270,7 +272,11 @@ export default function CalendarPage() {
             </span>
             Calendrier
           </h1>
-          <p className="text-sm text-gray-500 mt-1">Affectation travail · Équipe et véhicules</p>
+          <p className="text-sm text-gray-500 mt-1">
+            {canManageCalendar
+              ? 'Affectation travail · Équipe et véhicules'
+              : 'Vos affectations planifiées (lecture seule)'}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="outline" onClick={goToday}>
@@ -333,7 +339,8 @@ export default function CalendarPage() {
                           type="button"
                           onClick={e => {
                             e.stopPropagation()
-                            openEditAssignment(a)
+                            if (canManageCalendar) openEditAssignment(a)
+                            else openDay(cell.date)
                           }}
                           className="w-full text-left text-[10px] sm:text-xs truncate px-1 py-0.5 rounded bg-indigo-50 text-indigo-800 font-medium hover:bg-indigo-100"
                           title={`${a.memberName} · ${a.vehicleLabel} · ${a.description}`}
@@ -359,9 +366,11 @@ export default function CalendarPage() {
               <>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-bold text-gray-900">{formatDate(selectedDate)}</h3>
-                  <Button size="sm" onClick={() => openAddForDate(selectedDate)} icon={<Plus className="w-4 h-4" />}>
-                    Affecter
-                  </Button>
+                  {canManageCalendar && (
+                    <Button size="sm" onClick={() => openAddForDate(selectedDate)} icon={<Plus className="w-4 h-4" />}>
+                      Affecter
+                    </Button>
+                  )}
                 </div>
                 {selectedDayAssignments.length === 0 ? (
                   <p className="text-sm text-gray-500 py-4">Aucune affectation ce jour.</p>
@@ -388,18 +397,20 @@ export default function CalendarPage() {
                             </p>
                           )}
                         </div>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            const ok = await removeAssignment(a.id)
-                            if (ok) toast.success('Affectation supprimée')
-                            else toast.error('Erreur lors de la suppression')
-                          }}
-                          className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                          title="Supprimer"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
+                        {canManageCalendar && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const ok = await removeAssignment(a.id)
+                              if (ok) toast.success('Affectation supprimée')
+                              else toast.error('Erreur lors de la suppression')
+                            }}
+                            className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Supprimer"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
                       </li>
                     ))}
                   </ul>

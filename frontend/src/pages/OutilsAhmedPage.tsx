@@ -16,7 +16,7 @@ function formatMontant(n: number): string {
 }
 
 export default function OutilsAhmedPage() {
-  const { user } = useAuth()
+  const { user, permissions } = useAuth()
   const { outilsAhmed, loading, addOutilAhmed, updateOutilAhmed, removeOutilAhmed } = useOutils()
   const toast = useToast()
   const [search, setSearch] = useState('')
@@ -86,6 +86,15 @@ export default function OutilsAhmedPage() {
   }
 
   if (!user) return null
+
+  if (!permissions?.canViewEquipeOutils) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16">
+        <Wrench className="w-12 h-12 text-gray-300 mb-4" />
+        <p className="text-gray-500 font-medium">Vous n'avez pas accès à cette page.</p>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-5xl mx-auto pb-12">

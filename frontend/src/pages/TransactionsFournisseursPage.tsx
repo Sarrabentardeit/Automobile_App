@@ -38,7 +38,7 @@ const TAB_CONFIG: Record<Exclude<TabType, 'synthese'>, { label: string; icon: ty
 const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 
 export default function TransactionsFournisseursPage() {
-  const { user } = useAuth()
+  const { user, permissions } = useAuth()
   const { fournisseurs } = useFournisseurs()
   const { transactions, loading, addTransaction, updateTransaction, removeTransaction } = useTransactionsFournisseurs()
   const toast = useToast()
@@ -187,6 +187,15 @@ export default function TransactionsFournisseursPage() {
   }
 
   if (!user) return null
+
+  if (!permissions?.canViewFinance) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16">
+        <Receipt className="w-12 h-12 text-gray-300 mb-4" />
+        <p className="text-gray-500 font-medium">Vous n'avez pas accès aux transactions fournisseurs.</p>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-6xl mx-auto pb-12">

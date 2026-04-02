@@ -42,6 +42,8 @@ function mergePermissions(role: string, raw: unknown): Permissions {
     canManageUsers: Boolean(p.canManageUsers ?? base.canManageUsers),
     canViewDashboard: Boolean(p.canViewDashboard ?? base.canViewDashboard),
     canViewFinance: Boolean(p.canViewFinance ?? base.canViewFinance),
+    canViewInventory: Boolean(p.canViewInventory ?? base.canViewInventory),
+    canViewEquipeOutils: Boolean(p.canViewEquipeOutils ?? base.canViewEquipeOutils),
   }
 }
 

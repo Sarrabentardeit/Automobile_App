@@ -1,8 +1,22 @@
 import { Router } from 'express'
+import type { Response } from 'express'
 import { prisma } from '../lib/prisma'
-import { authenticate } from '../middleware/auth'
+import { authenticate, type AuthRequest } from '../middleware/auth'
 
 const router = Router()
+
+/** Seuls admin / responsable / financier gèrent les affectations ; les techniciens consultent leur planning uniquement */
+function canManageAssignments(role: string | undefined) {
+  return role !== 'technicien'
+}
+
+function denyIfTechnicien(req: AuthRequest, res: Response) {
+  if (!canManageAssignments(req.user?.role)) {
+    res.status(403).json({ error: 'Action réservée aux administrateurs et responsables' })
+    return true
+  }
+  return false
+}
 
 type CalendarAssignmentRow = {
   id: number
@@ -29,7 +43,7 @@ function toAssignment(r: CalendarAssignmentRow) {
 }
 
 // GET /calendar-assignments - liste (option: filtre année/mois)
-router.get('/', authenticate(), async (req, res) => {
+router.get('/', authenticate(), async (req: AuthRequest, res) => {
   try {
     const year = req.query.year ? Number(req.query.year) : undefined
     const month = req.query.month ? Number(req.query.month) : undefined
@@ -53,6 +67,12 @@ router.get('/', authenticate(), async (req, res) => {
       where.date = { gte: `${year}-01-01`, lte: `${year}-12-31` }
     }
 
+    if (req.user?.role === 'technicien') {
+      const name = req.user.fullName?.trim()
+      if (!name) return res.json([])
+      where.member_name = { equals: name, mode: 'insensitive' }
+    }
+
     const list = (await prisma.calendarAssignment.findMany({
       where: Object.keys(where).length ? where : undefined,
       orderBy: [{ date: 'asc' }, { id: 'asc' }],
@@ -71,8 +91,10 @@ router.get('/', authenticate(), async (req, res) => {
 })
 
 // POST /calendar-assignments - créer
-router.post('/', authenticate(), async (req, res) => {
+router.post('/', authenticate(), async (req: AuthRequest, res) => {
   try {
+    if (denyIfTechnicien(req, res)) return
+
     const body = req.body as {
       date?: string
       memberName?: string
@@ -111,8 +133,10 @@ router.post('/', authenticate(), async (req, res) => {
 })
 
 // PUT /calendar-assignments/:id - mise à jour
-router.put('/:id', authenticate(), async (req, res) => {
+router.put('/:id', authenticate(), async (req: AuthRequest, res) => {
   try {
+    if (denyIfTechnicien(req, res)) return
+
     const id = Number(req.params.id)
     if (isNaN(id)) return res.status(400).json({ error: 'ID invalide' })
 
@@ -163,8 +187,10 @@ router.put('/:id', authenticate(), async (req, res) => {
 })
 
 // DELETE /calendar-assignments/:id - suppression
-router.delete('/:id', authenticate(), async (req, res) => {
+router.delete('/:id', authenticate(), async (req: AuthRequest, res) => {
   try {
+    if (denyIfTechnicien(req, res)) return
+
     const id = Number(req.params.id)
     if (isNaN(id)) return res.status(400).json({ error: 'ID invalide' })
     const existing = await prisma.calendarAssignment.findUnique({ where: { id } })

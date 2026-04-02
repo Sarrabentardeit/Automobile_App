@@ -22,9 +22,22 @@ export interface Permissions {
   canManageUsers: boolean
   canViewDashboard: boolean
   canViewFinance: boolean
+  /** Stock général + huiles */
+  canViewInventory: boolean
+  /** Outils Mohamed / Ahmed */
+  canViewEquipeOutils: boolean
 }
 
-export type TogglePermissionKey = 'canAddVehicule' | 'canEditVehicule' | 'canChangeEtat' | 'canAssignTechnicien' | 'canManageUsers' | 'canViewDashboard' | 'canViewFinance'
+export type TogglePermissionKey =
+  | 'canAddVehicule'
+  | 'canEditVehicule'
+  | 'canChangeEtat'
+  | 'canAssignTechnicien'
+  | 'canManageUsers'
+  | 'canViewDashboard'
+  | 'canViewFinance'
+  | 'canViewInventory'
+  | 'canViewEquipeOutils'
 
 export const TOGGLE_PERMISSION_LABELS: Record<TogglePermissionKey, { label: string; description: string; icon: string }> = {
   canViewDashboard: { label: 'Voir le dashboard', description: 'Accès au tableau de bord et statistiques', icon: '📊' },
@@ -34,11 +47,14 @@ export const TOGGLE_PERMISSION_LABELS: Record<TogglePermissionKey, { label: stri
   canAssignTechnicien: { label: 'Assigner technicien', description: 'Affecter un technicien à un véhicule', icon: '👤' },
   canManageUsers: { label: 'Gérer les utilisateurs', description: 'Créer, modifier et désactiver des comptes', icon: '🔑' },
   canViewFinance: { label: 'Accès finance', description: 'Consulter les données financières', icon: '💰' },
+  canViewInventory: { label: 'Accès inventaire', description: 'Stock général et huiles', icon: '📦' },
+  canViewEquipeOutils: { label: 'Accès outils équipe', description: 'Outils Mohamed / Ahmed', icon: '🔧' },
 }
 
 export const ALL_TOGGLE_KEYS: TogglePermissionKey[] = [
   'canViewDashboard', 'canAddVehicule', 'canEditVehicule',
   'canChangeEtat', 'canAssignTechnicien', 'canManageUsers', 'canViewFinance',
+  'canViewInventory', 'canViewEquipeOutils',
 ]
 
 export const VISIBILITY_OPTIONS: { value: VehiculeVisibility; label: string; description: string; icon: string }[] = [
@@ -51,18 +67,22 @@ export const ROLE_PRESETS: Record<Role, Permissions> = {
   admin: {
     vehiculeVisibility: 'all', canAddVehicule: true, canEditVehicule: true, canChangeEtat: true,
     canAssignTechnicien: true, canManageUsers: true, canViewDashboard: true, canViewFinance: true,
+    canViewInventory: true, canViewEquipeOutils: true,
   },
   responsable: {
     vehiculeVisibility: 'all', canAddVehicule: true, canEditVehicule: true, canChangeEtat: true,
-    canAssignTechnicien: true, canManageUsers: false, canViewDashboard: true, canViewFinance: false,
+    canAssignTechnicien: true, canManageUsers: false, canViewDashboard: true, canViewFinance: true,
+    canViewInventory: true, canViewEquipeOutils: true,
   },
   technicien: {
     vehiculeVisibility: 'own', canAddVehicule: false, canEditVehicule: false, canChangeEtat: true,
     canAssignTechnicien: false, canManageUsers: false, canViewDashboard: true, canViewFinance: false,
+    canViewInventory: false, canViewEquipeOutils: false,
   },
   financier: {
     vehiculeVisibility: 'all', canAddVehicule: false, canEditVehicule: false, canChangeEtat: false,
     canAssignTechnicien: false, canManageUsers: false, canViewDashboard: true, canViewFinance: true,
+    canViewInventory: true, canViewEquipeOutils: false,
   },
 }
 
