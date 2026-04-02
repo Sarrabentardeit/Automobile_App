@@ -77,6 +77,7 @@ interface UsersContextType {
     statut: 'actif' | 'inactif'
     password?: string
   }>) => Promise<User>
+  deleteUser: (id: number) => Promise<boolean>
 }
 
 const UsersContext = createContext<UsersContextType | null>(null)
@@ -180,8 +181,19 @@ export function UsersProvider({ children }: { children: ReactNode }) {
     [getAccessToken]
   )
 
+  const deleteUser = useCallback(
+    async (id: number): Promise<boolean> => {
+      const token = getAccessToken()
+      if (!token) return false
+      await apiFetch(`/users/${id}`, { method: 'DELETE', token })
+      setUsers(prev => prev.filter(u => u.id !== id))
+      return true
+    },
+    [getAccessToken]
+  )
+
   return (
-    <UsersContext.Provider value={{ users, loading, error, refetch: fetchUsers, createUser, updateUser }}>
+    <UsersContext.Provider value={{ users, loading, error, refetch: fetchUsers, createUser, updateUser, deleteUser }}>
       {children}
     </UsersContext.Provider>
   )

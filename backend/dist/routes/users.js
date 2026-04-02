@@ -137,4 +137,34 @@ router.put('/:id', (0, auth_1.authenticate)(), async (req, res) => {
         return res.status(500).json({ error: 'Internal server error' });
     }
 });
+router.delete('/:id', (0, auth_1.authenticate)(), async (req, res) => {
+    if (!isAdmin(req)) {
+        return res.status(403).json({ error: 'Accès réservé aux administrateurs' });
+    }
+    try {
+        const id = Number(req.params.id);
+        if (isNaN(id))
+            return res.status(400).json({ error: 'ID invalide' });
+        const target = await prisma_1.prisma.user.findUnique({ where: { id } });
+        if (!target)
+            return res.status(404).json({ error: 'Utilisateur introuvable' });
+        // évite de supprimer l'utilisateur connecté par erreur
+        if (req.user?.sub === id) {
+            return res.status(400).json({ error: 'Vous ne pouvez pas supprimer votre propre compte' });
+        }
+        // garde-fou: ne pas supprimer le dernier admin
+        if (target.role === 'admin') {
+            const adminCount = await prisma_1.prisma.user.count({ where: { role: 'admin' } });
+            if (adminCount <= 1) {
+                return res.status(400).json({ error: 'Impossible de supprimer le dernier administrateur' });
+            }
+        }
+        await prisma_1.prisma.user.delete({ where: { id } });
+        return res.status(204).send();
+    }
+    catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
 exports.default = router;

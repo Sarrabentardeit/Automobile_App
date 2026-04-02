@@ -70,7 +70,7 @@ type MainTab = 'equipe' | 'historique' | 'resume'
 type MemberSort = 'solde' | 'nom' | 'avances'
 
 export default function CaissePage() {
-  const { permissions } = useAuth()
+  const { user, permissions } = useAuth()
   const { users } = useUsers()
   const { days, setDays } = useCaisse()
   const { ins, outs, addOut, updateOut, removeOut } = useMoney()
@@ -96,7 +96,8 @@ export default function CaissePage() {
   const memberNames = useMemo(
     () =>
       users
-        .filter(u => u.statut === 'actif' && (u.role === 'technicien' || u.role === 'responsable'))
+        // Dans Caisse, on affiche tous les comptes actifs, quel que soit le role.
+        .filter(u => u.statut === 'actif')
         .map(u => u.nom_complet),
     [users]
   )

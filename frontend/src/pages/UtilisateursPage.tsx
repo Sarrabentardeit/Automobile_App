@@ -8,7 +8,8 @@ import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
-import { Search, UserPlus, Pencil, Ban, CheckCircle, Shield, Eye, RotateCcw } from 'lucide-react'
+import { useAuth } from '@/contexts/AuthContext'
+import { Search, UserPlus, Pencil, Ban, CheckCircle, Shield, Eye, RotateCcw, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 function countPerms(p: Permissions): number {
@@ -26,7 +27,8 @@ function isCustomized(role: Role, perms: Permissions): boolean {
 const TOTAL_PERMS = ALL_TOGGLE_KEYS.length + 1
 
 export default function UtilisateursPage() {
-  const { users, loading, error, createUser, updateUser } = useUsers()
+  const { user } = useAuth()
+  const { users, loading, error, createUser, updateUser, deleteUser } = useUsers()
   const toast = useToast()
   const [filtreRole, setFiltreRole] = useState<Role | 'tous'>('tous')
   const [recherche, setRecherche] = useState('')
@@ -34,6 +36,8 @@ export default function UtilisateursPage() {
   const [showPermsView, setShowPermsView] = useState<User | null>(null)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const [formData, setFormData] = useState({
     nom_complet: '', email: '', telephone: '', password: '',
@@ -149,6 +153,23 @@ export default function UtilisateursPage() {
     }
   }
 
+  const canDelete = user?.role === 'admin'
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      const ok = await deleteUser(deleteTarget.id)
+      if (ok) toast.success('Compte supprimé')
+      else toast.error('Impossible de supprimer le compte')
+      setDeleteTarget(null)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur suppression')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const hasCustom = isCustomized(formData.role, formData.permissions)
 
   return (
@@ -244,6 +265,15 @@ export default function UtilisateursPage() {
                   >
                     {u.statut === 'actif' ? <Ban className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
                   </button>
+                  {canDelete && (
+                    <button
+                      onClick={() => setDeleteTarget(u)}
+                      title="Supprimer"
+                      className="p-2 rounded-lg hover:bg-red-50 text-red-500 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             )
@@ -308,12 +338,50 @@ export default function UtilisateursPage() {
                   >
                     {u.statut === 'actif' ? <><Ban className="w-3.5 h-3.5" />Désactiver</> : <><CheckCircle className="w-3.5 h-3.5" />Activer</>}
                   </button>
+                  {canDelete && (
+                    <button
+                      onClick={() => setDeleteTarget(u)}
+                      className="w-10 flex items-center justify-center py-2 rounded-lg bg-red-50 text-red-600 text-xs font-semibold hover:bg-red-100 active:bg-red-200 transition-colors"
+                      title="Supprimer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
             )
           })
         )}
       </div>
+
+      {/* Delete confirmation modal */}
+      <Modal
+        open={!!deleteTarget}
+        onClose={() => {
+          if (deleting) return
+          setDeleteTarget(null)
+        }}
+        title="Supprimer le compte"
+        subtitle={deleteTarget ? `${deleteTarget.nom_complet} · ${deleteTarget.email}` : undefined}
+        maxWidth="sm"
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-gray-700">
+            Cette action est <span className="font-semibold text-red-700">irréversible</span>.
+          </p>
+          <p className="text-xs text-gray-500">
+            Le compte sera supprimé définitivement (avec ses données liées).
+          </p>
+          <div className="flex gap-2 justify-end pt-1">
+            <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+              Annuler
+            </Button>
+            <Button type="button" onClick={() => void confirmDelete()} disabled={deleting} className="bg-red-600 hover:bg-red-700">
+              {deleting ? 'Suppression...' : 'Confirmer la suppression'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* View permissions modal */}
       {showPermsView && (
