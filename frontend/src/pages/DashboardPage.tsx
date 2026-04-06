@@ -9,7 +9,7 @@ import { daysSince } from '@/lib/utils'
 
 export default function DashboardPage() {
   const { user, permissions } = useAuth()
-  const { vehicules, historique, stats, dashboardSummary } = useVehiculesContext()
+  const { vehicules, stats, dashboardSummary } = useVehiculesContext()
   const { users } = useUsers()
   const navigate = useNavigate()
   if (!user || !permissions) return null
@@ -32,16 +32,13 @@ export default function DashboardPage() {
     : myVehicules.filter(v => daysSince(v.date_entree) > 7 && v.etat_actuel !== 'vert')
   const problemsCount = isGlobalView ? (dashboardSummary?.problemsCount ?? urgents.length) : urgents.length
 
-  const myVehiculeIds = new Set(myVehicules.map(v => v.id))
-
-  const recentActivity = isGlobalView
-    ? (dashboardSummary?.recentActivity ?? []).slice(0, 6)
-    : [...historique]
-        .filter(h => myVehiculeIds.has(h.vehicule_id))
-        .sort((a, b) => new Date(b.date_changement).getTime() - new Date(a.date_changement).getTime())
-        .slice(0, 6)
+  const recentActivity = (dashboardSummary?.recentActivity ?? []).slice(0, 6)
 
   const etats: EtatVehicule[] = ['orange', 'mauve', 'bleu', 'rouge', 'vert', 'retour']
+
+  /** Libellé dashboard pour l’état rouge (reste « PROBLÈME » ailleurs dans l’app) */
+  const labelEtatDashboard = (etat: EtatVehicule) =>
+    etat === 'rouge' ? 'À RÉSOUDRE' : ETAT_CONFIG[etat].label
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -67,7 +64,7 @@ export default function DashboardPage() {
             >
               <div className="flex items-center gap-1.5 mb-1.5">
                 <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cfg.color }} />
-                <span className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wide">{cfg.label}</span>
+                <span className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wide">{labelEtatDashboard(etat)}</span>
               </div>
               <p className="text-2xl sm:text-3xl font-extrabold" style={{ color: cfg.color }}>{count}</p>
             </button>
@@ -95,7 +92,7 @@ export default function DashboardPage() {
             </div>
             <div className="min-w-0">
               <p className="text-lg sm:text-2xl font-extrabold text-gray-900">{problemsCount}</p>
-              <p className="text-[10px] sm:text-sm text-gray-500">Problèmes</p>
+              <p className="text-[10px] sm:text-sm text-gray-500">À résoudre</p>
             </div>
           </div>
         </Card>
@@ -167,7 +164,9 @@ export default function DashboardPage() {
             )}
             {recentActivity.map(h => {
               const cfg = ETAT_CONFIG[h.etat_nouveau]
-              const v = vehicules.find(vv => vv.id === h.vehicule_id)
+              const vehicleModel =
+                (h as typeof h & { vehicleModel?: string }).vehicleModel ||
+                vehicules.find(vv => vv.id === h.vehicule_id)?.modele
               return (
                 <div key={h.id} className="flex items-start gap-2.5">
                   <div className="w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: cfg.color }} />
@@ -176,8 +175,8 @@ export default function DashboardPage() {
                       <span className="font-semibold">{h.utilisateur_nom}</span>
                       {' → '}
                       <span className="font-semibold" style={{ color: cfg.color }}>{cfg.label}</span>
-                      {(isGlobalView ? (h as typeof h & { vehicleModel?: string }).vehicleModel : v?.modele) && (
-                        <span className="text-gray-500"> · {isGlobalView ? (h as typeof h & { vehicleModel?: string }).vehicleModel : v?.modele}</span>
+                      {vehicleModel && (
+                        <span className="text-gray-500"> · {vehicleModel}</span>
                       )}
                     </p>
                     <p className="text-xs text-gray-400 truncate">{h.commentaire}</p>

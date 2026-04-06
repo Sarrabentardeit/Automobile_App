@@ -9,6 +9,7 @@ import { ETAT_CONFIG, type EtatVehicule, type VehiculeType, type Vehicule } from
 import type { VehiculesFilters } from '@/hooks/useVehicules'
 import VehiculeCard from '@/components/vehicules/VehiculeCard'
 import VehiculeForm from '@/components/vehicules/VehiculeForm'
+import VehiculeFicheFinanciereModal from '@/components/vehicules/VehiculeFicheFinanciereModal'
 import ChangeEtatModal from '@/components/vehicules/ChangeEtatModal'
 import { Car, Bike, Search, Plus, Filter, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -58,6 +59,12 @@ export default function VehiculesPage() {
     uploadVehiculeImage,
     fetchVehicules,
     fetchFilteredCounts,
+    fetchFicheFinanciere,
+    patchFicheFinanciereAvance,
+    createDepense,
+    updateDepense,
+    deleteDepense,
+    createDepenseFromStock,
   } = useVehiculesContext()
   const toast = useToast()
   const { addNotification } = useNotifications()
@@ -77,8 +84,11 @@ export default function VehiculesPage() {
   const [editingVehicule, setEditingVehicule] = useState<Vehicule | null>(null)
   const [changeEtatVehicule, setChangeEtatVehicule] = useState<Vehicule | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<Vehicule | null>(null)
+  const [ficheVehicule, setFicheVehicule] = useState<Vehicule | null>(null)
 
   if (!user || !permissions) return null
+
+  const canEditFicheFinanciere = permissions.canEditVehicule || permissions.canViewFinance
 
   const techniciens = (users ?? []).filter(u => u.role === 'technicien')
 
@@ -311,6 +321,7 @@ export default function VehiculesPage() {
               vehicule={v}
               permissions={permissions}
               onChangeEtat={() => setChangeEtatVehicule(v)}
+              onFicheFinanciere={() => setFicheVehicule(v)}
               onEdit={() => { setEditingVehicule(v); setShowAddForm(true) }}
               onDelete={permissions.canEditVehicule ? () => setDeleteConfirm(v) : undefined}
             />
@@ -410,6 +421,19 @@ export default function VehiculesPage() {
           }}
         />
       )}
+
+      <VehiculeFicheFinanciereModal
+        open={!!ficheVehicule}
+        vehicule={ficheVehicule}
+        canEdit={canEditFicheFinanciere}
+        onClose={() => setFicheVehicule(null)}
+        fetchFiche={fetchFicheFinanciere}
+        onSaveAvance={patchFicheFinanciereAvance}
+        onAddDepense={createDepense}
+        onUpdateDepense={updateDepense}
+        onDeleteDepense={deleteDepense}
+        onAddDepenseFromStock={createDepenseFromStock}
+      />
 
       {/* Change Etat Modal */}
       {changeEtatVehicule && (

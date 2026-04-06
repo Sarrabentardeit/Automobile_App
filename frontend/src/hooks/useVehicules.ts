@@ -6,6 +6,8 @@ import type {
   EtatVehicule,
   VehiculeImage,
   VehiculeImageUploadInput,
+  VehiculeFicheFinanciere,
+  VehiculeDepenseLigne,
 } from '@/types'
 import { TRANSITIONS_AUTORISEES } from '@/types'
 import { apiFetch } from '@/lib/api'
@@ -115,13 +117,15 @@ export function useVehicules() {
   const fetchDashboardSummary = useCallback(async () => {
     const token = getAccessToken()
     if (!token) return
+    const ownOnly = user?.permissions?.vehiculeVisibility === 'own'
     try {
-      const data = await apiFetch<DashboardSummary>('/vehicules/dashboard-summary', { token })
+      const params = ownOnly && user ? { technicien_id: user.id } : undefined
+      const data = await apiFetch<DashboardSummary>('/vehicules/dashboard-summary', { token, params })
       setDashboardSummary(data)
     } catch {
       setDashboardSummary(null)
     }
-  }, [getAccessToken])
+  }, [getAccessToken, user])
 
   const fetchFilteredCounts = useCallback(
     async (filters?: VehiculesFilters, includeEtat = false) => {
@@ -146,26 +150,6 @@ export function useVehicules() {
     [getAccessToken]
   )
 
-  const fetchHistorique = useCallback(
-    async (ids: number[]) => {
-      const token = getAccessToken()
-      if (!token || ids.length === 0) return
-      const all: HistoriqueEtat[] = []
-      for (const id of ids) {
-        try {
-          const list = await apiFetch<HistoriqueEtat[]>(`/vehicules/${id}/historique`, { token })
-          if (Array.isArray(list)) all.push(...list)
-        } catch {}
-      }
-      setHistorique(prev => {
-        const byVeh = new Map(prev.map(h => [h.vehicule_id, true]))
-        const newOnes = all.filter(h => !byVeh.get(h.vehicule_id))
-        return [...prev.filter(h => !ids.includes(h.vehicule_id)), ...all]
-      })
-    },
-    [getAccessToken]
-  )
-
   useEffect(() => {
     const ownOnly = user?.permissions?.vehiculeVisibility === 'own'
     fetchVehicules({
@@ -178,9 +162,10 @@ export function useVehicules() {
   }, [fetchVehicules, fetchStats, fetchDashboardSummary, user])
 
   useEffect(() => {
-    if (vehicules.length > 0) fetchHistorique(vehicules.map(v => v.id))
-    else setHistorique([])
-  }, [vehicules, fetchHistorique])
+    if (user?.permissions?.vehiculeVisibility !== 'own') {
+      setHistorique([])
+    }
+  }, [user])
 
   const addVehicule = useCallback(
     async (data: VehiculeFormData, userId: number, userName: string) => {
@@ -395,6 +380,81 @@ export function useVehicules() {
     [fetchVehicules, fetchStats, fetchDashboardSummary, page, limit]
   )
 
+  const fetchFicheFinanciere = useCallback(
+    async (vehiculeId: number): Promise<VehiculeFicheFinanciere> => {
+      const token = getAccessToken()
+      if (!token) throw new Error('Non authentifié')
+      return apiFetch<VehiculeFicheFinanciere>(`/vehicules/${vehiculeId}/fiche-financiere`, { token })
+    },
+    [getAccessToken]
+  )
+
+  const patchFicheFinanciereAvance = useCallback(
+    async (vehiculeId: number, avance_client: number): Promise<VehiculeFicheFinanciere> => {
+      const token = getAccessToken()
+      if (!token) throw new Error('Non authentifié')
+      return apiFetch<VehiculeFicheFinanciere>(`/vehicules/${vehiculeId}/fiche-financiere`, {
+        method: 'PATCH',
+        token,
+        body: JSON.stringify({ avance_client }),
+      })
+    },
+    [getAccessToken]
+  )
+
+  const createDepense = useCallback(
+    async (vehiculeId: number, libelle: string, montant: number): Promise<VehiculeDepenseLigne> => {
+      const token = getAccessToken()
+      if (!token) throw new Error('Non authentifié')
+      return apiFetch<VehiculeDepenseLigne>(`/vehicules/${vehiculeId}/depenses`, {
+        method: 'POST',
+        token,
+        body: JSON.stringify({ libelle, montant }),
+      })
+    },
+    [getAccessToken]
+  )
+
+  const updateDepense = useCallback(
+    async (
+      vehiculeId: number,
+      depenseId: number,
+      libelle: string,
+      montant: number
+    ): Promise<VehiculeDepenseLigne> => {
+      const token = getAccessToken()
+      if (!token) throw new Error('Non authentifié')
+      return apiFetch<VehiculeDepenseLigne>(`/vehicules/${vehiculeId}/depenses/${depenseId}`, {
+        method: 'PUT',
+        token,
+        body: JSON.stringify({ libelle, montant }),
+      })
+    },
+    [getAccessToken]
+  )
+
+  const deleteDepense = useCallback(
+    async (vehiculeId: number, depenseId: number): Promise<void> => {
+      const token = getAccessToken()
+      if (!token) throw new Error('Non authentifié')
+      await apiFetch(`/vehicules/${vehiculeId}/depenses/${depenseId}`, { method: 'DELETE', token })
+    },
+    [getAccessToken]
+  )
+
+  const createDepenseFromStock = useCallback(
+    async (vehiculeId: number, productId: number, quantite: number): Promise<VehiculeDepenseLigne> => {
+      const token = getAccessToken()
+      if (!token) throw new Error('Non authentifié')
+      return apiFetch<VehiculeDepenseLigne>(`/vehicules/${vehiculeId}/depenses/stock`, {
+        method: 'POST',
+        token,
+        body: JSON.stringify({ productId, quantite }),
+      })
+    },
+    [getAccessToken]
+  )
+
   return {
     vehicules,
     historique,
@@ -421,5 +481,11 @@ export function useVehicules() {
     deleteVehiculeImage,
     fetchVehicules,
     refetch,
+    fetchFicheFinanciere,
+    patchFicheFinanciereAvance,
+    createDepense,
+    updateDepense,
+    deleteDepense,
+    createDepenseFromStock,
   }
 }

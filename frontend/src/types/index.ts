@@ -24,7 +24,7 @@ export interface Permissions {
   canViewFinance: boolean
   /** Stock général + huiles */
   canViewInventory: boolean
-  /** Outils Mohamed / Ahmed */
+  /** Opération Ahmed (suivi outillage / travaux) */
   canViewEquipeOutils: boolean
 }
 
@@ -48,7 +48,7 @@ export const TOGGLE_PERMISSION_LABELS: Record<TogglePermissionKey, { label: stri
   canManageUsers: { label: 'Gérer les utilisateurs', description: 'Créer, modifier et désactiver des comptes', icon: '🔑' },
   canViewFinance: { label: 'Accès finance', description: 'Consulter les données financières', icon: '💰' },
   canViewInventory: { label: 'Accès inventaire', description: 'Stock général et catalogue produits', icon: '📦' },
-  canViewEquipeOutils: { label: 'Accès outils équipe', description: 'Outils Mohamed / Ahmed', icon: '🔧' },
+  canViewEquipeOutils: { label: 'Accès outils équipe', description: 'Opération Ahmed', icon: '🔧' },
 }
 
 export const ALL_TOGGLE_KEYS: TogglePermissionKey[] = [
@@ -190,6 +190,27 @@ export interface Vehicule {
   date_sortie: string | null
   notes: string
   derniere_mise_a_jour: string
+  /** Acompte client (fiche financière) */
+  avance_client?: number
+}
+
+export interface VehiculeDepenseLigne {
+  id: number
+  vehicule_id: number
+  libelle: string
+  montant: number
+  created_at: string
+  /** Ligne issue du catalogue stock (décrémente / réintègre le stock) */
+  product_id?: number | null
+  quantite?: number | null
+  cout_stock_sortie?: number | null
+}
+
+export interface VehiculeFicheFinanciere {
+  avance_client: number
+  lignes: VehiculeDepenseLigne[]
+  total: number
+  reste: number
 }
 
 export type VehiculeImageCategory =

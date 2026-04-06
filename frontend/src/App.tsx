@@ -40,7 +40,6 @@ import DemandeDevisPage from '@/pages/DemandeDevisPage'
 import FournisseursPage from '@/pages/FournisseursPage'
 import TransactionsFournisseursPage from '@/pages/TransactionsFournisseursPage'
 import StockGeneralPage from '@/pages/StockGeneralPage'
-import OutilsMohamedPage from '@/pages/OutilsMohamedPage'
 import OutilsAhmedPage from '@/pages/OutilsAhmedPage'
 import AdminEspacePage from '@/pages/AdminEspacePage'
 import FacturationPage from '@/pages/FacturationPage'
@@ -98,7 +97,7 @@ export default function App() {
               <Route path="/fournisseurs" element={<FournisseursPage />} />
               <Route path="/fournisseurs/transactions" element={<TransactionsFournisseursPage />} />
               <Route path="/stock-general" element={<StockGeneralPage />} />
-              <Route path="/outils/mohamed" element={<OutilsMohamedPage />} />
+              <Route path="/outils/mohamed" element={<Navigate to="/outils/ahmed" replace />} />
               <Route path="/outils/ahmed" element={<OutilsAhmedPage />} />
               <Route path="/checklists" element={<ChecklistsPage />} />
               <Route path="/checklists/history" element={<ChecklistsHistoryPage />} />

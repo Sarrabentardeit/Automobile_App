@@ -50,8 +50,10 @@ export default function VehiculeDetailPage() {
     if (!vehicule && fetchVehiculeById) {
       setLoadingDetail(true)
       fetchVehiculeById(vehiculeId).then(() => setLoadingDetail(false))
+      return
     }
-  }, [vehiculeId, vehicule, fetchVehiculeById])
+    if (vehicule && historique.length === 0) void fetchVehiculeById(vehiculeId)
+  }, [vehiculeId, vehicule, fetchVehiculeById, historique.length])
 
   useEffect(() => {
     if (isNaN(vehiculeId)) return

@@ -63,11 +63,28 @@ model Vehicule {
   date_sortie          String?   // YYYY-MM-DD ou null
   notes                String    @default("")
   derniere_mise_a_jour String    // ISO string
+  avance_client        Float     @default(0)
   createdAt            DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
   historique           VehiculeHistorique[]
   images               VehiculeImage[]
   notifications        Notification[]
+  depenses             VehiculeDepense[]
+}
+
+model VehiculeDepense {
+  id                 Int      @id @default(autoincrement())
+  vehicule           Vehicule @relation(fields: [vehiculeId], references: [id], onDelete: Cascade)
+  vehiculeId         Int
+  libelle            String   @default("")
+  montant            Float    @default(0)
+  // Produit stock (sortie) ; suppression = réintégration stock
+  productId          Int?
+  quantite           Int?
+  // Coût achat TTC retiré (réintégration à la suppression)
+  cout_stock_sortie  Float?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
 
 model VehiculeHistorique {

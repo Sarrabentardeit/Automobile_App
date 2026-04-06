@@ -65,8 +65,7 @@ const NAV_STRUCTURE: NavCategory[] = [
     items: [
       { name: 'Utilisateurs', href: '/utilisateurs', icon: Users, requiredPermission: 'canManageUsers' },
       { name: 'Membres équipe', href: '/equipe/membres', icon: UsersRound, requiredPermission: 'canManageUsers' },
-      { name: 'Outils Mohamed', href: '/outils/mohamed', icon: Wrench, requiredPermission: 'canViewEquipeOutils' },
-      { name: 'Outils Ahmed', href: '/outils/ahmed', icon: Wrench, requiredPermission: 'canViewEquipeOutils' },
+      { name: 'Opération Ahmed', href: '/outils/ahmed', icon: Wrench, requiredPermission: 'canViewEquipeOutils' },
     ],
   },
   {

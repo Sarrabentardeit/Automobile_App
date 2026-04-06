@@ -67,6 +67,12 @@ app.use(
   })
 )
 app.use(express.json({ limit: '12mb' }))
+/** Évite cache navigateur / proxy sur les réponses JSON (un poste ne doit pas voir d’anciennes données). */
+app.use((req, res, next) => {
+  if (req.path.startsWith('/uploads')) return next()
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+  next()
+})
 app.use(morgan('dev'))
 app.use('/uploads', (req, res, next) => {
   if (!canReadUploads(req)) return res.status(401).json({ error: 'Unauthorized file access' })

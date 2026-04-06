@@ -21,7 +21,7 @@ function formatMontant(n: number): string {
 export default function StockGeneralPage() {
   const navigate = useNavigate()
   const { user, permissions } = useAuth()
-  const { produits, mouvementsStock, loading, updateProduit, removeProduit } = useStockGeneral()
+  const { produits, mouvementsStock, loading, updateProduit, removeProduit, refetch } = useStockGeneral()
   const { factures } = useFacturation()
   const toast = useToast()
   const [search, setSearch] = useState('')
@@ -70,6 +70,10 @@ export default function StockGeneralPage() {
       setFilterCategorie('')
     }
   }, [filterCategorie, filterSelectCategories])
+
+  useEffect(() => {
+    refetch()
+  }, [refetch])
 
   const filteredProduits = useMemo(() => {
     let list = produits

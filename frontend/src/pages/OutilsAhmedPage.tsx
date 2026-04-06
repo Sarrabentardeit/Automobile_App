@@ -104,9 +104,9 @@ export default function OutilsAhmedPage() {
             <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/25">
               <Wrench className="w-5 h-5" />
             </span>
-            Outils Ahmed
+            Opération Ahmed
           </h1>
-          <p className="text-sm text-gray-500 mt-1">Feuille AHMED : Type de travaux, Prix Garage, Prix Ahmed</p>
+          <p className="text-sm text-gray-500 mt-1">Suivi des travaux : type d’intervention, prix garage, prix Ahmed</p>
         </div>
         <Button onClick={openNew} icon={<Plus className="w-4 h-4" />}>
           Nouveau

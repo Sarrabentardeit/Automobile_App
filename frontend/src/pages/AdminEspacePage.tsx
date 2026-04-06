@@ -84,7 +84,7 @@ export default function AdminEspacePage() {
   const { contacts } = useContactsImportants()
   const { clients: clientsDettes } = useClientsDettes()
   const { mouvements, produits } = useStockGeneral()
-  const { outilsMohamed, outilsAhmed } = useOutils()
+  const { outilsAhmed } = useOutils()
   const { ins: moneyIns, outs: moneyOuts } = useMoney()
 
   const now = new Date()
@@ -203,7 +203,7 @@ export default function AdminEspacePage() {
     { label: 'Contacts importants', value: (contacts ?? []).length, icon: Phone, href: '/contacts-importants', color: 'bg-sky-50 text-sky-700' },
     { label: 'Clients avec dettes', value: (clientsDettes ?? []).length, icon: CreditCard, href: '/clients/dettes', color: 'bg-rose-50 text-rose-700' },
     { label: 'Mouvements stock', value: (mouvements ?? []).length + (produits ?? []).length, icon: Package, href: '/stock-general', color: 'bg-lime-50 text-lime-700' },
-    { label: 'Outils Mohamed / Ahmed', value: (outilsMohamed ?? []).length + (outilsAhmed ?? []).length, icon: Wrench, href: '/outils/mohamed', color: 'bg-gray-100 text-gray-700' },
+    { label: 'Opération Ahmed', value: (outilsAhmed ?? []).length, icon: Wrench, href: '/outils/ahmed', color: 'bg-gray-100 text-gray-700' },
   ]
 
   const doneCount = corrections.filter(c => c.done).length

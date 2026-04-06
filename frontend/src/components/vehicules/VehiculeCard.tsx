@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { ETAT_CONFIG, type Vehicule } from '@/types'
 import { useUsers } from '@/contexts/UsersContext'
 import EtatBadge from './EtatBadge'
-import { Phone, Calendar, ArrowRightLeft, Eye, Pencil, Clock, Trash2 } from 'lucide-react'
+import { Phone, Calendar, ArrowRightLeft, Eye, Pencil, Clock, Trash2, Wallet } from 'lucide-react'
 import { daysSince, getUserDisplayName, formatDuree, formatDate } from '@/lib/utils'
 import type { Permissions } from '@/types'
 
@@ -11,10 +11,11 @@ interface Props {
   permissions: Permissions
   onChangeEtat: () => void
   onEdit: () => void
+  onFicheFinanciere: () => void
   onDelete?: () => void
 }
 
-export default function VehiculeCard({ vehicule: v, permissions, onChangeEtat, onEdit, onDelete }: Props) {
+export default function VehiculeCard({ vehicule: v, permissions, onChangeEtat, onEdit, onFicheFinanciere, onDelete }: Props) {
   const navigate = useNavigate()
   const { users } = useUsers()
   const cfg = ETAT_CONFIG[v.etat_actuel]
@@ -54,6 +55,13 @@ export default function VehiculeCard({ vehicule: v, permissions, onChangeEtat, o
                   <ArrowRightLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
               )}
+              <button
+                onClick={onFicheFinanciere}
+                title="Fiche financière (dépenses, avance, reste)"
+                className="p-1.5 sm:p-2 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 active:bg-emerald-200 transition-colors"
+              >
+                <Wallet className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              </button>
               {permissions.canEditVehicule && (
                 <button onClick={onEdit} title="Modifier"
                   className="p-1.5 sm:p-2 rounded-lg bg-gray-50 text-gray-500 hover:bg-gray-100 active:bg-gray-200 transition-colors"

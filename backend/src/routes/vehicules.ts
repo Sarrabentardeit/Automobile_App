@@ -125,7 +125,23 @@ function parseDataUrl(dataUrl?: string): { mimeType: string; buffer: Buffer } | 
   }
 }
 
-function toVehicule(v: { id: number; immatriculation: string; modele: string; type: string; etat_actuel: string; service_type: string | null; technicien_id: number | null; responsable_id: number | null; defaut: string; client_telephone: string; date_entree: string; date_sortie: string | null; notes: string; derniere_mise_a_jour: string }) {
+function toVehicule(v: {
+  id: number
+  immatriculation: string
+  modele: string
+  type: string
+  etat_actuel: string
+  service_type: string | null
+  technicien_id: number | null
+  responsable_id: number | null
+  defaut: string
+  client_telephone: string
+  date_entree: string
+  date_sortie: string | null
+  notes: string
+  derniere_mise_a_jour: string
+  avance_client?: number | null
+}) {
   return {
     id: v.id,
     immatriculation: v.immatriculation,
@@ -141,6 +157,29 @@ function toVehicule(v: { id: number; immatriculation: string; modele: string; ty
     date_sortie: v.date_sortie,
     notes: v.notes,
     derniere_mise_a_jour: v.derniere_mise_a_jour,
+    avance_client: v.avance_client ?? 0,
+  }
+}
+
+function toDepense(d: {
+  id: number
+  vehiculeId: number
+  libelle: string
+  montant: number
+  createdAt: Date
+  productId?: number | null
+  quantite?: number | null
+  cout_stock_sortie?: number | null
+}) {
+  return {
+    id: d.id,
+    vehicule_id: d.vehiculeId,
+    libelle: d.libelle,
+    montant: d.montant,
+    created_at: d.createdAt.toISOString(),
+    product_id: d.productId ?? null,
+    quantite: d.quantite ?? null,
+    cout_stock_sortie: d.cout_stock_sortie ?? null,
   }
 }
 
@@ -228,37 +267,50 @@ router.get('/stats', authenticate(), async (req, res) => {
   }
 })
 
-router.get('/dashboard-summary', authenticate(), async (_req, res) => {
+router.get('/dashboard-summary', authenticate(), async (req: AuthRequest, res) => {
   try {
+    const rawTid = (req.query as { technicien_id?: string }).technicien_id
+    const techId = rawTid !== undefined && rawTid !== '' ? parseInt(rawTid, 10) : NaN
+    const scoped = !Number.isNaN(techId)
+    if (scoped && req.user?.sub !== techId) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
     const today = new Date()
     const seuil = new Date(today)
     seuil.setDate(seuil.getDate() - 7)
     const seuilStr = `${seuil.getFullYear()}-${String(seuil.getMonth() + 1).padStart(2, '0')}-${String(seuil.getDate()).padStart(2, '0')}`
 
+    const techWhere = scoped ? { technicien_id: techId } : {}
+
     const [urgents, anciens, recentRaw, teamGrouped] = await Promise.all([
       db.vehicule.findMany({
-        where: { etat_actuel: 'rouge' },
+        where: { etat_actuel: 'rouge', ...techWhere },
         orderBy: { id: 'desc' },
       }),
       db.vehicule.findMany({
         where: {
           etat_actuel: { notIn: ['vert', 'rouge'] },
           date_entree: { lt: seuilStr },
+          ...techWhere,
         },
         orderBy: { date_entree: 'asc' },
       }),
       db.vehiculeHistorique.findMany({
+        where: scoped ? { vehicule: { technicien_id: techId } } : undefined,
         orderBy: [{ date_changement: 'desc' }, { id: 'desc' }],
         take: 12,
       }),
-      db.vehicule.groupBy({
-        by: ['technicien_id'],
-        where: {
-          technicien_id: { not: null },
-          etat_actuel: { not: 'vert' },
-        },
-        _count: { id: true },
-      }),
+      scoped
+        ? Promise.resolve([])
+        : db.vehicule.groupBy({
+            by: ['technicien_id'],
+            where: {
+              technicien_id: { not: null },
+              etat_actuel: { not: 'vert' },
+            },
+            _count: { id: true },
+          }),
     ])
 
     const vehicleIds = Array.from(new Set((recentRaw as any[]).map(r => Number(r.vehiculeId)).filter((v: number) => !Number.isNaN(v))))
@@ -271,9 +323,11 @@ router.get('/dashboard-summary', authenticate(), async (_req, res) => {
     const modelByVehiculeId = new Map<number, string>((recentVehicles as Array<{ id: number; modele: string }>).map(v => [v.id, v.modele]))
 
     const teamLoadByTechnicien: Record<string, number> = {}
-    for (const row of teamGrouped as Array<{ technicien_id: number | null; _count: { id: number } }>) {
-      if (row.technicien_id == null) continue
-      teamLoadByTechnicien[String(row.technicien_id)] = row._count.id
+    if (!scoped) {
+      for (const row of teamGrouped as Array<{ technicien_id: number | null; _count: { id: number } }>) {
+        if (row.technicien_id == null) continue
+        teamLoadByTechnicien[String(row.technicien_id)] = row._count.id
+      }
     }
 
     return res.json({
@@ -351,6 +405,246 @@ router.get('/counts', authenticate(), async (req, res) => {
     }
 
     return res.json({ total, byEtat })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+router.get('/:id/fiche-financiere', authenticate(), async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    if (isNaN(id)) return res.status(400).json({ error: 'ID invalide' })
+    const v = await db.vehicule.findUnique({
+      where: { id },
+      include: { depenses: { orderBy: { id: 'asc' } } },
+    })
+    if (!v) return res.status(404).json({ error: 'Véhicule introuvable' })
+    const lignes = (v.depenses || []).map(toDepense)
+    const total = lignes.reduce((s: number, l: { montant: number }) => s + l.montant, 0)
+    const avance = Number(v.avance_client ?? 0)
+    const reste = total - avance
+    return res.json({
+      avance_client: avance,
+      lignes,
+      total,
+      reste,
+    })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+router.patch('/:id/fiche-financiere', authenticate(), async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    if (isNaN(id)) return res.status(400).json({ error: 'ID invalide' })
+    const body = req.body as { avance_client?: unknown }
+    const ac = body.avance_client
+    const avance = typeof ac === 'number' && !Number.isNaN(ac) ? Math.max(0, ac) : 0
+    const existing = await db.vehicule.findUnique({ where: { id } })
+    if (!existing) return res.status(404).json({ error: 'Véhicule introuvable' })
+    await db.vehicule.update({ where: { id }, data: { avance_client: avance } })
+    const v = await db.vehicule.findUnique({
+      where: { id },
+      include: { depenses: { orderBy: { id: 'asc' } } },
+    })
+    if (!v) return res.status(404).json({ error: 'Véhicule introuvable' })
+    const lignes = (v.depenses || []).map(toDepense)
+    const total = lignes.reduce((s: number, l: { montant: number }) => s + l.montant, 0)
+    const av = Number(v.avance_client ?? 0)
+    return res.json({
+      avance_client: av,
+      lignes,
+      total,
+      reste: total - av,
+    })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+/** Sortie stock + ligne fiche (prix = prix vente × qté si défini, sinon coût moyen unitaire × qté) */
+router.post('/:id/depenses/stock', authenticate(), async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    if (isNaN(id)) return res.status(400).json({ error: 'ID invalide' })
+    const vehicule = await db.vehicule.findUnique({ where: { id } })
+    if (!vehicule) return res.status(404).json({ error: 'Véhicule introuvable' })
+    const body = req.body as { productId?: unknown; quantite?: unknown }
+    const productId = Number(body.productId)
+    const quantite = Math.max(1, Math.floor(Number(body.quantite) || 0))
+    if (isNaN(productId) || productId < 1) return res.status(400).json({ error: 'Produit invalide' })
+
+    const produit = await db.produitStock.findUnique({ where: { id: productId } })
+    if (!produit) return res.status(404).json({ error: 'Produit introuvable' })
+    if (produit.quantite < quantite) {
+      return res.status(400).json({ error: 'Stock insuffisant' })
+    }
+
+    const valeurUnitaireAchat =
+      produit.quantite > 0 ? produit.valeur_achat_ttc / produit.quantite : 0
+    const cout_stock_sortie = valeurUnitaireAchat * quantite
+    const prixVenteUnit =
+      produit.prix_vente != null && produit.prix_vente > 0 ? produit.prix_vente : valeurUnitaireAchat
+    const montantLigne = Math.round(prixVenteUnit * quantite * 100) / 100
+
+    const puStr = prixVenteUnit.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const totalStr = montantLigne.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const libelleLigne = `${produit.nom} (stock) — ${puStr} DT × ${quantite} = ${totalStr} DT`
+
+    const dateStr = new Date().toISOString().slice(0, 10)
+    const ref = `vehicule:${id}`
+
+    const [, , dep] = await db.$transaction([
+      db.produitStock.update({
+        where: { id: productId },
+        data: {
+          quantite: produit.quantite - quantite,
+          valeur_achat_ttc: Math.max(0, produit.valeur_achat_ttc - cout_stock_sortie),
+        },
+      }),
+      db.mouvementStock.create({
+        data: {
+          productId,
+          date: dateStr,
+          produit_nom: produit.nom,
+          quantite,
+          type: 'sortie',
+          origine: 'vehicule',
+          reference: ref,
+        },
+      }),
+      db.vehiculeDepense.create({
+        data: {
+          vehiculeId: id,
+          libelle: libelleLigne,
+          montant: montantLigne,
+          productId,
+          quantite,
+          cout_stock_sortie,
+        },
+      }),
+    ])
+
+    return res.status(201).json(toDepense(dep))
+  } catch (err) {
+    console.error('[vehicules] POST depenses/stock', err)
+    const raw = err instanceof Error ? err.message : ''
+    const needsMigrate =
+      /column|does not exist|Unknown arg|Unknown column|P2022/i.test(raw)
+    return res.status(500).json({
+      error: needsMigrate
+        ? 'Base de données à jour requise : dans le dossier backend, exécutez npx prisma migrate deploy puis redémarrez le serveur.'
+        : 'Erreur lors de la sortie stock. Voir les logs du serveur.',
+    })
+  }
+})
+
+router.post('/:id/depenses', authenticate(), async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    if (isNaN(id)) return res.status(400).json({ error: 'ID invalide' })
+    const vehicule = await db.vehicule.findUnique({ where: { id } })
+    if (!vehicule) return res.status(404).json({ error: 'Véhicule introuvable' })
+    const body = req.body as { libelle?: string; montant?: unknown }
+    const libelle = String(body.libelle ?? '').trim().slice(0, 500)
+    const rawM = body.montant
+    const montantNum =
+      typeof rawM === 'number' && !Number.isNaN(rawM)
+        ? rawM
+        : parseFloat(String(rawM ?? '0').replace(',', '.')) || 0
+    const created = await db.vehiculeDepense.create({
+      data: { vehiculeId: id, libelle, montant: Math.max(0, montantNum) },
+    })
+    return res.status(201).json(toDepense(created))
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+router.put('/:id/depenses/:depenseId', authenticate(), async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const depenseId = Number(req.params.depenseId)
+    if (isNaN(id) || isNaN(depenseId)) return res.status(400).json({ error: 'ID invalide' })
+    const existing = await db.vehiculeDepense.findFirst({
+      where: { id: depenseId, vehiculeId: id },
+    })
+    if (!existing) return res.status(404).json({ error: 'Ligne introuvable' })
+    if (existing.productId != null && existing.quantite != null) {
+      return res.status(400).json({ error: 'Ligne liée au stock : supprimez-la pour réintégrer le stock, ou ajoutez une ligne manuelle.' })
+    }
+    const body = req.body as { libelle?: string; montant?: unknown }
+    const libelle = body.libelle !== undefined ? String(body.libelle).trim().slice(0, 500) : existing.libelle
+    let montant = existing.montant
+    if (body.montant !== undefined) {
+      const rawM = body.montant
+      const m =
+        typeof rawM === 'number' && !Number.isNaN(rawM)
+          ? rawM
+          : parseFloat(String(rawM).replace(',', '.')) || 0
+      montant = Math.max(0, m)
+    }
+    const updated = await db.vehiculeDepense.update({
+      where: { id: depenseId },
+      data: { libelle, montant },
+    })
+    return res.json(toDepense(updated))
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+router.delete('/:id/depenses/:depenseId', authenticate(), async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const depenseId = Number(req.params.depenseId)
+    if (isNaN(id) || isNaN(depenseId)) return res.status(400).json({ error: 'ID invalide' })
+    const existing = await db.vehiculeDepense.findFirst({
+      where: { id: depenseId, vehiculeId: id },
+    })
+    if (!existing) return res.status(404).json({ error: 'Ligne introuvable' })
+
+    if (existing.productId != null && existing.quantite != null && existing.quantite > 0) {
+      const pid = existing.productId
+      const qte = existing.quantite
+      const cout = Number(existing.cout_stock_sortie ?? 0)
+      const produit = await db.produitStock.findUnique({ where: { id: pid } })
+      if (produit) {
+        const dateStr = new Date().toISOString().slice(0, 10)
+        await db.$transaction([
+          db.produitStock.update({
+            where: { id: pid },
+            data: {
+              quantite: produit.quantite + qte,
+              valeur_achat_ttc: Math.max(0, produit.valeur_achat_ttc + cout),
+            },
+          }),
+          db.mouvementStock.create({
+            data: {
+              productId: pid,
+              date: dateStr,
+              produit_nom: produit.nom,
+              quantite: qte,
+              type: 'entree',
+              origine: 'vehicule',
+              reference: `annulation_depense:${id}`,
+            },
+          }),
+          db.vehiculeDepense.delete({ where: { id: depenseId } }),
+        ])
+      } else {
+        await db.vehiculeDepense.delete({ where: { id: depenseId } })
+      }
+    } else {
+      await db.vehiculeDepense.delete({ where: { id: depenseId } })
+    }
+    return res.status(204).send()
   } catch (err) {
     console.error(err)
     return res.status(500).json({ error: 'Internal server error' })
