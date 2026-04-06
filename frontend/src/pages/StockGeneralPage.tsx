@@ -10,7 +10,7 @@ import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
-import { Package, Plus, Search, Trash2, Layers, ShoppingCart, Pencil, AlertTriangle, ArrowUpDown, ArrowDown, ArrowUp, History, TrendingUp, AlertCircle } from 'lucide-react'
+import { Package, Plus, Search, Trash2, Layers, ShoppingCart, Pencil, AlertTriangle, ArrowUpDown, ArrowDown, ArrowUp, History, TrendingUp, AlertCircle, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { prixUnitaireStockAffiche } from '@/lib/stockUtils'
@@ -18,6 +18,8 @@ import { prixUnitaireStockAffiche } from '@/lib/stockUtils'
 function formatMontant(n: number): string {
   return n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TND'
 }
+
+const PAGE_SIZE_STOCK = 30
 
 export default function StockGeneralPage() {
   const navigate = useNavigate()
@@ -28,6 +30,7 @@ export default function StockGeneralPage() {
   const [search, setSearch] = useState('')
   const [filterCategorie, setFilterCategorie] = useState<string>('')
   const [sortQte, setSortQte] = useState<'none' | 'asc' | 'desc'>('none')
+  const [pageStock, setPageStock] = useState(1)
   const SEUIL_STOCK_FAIBLE = 3
   const [showFormProduit, setShowFormProduit] = useState(false)
   const [editingProduitId, setEditingProduitId] = useState<number | null>(null)
@@ -93,6 +96,30 @@ export default function StockGeneralPage() {
     return list
   }, [produits, search, filterCategorie, sortQte])
 
+  const totalFilteredCount = filteredProduits.length
+  const totalPagesStock =
+    totalFilteredCount === 0 ? 0 : Math.ceil(totalFilteredCount / PAGE_SIZE_STOCK)
+
+  useEffect(() => {
+    setPageStock(1)
+  }, [search, filterCategorie, sortQte])
+
+  useEffect(() => {
+    if (totalPagesStock > 0 && pageStock > totalPagesStock) setPageStock(totalPagesStock)
+  }, [totalPagesStock, pageStock])
+
+  const paginatedProduits = useMemo(() => {
+    const start = (pageStock - 1) * PAGE_SIZE_STOCK
+    return filteredProduits.slice(start, start + PAGE_SIZE_STOCK)
+  }, [filteredProduits, pageStock])
+
+  const rangeLabelStock = useMemo(() => {
+    if (totalFilteredCount === 0) return null
+    const from = (pageStock - 1) * PAGE_SIZE_STOCK + 1
+    const to = Math.min(pageStock * PAGE_SIZE_STOCK, totalFilteredCount)
+    return { from, to }
+  }, [totalFilteredCount, pageStock])
+
   const totalValeurStock = useMemo(() => filteredProduits.reduce((s, p) => s + p.valeurAchatTTC, 0), [filteredProduits])
 
   const derniersMouvements = useMemo(() => [...(mouvementsStock ?? [])].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id).slice(0, 15), [mouvementsStock])
@@ -104,6 +131,26 @@ export default function StockGeneralPage() {
   [produits, SEUIL_STOCK_FAIBLE])
 
   const stockEpuise = useMemo(() => produits.filter(p => (p.quantite ?? 0) === 0), [produits])
+
+  const stockEpuiseSig = useMemo(
+    () => stockEpuise.map(p => p.id).sort((a, b) => a - b).join(','),
+    [stockEpuise]
+  )
+  const aCommanderSig = useMemo(
+    () => aCommander.map(p => p.id).sort((a, b) => a - b).join(','),
+    [aCommander]
+  )
+
+  const [dismissAlertEpuise, setDismissAlertEpuise] = useState(false)
+  const [dismissAlertACommander, setDismissAlertACommander] = useState(false)
+
+  useEffect(() => {
+    setDismissAlertEpuise(false)
+  }, [stockEpuiseSig])
+
+  useEffect(() => {
+    setDismissAlertACommander(false)
+  }, [aCommanderSig])
 
   const produitsPlusVendus = useMemo(() => {
     const map = new Map<number, { nom: string; qte: number }>()
@@ -216,9 +263,18 @@ export default function StockGeneralPage() {
       </header>
 
       {/* Alerte Stock épuisé */}
-      {stockEpuise.length > 0 && (
-        <Card padding="sm" className="mb-4 border-red-200 bg-red-50">
-          <div className="flex items-start gap-3">
+      {stockEpuise.length > 0 && !dismissAlertEpuise && (
+        <Card padding="sm" className="relative mb-4 border-red-200 bg-red-50">
+          <button
+            type="button"
+            onClick={() => setDismissAlertEpuise(true)}
+            className="absolute top-2 right-2 z-10 p-1.5 rounded-lg text-red-700/70 hover:bg-red-100 hover:text-red-900 transition-colors"
+            aria-label="Fermer cette alerte"
+            title="Fermer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+          <div className="flex items-start gap-3 pr-8">
             <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center shrink-0">
               <AlertCircle className="w-5 h-5 text-red-600" />
             </div>
@@ -244,9 +300,18 @@ export default function StockGeneralPage() {
       )}
 
       {/* Alerte À commander */}
-      {aCommander.length > 0 && (
-        <Card padding="sm" className="mb-4 border-amber-200 bg-amber-50">
-          <div className="flex items-start gap-3">
+      {aCommander.length > 0 && !dismissAlertACommander && (
+        <Card padding="sm" className="relative mb-4 border-amber-200 bg-amber-50">
+          <button
+            type="button"
+            onClick={() => setDismissAlertACommander(true)}
+            className="absolute top-2 right-2 z-10 p-1.5 rounded-lg text-amber-800/70 hover:bg-amber-100 hover:text-amber-950 transition-colors"
+            aria-label="Fermer cette alerte"
+            title="Fermer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+          <div className="flex items-start gap-3 pr-8">
             <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
               <AlertCircle className="w-5 h-5 text-amber-600" />
             </div>
@@ -350,7 +415,7 @@ export default function StockGeneralPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredProduits.map(p => {
+                  paginatedProduits.map(p => {
                     const qte = p.quantite ?? 0
                     const isEpuise = qte === 0
                     const isFaible = qte > 0 && qte <= SEUIL_STOCK_FAIBLE
@@ -405,6 +470,57 @@ export default function StockGeneralPage() {
               </tbody>
             </table>
           </div>
+        {totalFilteredCount > 0 && rangeLabelStock && (
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 border-t border-gray-100 bg-gray-50/80">
+            <p className="text-xs text-gray-600">
+              Affichage{' '}
+              <span className="font-medium tabular-nums">
+                {rangeLabelStock.from}–{rangeLabelStock.to}
+              </span>{' '}
+              sur{' '}
+              <span className="font-medium tabular-nums">{totalFilteredCount}</span> produit
+              {totalFilteredCount > 1 ? 's' : ''}
+              {totalPagesStock > 1 && (
+                <span className="text-gray-500">
+                  {' '}
+                  · page {pageStock} / {totalPagesStock}
+                </span>
+              )}
+            </p>
+            {totalPagesStock > 1 && (
+              <div className="flex items-center gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setPageStock(p => Math.max(1, p - 1))}
+                  disabled={pageStock <= 1}
+                  className={cn(
+                    'inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                    pageStock <= 1
+                      ? 'border-gray-100 text-gray-300 cursor-not-allowed'
+                      : 'border-gray-200 bg-white text-gray-700 hover:bg-amber-50 hover:border-amber-200'
+                  )}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Précédent
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPageStock(p => Math.min(totalPagesStock, p + 1))}
+                  disabled={pageStock >= totalPagesStock}
+                  className={cn(
+                    'inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                    pageStock >= totalPagesStock
+                      ? 'border-gray-100 text-gray-300 cursor-not-allowed'
+                      : 'border-gray-200 bg-white text-gray-700 hover:bg-amber-50 hover:border-amber-200'
+                  )}
+                >
+                  Suivant
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </Card>
 
       {/* Historique des mouvements */}
