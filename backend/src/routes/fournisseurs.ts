@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { prisma } from '../lib/prisma'
 import { authenticate } from '../middleware/auth'
+import { totalTTCAchat } from '../lib/achatTotals'
 
 const router = Router()
 const db = prisma as any
@@ -62,12 +63,20 @@ router.get('/top', authenticate(), async (req, res) => {
     const achats = (await db.achat.findMany({
       where: { fournisseur_id: { not: null } },
       include: { lignes: true },
-    })) as { fournisseur_id: number | null; fournisseur_nom: string; lignes: { quantite: number; prix_unitaire: number }[] }[]
+    })) as {
+      fournisseur_id: number | null
+      fournisseur_nom: string
+      timbre: number
+      lignes: { quantite: number; prix_unitaire: number }[]
+    }[]
 
     const byFournisseur = new Map<number, { nom: string; total: number }>()
     for (const a of achats) {
       if (a.fournisseur_id == null) continue
-      const total = a.lignes.reduce((s, l) => s + l.quantite * l.prix_unitaire, 0)
+      const total = totalTTCAchat(
+        a.lignes.map(l => ({ quantite: l.quantite, prix_unitaire: l.prix_unitaire })),
+        a.timbre ?? 1
+      )
       const cur = byFournisseur.get(a.fournisseur_id)
       if (cur) {
         cur.total += total
@@ -99,17 +108,32 @@ router.get('/:id/fiche', authenticate(), async (req, res) => {
       where: { fournisseur_id: id },
       include: { lignes: true },
       orderBy: { date: 'desc' },
-    })) as { id: number; numero: string; date: string; lignes: { quantite: number; prix_unitaire: number }[] }[]
+    })) as {
+      id: number
+      numero: string
+      date: string
+      timbre: number
+      lignes: { quantite: number; prix_unitaire: number }[]
+    }[]
 
     const totalCumule = achats.reduce((s, a) => {
-      return s + a.lignes.reduce((s2, l) => s2 + l.quantite * l.prix_unitaire, 0)
+      return (
+        s +
+        totalTTCAchat(
+          a.lignes.map(l => ({ quantite: l.quantite, prix_unitaire: l.prix_unitaire })),
+          a.timbre ?? 1
+        )
+      )
     }, 0)
 
     const dernierAchat = achats[0]
       ? {
           numero: achats[0].numero,
           date: achats[0].date,
-          total: achats[0].lignes.reduce((s, l) => s + l.quantite * l.prix_unitaire, 0),
+          total: totalTTCAchat(
+            achats[0].lignes.map(l => ({ quantite: l.quantite, prix_unitaire: l.prix_unitaire })),
+            achats[0].timbre ?? 1
+          ),
         }
       : null
 
@@ -117,7 +141,10 @@ router.get('/:id/fiche', authenticate(), async (req, res) => {
       id: a.id,
       numero: a.numero,
       date: a.date,
-      total: a.lignes.reduce((s, l) => s + l.quantite * l.prix_unitaire, 0),
+      total: totalTTCAchat(
+        a.lignes.map(l => ({ quantite: l.quantite, prix_unitaire: l.prix_unitaire })),
+        a.timbre ?? 1
+      ),
     }))
 
     return res.json({

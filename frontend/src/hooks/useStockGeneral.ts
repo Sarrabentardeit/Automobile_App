@@ -59,6 +59,8 @@ export function useStockGeneral() {
           valeurAchatTTC: p.valeurAchatTTC ?? 0,
           categorie: p.categorie ?? '',
           prixVente: p.prixVente,
+          prixAchatUnitaire: p.prixAchatUnitaire,
+          margeVentePct: p.margeVentePct,
           reference: p.reference ?? '',
           unite: p.unite ?? 'unité',
           seuilAlerte: p.seuilAlerte,

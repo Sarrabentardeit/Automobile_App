@@ -640,7 +640,14 @@ export interface ProduitStock {
   nom: string
   quantite: number
   valeurAchatTTC: number
-  prixVente?: number // prix de vente conseillé (HT ou TTC selon usage)
+  /** Dernier coût d’achat unitaire TTC moyen (conservé quand quantité = 0) */
+  dernierPrixUnitaireTTC?: number
+  /** Prix d’achat unitaire (TND) — saisie catalogue hors huiles */
+  prixAchatUnitaire?: number
+  /** Marge % sur prix d’achat pour le prix de vente (ex. 25 = +25 %) */
+  margeVentePct?: number
+  /** Prix de vente conseillé (souvent calculé : PA × (1 + marge %)) */
+  prixVente?: number
   categorie?: string // ex: Huiles, Pièces, Consommables
   reference?: string
   unite?: string
@@ -787,6 +794,8 @@ export interface FactureFournisseur {
   numeroFactureFournisseur?: string
   modePaiement?: string
   commentaire?: string
+  /** Droit de timbre (TTC), aligné facture vente */
+  timbre?: number
   statut: FactureFournisseurStatut
   lignes: LigneAchat[]
   paye: boolean // suivi payé / non payé

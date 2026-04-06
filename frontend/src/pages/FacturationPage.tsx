@@ -36,13 +36,24 @@ import {
   RotateCcw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { prixUnitaireAchatTTC } from '@/lib/stockUtils'
 
 type FormLigne = LigneFacture
 
 const emptyLigneMainOeuvre = (): FormLigne => ({ type: 'main_oeuvre', designation: '', qte: 1, mtHT: 0 })
 const emptyLigneDepense = (): FormLigne => ({ type: 'depense', designation: '', montant: 0 })
 function ligneFromProduit(p: ProduitStock): FormLigne {
-  return { type: 'produit', productId: p.id, designation: p.nom, qte: 1, prixUnitaireHT: p.prixVente ?? p.valeurAchatTTC }
+  if (p.prixVente != null && p.prixVente > 0) {
+    return { type: 'produit', productId: p.id, designation: p.nom, qte: 1, prixUnitaireHT: p.prixVente }
+  }
+  const unitTTC = prixUnitaireAchatTTC(p)
+  return {
+    type: 'produit',
+    productId: p.id,
+    designation: p.nom,
+    qte: 1,
+    prixUnitaireHT: unitTTC > 0 ? unitTTC / 1.19 : 0,
+  }
 }
 
 export default function FacturationPage() {
@@ -378,7 +389,7 @@ export default function FacturationPage() {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <FileText className="w-12 h-12 text-gray-300 mb-4" />
-        <p className="text-gray-500 font-medium">Vous n'avez pas accès à la facturation.</p>
+        <p className="text-gray-500 font-medium">Vous n&apos;avez pas accès à la facturation vente.</p>
       </div>
     )
   }
@@ -393,7 +404,7 @@ export default function FacturationPage() {
               <FileText className="w-5 h-5 text-white" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight truncate">Facturation</h1>
+              <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight truncate">Facturation vente</h1>
               <p className="text-gray-500 text-xs truncate">Créez et gérez vos factures</p>
             </div>
           </div>

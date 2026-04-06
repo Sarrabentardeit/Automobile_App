@@ -13,6 +13,7 @@ import Input from '@/components/ui/Input'
 import { Package, Plus, Search, Trash2, Layers, ShoppingCart, Pencil, AlertTriangle, ArrowUpDown, ArrowDown, ArrowUp, History, TrendingUp, AlertCircle } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
+import { prixUnitaireStockAffiche } from '@/lib/stockUtils'
 
 function formatMontant(n: number): string {
   return n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TND'
@@ -199,9 +200,9 @@ export default function StockGeneralPage() {
           <p className="text-sm text-gray-500 mt-0.5">Catalogue et quantités en stock</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Link to="/achats">
+          <Link to="/facturation-achat">
             <Button variant="outline" size="sm" icon={<ShoppingCart className="w-4 h-4" />}>
-              Entrée stock (Achats)
+              Facturation achat
             </Button>
           </Link>
           <Button
@@ -282,7 +283,7 @@ export default function StockGeneralPage() {
               <p className="text-lg sm:text-xl font-bold text-gray-900 tabular-nums">{formatMontant(totalValeurStock)}</p>
             </div>
           </div>
-          <p className="text-xs text-gray-500 hidden sm:block">Entrées : Achats · Sorties : Facturation</p>
+          <p className="text-xs text-gray-500 hidden sm:block">Entrées : Achats · Sorties : Facturation vente</p>
         </div>
       </Card>
 
@@ -336,14 +337,15 @@ export default function StockGeneralPage() {
                   <th className="px-4 py-3 text-left font-semibold text-gray-700">Produit</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-700 w-24 hidden sm:table-cell">Catégorie</th>
                   <th className="px-4 py-3 text-right font-semibold text-gray-700 w-28">Quantité</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-700 w-32">Valeur totale</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-700 w-28">Prix unit.</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-700 w-32">Valeur stock</th>
                   <th className="w-24 px-2 py-3" />
                 </tr>
               </thead>
               <tbody>
                 {filteredProduits.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-12 text-center text-gray-500">
+                    <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
                       {produits.length === 0 ? 'Aucun produit. Cliquez sur « Nouveau produit » ou enregistrez un achat.' : 'Aucun résultat.'}
                     </td>
                   </tr>
@@ -373,7 +375,18 @@ export default function StockGeneralPage() {
                           {p.quantite}
                         </span>
                       </td>
-                      <td className={cn('px-4 py-3 text-right font-medium tabular-nums', isEpuise ? 'text-red-600' : 'text-amber-700')}>{formatMontant(p.valeurAchatTTC)}</td>
+                      <td
+                        className={cn(
+                          'px-4 py-3 text-right font-medium tabular-nums',
+                          isEpuise && (p.dernierPrixUnitaireTTC ?? 0) <= 0 ? 'text-red-600' : 'text-amber-700'
+                        )}
+                        title="Coût unitaire TTC (mémorisé si stock à zéro)"
+                      >
+                        {formatMontant(prixUnitaireStockAffiche(p))}
+                      </td>
+                      <td className={cn('px-4 py-3 text-right font-medium tabular-nums', isEpuise ? 'text-gray-500' : 'text-amber-700')}>
+                        {formatMontant(p.valeurAchatTTC)}
+                      </td>
                       <td className="px-2 py-3">
                         <div className="flex items-center gap-0.5">
                           <button onClick={e => openEditProduit(p, e)} className="p-2 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-amber-600" title="Modifier"><Pencil className="w-4 h-4" /></button>

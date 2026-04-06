@@ -78,8 +78,10 @@ export default function App() {
             <Route element={<AppLayout />}>
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/admin" element={<AdminEspacePage />} />
-              <Route path="/facturation" element={<FacturationPage />} />
-              <Route path="/achats" element={<AchatsPage />} />
+              <Route path="/facturation-vente" element={<FacturationPage />} />
+              <Route path="/facturation" element={<Navigate to="/facturation-vente" replace />} />
+              <Route path="/facturation-achat" element={<AchatsPage />} />
+              <Route path="/achats" element={<Navigate to="/facturation-achat" replace />} />
               <Route path="/vehicules" element={<VehiculesPage />} />
               <Route path="/vehicules/:id" element={<VehiculeDetailPage />} />
               <Route path="/utilisateurs" element={<UtilisateursPage />} />

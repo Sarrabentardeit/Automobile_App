@@ -498,12 +498,22 @@ router.post('/:id/depenses/stock', authenticate(), async (req, res) => {
     const dateStr = new Date().toISOString().slice(0, 10)
     const ref = `vehicule:${id}`
 
+    const newQty = produit.quantite - quantite
+    const newVal = Math.max(0, produit.valeur_achat_ttc - cout_stock_sortie)
+    const dernierPrix =
+      newQty > 0
+        ? newVal / newQty
+        : valeurUnitaireAchat > 0
+          ? valeurUnitaireAchat
+          : produit.dernier_prix_unitaire_ttc ?? 0
+
     const [, , dep] = await db.$transaction([
       db.produitStock.update({
         where: { id: productId },
         data: {
-          quantite: produit.quantite - quantite,
-          valeur_achat_ttc: Math.max(0, produit.valeur_achat_ttc - cout_stock_sortie),
+          quantite: newQty,
+          valeur_achat_ttc: newVal,
+          dernier_prix_unitaire_ttc: dernierPrix,
         },
       }),
       db.mouvementStock.create({
@@ -617,12 +627,15 @@ router.delete('/:id/depenses/:depenseId', authenticate(), async (req, res) => {
       const produit = await db.produitStock.findUnique({ where: { id: pid } })
       if (produit) {
         const dateStr = new Date().toISOString().slice(0, 10)
+        const newQty = produit.quantite + qte
+        const newVal = Math.max(0, produit.valeur_achat_ttc + cout)
         await db.$transaction([
           db.produitStock.update({
             where: { id: pid },
             data: {
-              quantite: produit.quantite + qte,
-              valeur_achat_ttc: Math.max(0, produit.valeur_achat_ttc + cout),
+              quantite: newQty,
+              valeur_achat_ttc: newVal,
+              dernier_prix_unitaire_ttc: newQty > 0 ? newVal / newQty : produit.dernier_prix_unitaire_ttc ?? 0,
             },
           }),
           db.mouvementStock.create({

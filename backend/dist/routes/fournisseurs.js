@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const prisma_1 = require("../lib/prisma");
 const auth_1 = require("../middleware/auth");
+const achatTotals_1 = require("../lib/achatTotals");
 const router = (0, express_1.Router)();
 const db = prisma_1.prisma;
 function toFournisseur(f) {
@@ -53,7 +54,7 @@ router.get('/top', (0, auth_1.authenticate)(), async (req, res) => {
         for (const a of achats) {
             if (a.fournisseur_id == null)
                 continue;
-            const total = a.lignes.reduce((s, l) => s + l.quantite * l.prix_unitaire, 0);
+            const total = (0, achatTotals_1.totalTTCAchat)(a.lignes.map(l => ({ quantite: l.quantite, prix_unitaire: l.prix_unitaire })), a.timbre ?? 1);
             const cur = byFournisseur.get(a.fournisseur_id);
             if (cur) {
                 cur.total += total;
@@ -88,20 +89,21 @@ router.get('/:id/fiche', (0, auth_1.authenticate)(), async (req, res) => {
             orderBy: { date: 'desc' },
         }));
         const totalCumule = achats.reduce((s, a) => {
-            return s + a.lignes.reduce((s2, l) => s2 + l.quantite * l.prix_unitaire, 0);
+            return (s +
+                (0, achatTotals_1.totalTTCAchat)(a.lignes.map(l => ({ quantite: l.quantite, prix_unitaire: l.prix_unitaire })), a.timbre ?? 1));
         }, 0);
         const dernierAchat = achats[0]
             ? {
                 numero: achats[0].numero,
                 date: achats[0].date,
-                total: achats[0].lignes.reduce((s, l) => s + l.quantite * l.prix_unitaire, 0),
+                total: (0, achatTotals_1.totalTTCAchat)(achats[0].lignes.map(l => ({ quantite: l.quantite, prix_unitaire: l.prix_unitaire })), achats[0].timbre ?? 1),
             }
             : null;
         const historique = achats.slice(0, 50).map(a => ({
             id: a.id,
             numero: a.numero,
             date: a.date,
-            total: a.lignes.reduce((s, l) => s + l.quantite * l.prix_unitaire, 0),
+            total: (0, achatTotals_1.totalTTCAchat)(a.lignes.map(l => ({ quantite: l.quantite, prix_unitaire: l.prix_unitaire })), a.timbre ?? 1),
         }));
         return res.json({
             fournisseur: toFournisseur(f),

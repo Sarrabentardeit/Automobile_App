@@ -11,6 +11,7 @@ function toProduit(p) {
         nom: p.nom,
         quantite: p.quantite,
         valeurAchatTTC: p.valeur_achat_ttc,
+        dernierPrixUnitaireTTC: p.dernier_prix_unitaire_ttc ?? 0,
         categorie: p.categorie ?? undefined,
         prixVente: p.prix_vente ?? undefined,
         reference: p.reference ?? '',
@@ -106,11 +107,14 @@ router.post('/produits', (0, auth_1.authenticate)(), async (req, res) => {
         if (!body.nom?.trim())
             return res.status(400).json({ error: 'nom est requis' });
         const fluide = body.fluideType?.trim();
+        const q0 = Math.max(0, Number(body.quantite) || 0);
+        const v0 = Math.max(0, Number(body.valeurAchatTTC) || 0);
         const p = await db.produitStock.create({
             data: {
                 nom: body.nom.trim(),
-                quantite: Math.max(0, Number(body.quantite) || 0),
-                valeur_achat_ttc: Math.max(0, Number(body.valeurAchatTTC) || 0),
+                quantite: q0,
+                valeur_achat_ttc: v0,
+                dernier_prix_unitaire_ttc: q0 > 0 ? v0 / q0 : 0,
                 categorie: (body.categorie ?? '').trim() || null,
                 prix_vente: body.prixVente != null ? Number(body.prixVente) : null,
                 reference: (body.reference ?? '').toString().trim(),
@@ -156,6 +160,14 @@ router.put('/produits/:id', (0, auth_1.authenticate)(), async (req, res) => {
         if (body.fluideType !== undefined) {
             const f = body.fluideType?.toString().trim();
             data.fluide_type = f && f.length ? f : null;
+        }
+        const nextQte = body.quantite !== undefined ? Math.max(0, Number(body.quantite) || 0) : existing.quantite;
+        const nextVal = body.valeurAchatTTC !== undefined
+            ? Math.max(0, Number(body.valeurAchatTTC) || 0)
+            : existing.valeur_achat_ttc;
+        if (body.quantite !== undefined || body.valeurAchatTTC !== undefined) {
+            if (nextQte > 0)
+                data.dernier_prix_unitaire_ttc = nextVal / nextQte;
         }
         const p = await db.produitStock.update({ where: { id }, data });
         return res.json(toProduit(p));
@@ -307,12 +319,15 @@ router.post('/produits/:id/increment', (0, auth_1.authenticate)(), async (req, r
         const produit = await db.produitStock.findUnique({ where: { id } });
         if (!produit)
             return res.status(404).json({ error: 'Produit introuvable' });
+        const newQty = produit.quantite + quantite;
+        const newVal = produit.valeur_achat_ttc + valeurAjout;
         const [updated] = await db.$transaction([
             db.produitStock.update({
                 where: { id },
                 data: {
-                    quantite: produit.quantite + quantite,
-                    valeur_achat_ttc: produit.valeur_achat_ttc + valeurAjout,
+                    quantite: newQty,
+                    valeur_achat_ttc: newVal,
+                    dernier_prix_unitaire_ttc: newQty > 0 ? newVal / newQty : produit.dernier_prix_unitaire_ttc ?? 0,
                 },
             }),
             db.mouvementStock.create({
@@ -352,12 +367,16 @@ router.post('/produits/:id/decrement', (0, auth_1.authenticate)(), async (req, r
         }
         const valeurUnitaire = produit.quantite > 0 ? produit.valeur_achat_ttc / produit.quantite : 0;
         const valeurSortie = valeurUnitaire * quantite;
+        const newQty = produit.quantite - quantite;
+        const newVal = Math.max(0, produit.valeur_achat_ttc - valeurSortie);
+        const dernierPrix = newQty > 0 ? newVal / newQty : valeurUnitaire > 0 ? valeurUnitaire : produit.dernier_prix_unitaire_ttc ?? 0;
         const [updated] = await db.$transaction([
             db.produitStock.update({
                 where: { id },
                 data: {
-                    quantite: produit.quantite - quantite,
-                    valeur_achat_ttc: Math.max(0, produit.valeur_achat_ttc - valeurSortie),
+                    quantite: newQty,
+                    valeur_achat_ttc: newVal,
+                    dernier_prix_unitaire_ttc: dernierPrix,
                 },
             }),
             db.mouvementStock.create({

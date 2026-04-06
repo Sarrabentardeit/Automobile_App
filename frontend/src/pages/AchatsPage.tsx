@@ -12,8 +12,27 @@ import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
-import { Package, Plus, Search, Pencil, Trash2, Truck, CheckCircle, Copy, AlertCircle, TrendingUp, Users, X, ExternalLink } from 'lucide-react'
+import {
+  Package,
+  Plus,
+  Search,
+  Pencil,
+  Trash2,
+  Truck,
+  CheckCircle,
+  Copy,
+  AlertCircle,
+  TrendingUp,
+  Users,
+  X,
+  ExternalLink,
+  Import,
+  Printer,
+  FileDown,
+} from 'lucide-react'
+import { computeFactureAchatTotals, formatMontantEnLettres, printFactureAchat, exportFactureAchatPdf } from '@/lib/factureUtils'
 import { cn } from '@/lib/utils'
+import { prixUnitaireAchatTTC } from '@/lib/stockUtils'
 
 export default function AchatsPage() {
   const { permissions } = useAuth()
@@ -41,12 +60,17 @@ export default function AchatsPage() {
     numeroFactureFournisseur: '',
     modePaiement: '',
     commentaire: '',
+    timbre: 1,
     statut: 'brouillon',
     lignes: [],
     paye: false,
   })
 
-  const totalLignes = (lignes: LigneAchat[]) => lignes.reduce((s, l) => s + l.quantite * l.prixUnitaire, 0)
+  const ttcFacture = useCallback((lignes: LigneAchat[], timbre?: number) => {
+    return computeFactureAchatTotals(lignes, timbre ?? 1).totalTTC
+  }, [])
+
+  const formTotals = useMemo(() => computeFactureAchatTotals(form.lignes, form.timbre ?? 1), [form.lignes, form.timbre])
 
   const now = new Date()
   const year = now.getFullYear()
@@ -80,19 +104,17 @@ export default function AchatsPage() {
   }, [factures, search, filtreStatut, inPeriod])
 
   const stats = useMemo(() => {
-    const sum = (l: LigneAchat[]) => l.reduce((s, x) => s + x.quantite * x.prixUnitaire, 0)
     const totalDuMois = factures
       .filter(f => f.date >= monthStart && f.date <= monthEnd)
-      .reduce((s, f) => s + sum(f.lignes), 0)
-    const enAttente = factures.filter(f => !f.paye).reduce((s, f) => s + sum(f.lignes), 0)
+      .reduce((s, f) => s + ttcFacture(f.lignes, f.timbre), 0)
+    const enAttente = factures.filter(f => !f.paye).reduce((s, f) => s + ttcFacture(f.lignes, f.timbre), 0)
     const countEnAttente = factures.filter(f => !f.paye).length
     return { totalDuMois, enAttente, countEnAttente }
-  }, [factures, monthStart, monthEnd])
+  }, [factures, monthStart, monthEnd, ttcFacture])
 
   const totalParPeriode = useMemo(() => {
-    const sum = (l: LigneAchat[]) => l.reduce((s, x) => s + x.quantite * x.prixUnitaire, 0)
-    return factures.filter(f => inPeriod(f.date)).reduce((s, f) => s + sum(f.lignes), 0)
-  }, [factures, inPeriod])
+    return factures.filter(f => inPeriod(f.date)).reduce((s, f) => s + ttcFacture(f.lignes, f.timbre), 0)
+  }, [factures, inPeriod, ttcFacture])
 
   const [topFournisseurs, setTopFournisseurs] = useState<FournisseurTopItem[]>([])
   useEffect(() => {
@@ -129,6 +151,7 @@ export default function AchatsPage() {
       numeroFactureFournisseur: '',
       modePaiement: '',
       commentaire: '',
+      timbre: 1,
       statut: 'brouillon',
       lignes: [],
       paye: false,
@@ -146,6 +169,7 @@ export default function AchatsPage() {
       numeroFactureFournisseur: f.numeroFactureFournisseur ?? '',
       modePaiement: f.modePaiement ?? '',
       commentaire: f.commentaire ?? '',
+      timbre: f.timbre ?? 1,
       statut: f.statut,
       lignes: f.lignes.length ? f.lignes : [],
       paye: f.paye,
@@ -164,6 +188,7 @@ export default function AchatsPage() {
       numeroFactureFournisseur: f.numeroFactureFournisseur ?? '',
       modePaiement: f.modePaiement ?? '',
       commentaire: f.commentaire ?? '',
+      timbre: f.timbre ?? 1,
       statut: 'brouillon',
       lignes: f.lignes.length ? f.lignes.map(l => ({ ...l })) : [],
       paye: false,
@@ -177,8 +202,9 @@ export default function AchatsPage() {
   const addLigne = (productId: number) => {
     const p = produits.find(x => x.id === productId)
     if (!p) return
-    const qte = p.quantite ?? 0
-    const prixUnitaire = p.prixVente ?? (qte > 0 ? (p.valeurAchatTTC ?? 0) / qte : 0)
+    const qteStock = p.quantite ?? 0
+    const ttcUnit = prixUnitaireAchatTTC(p)
+    const prixUnitaire = ttcUnit > 0 ? Math.round((ttcUnit / 1.19) * 10000) / 10000 : 0
     setForm(prev => ({
       ...prev,
       lignes: [...prev.lignes, { productId: p.id, designation: p.nom, quantite: 1, prixUnitaire }],
@@ -213,28 +239,29 @@ export default function AchatsPage() {
       lignes: lignesValides,
       statut: newStatut,
       paye: validerEtEntrerStock ? form.paye : form.paye,
+      timbre: form.timbre ?? 1,
     }
 
     const prev = editingId ? factures.find(f => f.id === editingId) : null
     const doitIncrementerStock = (newStatut === 'validee' || newStatut === 'payee') && (!prev || prev.statut === 'brouillon')
 
     if (doitIncrementerStock) {
-      const totalAchat = totalLignes(lignesValides)
+      const totalAchat = computeFactureAchatTotals(lignesValides, form.timbre ?? 1).totalTTC
       addOut({
         date: payload.date,
         amount: totalAchat,
         category: 'FOURNISSEUR',
-        description: `Achat ${payload.numero} — ${payload.fournisseurNom}`,
+        description: `Facture achat ${payload.numero} — ${payload.fournisseurNom}`,
       })
     }
 
     try {
       if (editingId) {
         await updateFacture(editingId, payload)
-        toast.success(validerEtEntrerStock ? 'Achat validé — stock mis à jour' : 'Achat enregistré')
+        toast.success(validerEtEntrerStock ? 'Facture validée — stock mis à jour' : 'Facture enregistrée')
       } else {
         await addFacture(payload)
-        toast.success(validerEtEntrerStock ? 'Achat créé et validé — stock mis à jour' : 'Achat créé')
+        toast.success(validerEtEntrerStock ? 'Facture créée et validée — stock mis à jour' : 'Facture créée')
       }
       if (doitIncrementerStock) refetchStock()
       setShowModal(false)
@@ -243,20 +270,30 @@ export default function AchatsPage() {
     }
   }
 
+  const handleExportPdfAchat = async (f: FactureFournisseur) => {
+    try {
+      await exportFactureAchatPdf({ ...f, timbre: f.timbre ?? 1 })
+      toast.success('Facture exportée en PDF')
+    } catch (err) {
+      console.error(err)
+      toast.error('Erreur lors de l\'export PDF')
+    }
+  }
+
   const marquerPayee = async (f: FactureFournisseur) => {
     if (f.statut === 'brouillon') {
-      const totalAchat = totalLignes(f.lignes)
+      const totalAchat = computeFactureAchatTotals(f.lignes, f.timbre ?? 1).totalTTC
       addOut({
         date: f.date,
         amount: totalAchat,
         category: 'FOURNISSEUR',
-        description: `Achat ${f.numero} — ${f.fournisseurNom}`,
+        description: `Facture achat ${f.numero} — ${f.fournisseurNom}`,
       })
     }
     try {
       await updateFacture(f.id, { statut: 'payee', paye: true })
       if (f.statut === 'brouillon') refetchStock()
-      toast.success('Achat marqué payé')
+      toast.success('Facture marquée payée')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur')
     }
@@ -266,7 +303,7 @@ export default function AchatsPage() {
     return (
       <div className="flex flex-col items-center justify-center py-16">
         <Package className="w-12 h-12 text-gray-300 mb-4" />
-        <p className="text-gray-500 font-medium">Vous n'avez pas accès aux achats.</p>
+        <p className="text-gray-500 font-medium">Vous n&apos;avez pas accès à la facturation achat.</p>
       </div>
     )
   }
@@ -274,7 +311,7 @@ export default function AchatsPage() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-16">
-        <p className="text-gray-500 font-medium">Chargement des achats...</p>
+        <p className="text-gray-500 font-medium">Chargement des factures fournisseurs…</p>
       </div>
     )
   }
@@ -282,15 +319,17 @@ export default function AchatsPage() {
   return (
     <div className="space-y-3 sm:space-y-4 px-2 sm:px-4 md:px-6 pb-6 max-w-full overflow-x-hidden">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center gap-2">
-            <Package className="w-6 h-6 sm:w-7 sm:h-7 text-orange-500 shrink-0" />
-            Achats (entrée stock)
-          </h1>
-          <p className="text-gray-500 text-xs sm:text-sm mt-0.5">Factures fournisseur — validation = entrée en stock</p>
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shadow-md shrink-0">
+            <Import className="w-5 h-5 text-white" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight truncate">Facturation achat</h1>
+            <p className="text-gray-500 text-xs sm:text-sm mt-0.5 truncate">Factures fournisseurs — la validation enregistre l&apos;entrée en stock</p>
+          </div>
         </div>
         <Button onClick={openNew} icon={<Plus className="w-4 h-4" />} size="sm" className="w-full sm:w-auto shrink-0">
-          Nouvel achat
+          Nouvelle facture fournisseur
         </Button>
       </div>
 
@@ -364,7 +403,7 @@ export default function AchatsPage() {
             Top fournisseurs
           </h3>
           {topFournisseurs.length === 0 ? (
-            <p className="text-sm text-gray-500">Aucun achat enregistré</p>
+            <p className="text-sm text-gray-500">Aucune facture enregistrée</p>
           ) : (
             <ul className="space-y-2">
               {topFournisseurs.map((f, i) => (
@@ -420,10 +459,10 @@ export default function AchatsPage() {
             <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-orange-50 flex items-center justify-center mx-auto mb-3 sm:mb-4">
               <Truck className="w-7 h-7 sm:w-8 sm:h-8 text-orange-500" />
             </div>
-            <p className="font-semibold text-gray-700 text-sm sm:text-base">Aucun achat</p>
-            <p className="text-xs sm:text-sm text-gray-500 mt-1">Créez un achat pour enregistrer une entrée en stock.</p>
+            <p className="font-semibold text-gray-700 text-sm sm:text-base">Aucune facture fournisseur</p>
+            <p className="text-xs sm:text-sm text-gray-500 mt-1">Créez une facture pour enregistrer l&apos;achat et l&apos;entrée en stock.</p>
             <Button className="mt-3 sm:mt-4" onClick={openNew} icon={<Plus className="w-4 h-4" />} size="sm">
-              Nouvel achat
+              Nouvelle facture fournisseur
             </Button>
           </div>
         ) : (
@@ -444,7 +483,7 @@ export default function AchatsPage() {
                     <p className="font-semibold text-gray-900 truncate">{f.numero}</p>
                     <p className="text-xs text-gray-500">{formatDate(f.date)}</p>
                   </div>
-                  <span className="tabular-nums font-bold text-gray-900 shrink-0">{totalLignes(f.lignes).toFixed(2)} DT</span>
+                  <span className="tabular-nums font-bold text-gray-900 shrink-0">{ttcFacture(f.lignes, f.timbre).toFixed(2)} DT</span>
                 </div>
                 <button
                   type="button"
@@ -463,7 +502,9 @@ export default function AchatsPage() {
                     <span className="text-amber-600 text-xs font-medium">Non payé</span>
                   )}
                 </div>
-                <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-100" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-100 flex-wrap" onClick={e => e.stopPropagation()}>
+                  <button type="button" onClick={() => printFactureAchat({ ...f, timbre: f.timbre ?? 1 })} className="p-1.5 rounded-lg text-gray-400 hover:bg-blue-50 hover:text-blue-600" title="Imprimer"><Printer className="w-4 h-4" /></button>
+                  <button type="button" onClick={() => void handleExportPdfAchat(f)} className="p-1.5 rounded-lg text-gray-400 hover:bg-violet-50 hover:text-violet-600" title="PDF"><FileDown className="w-4 h-4" /></button>
                   <button type="button" onClick={() => openEdit(f)} className="p-1.5 rounded-lg text-gray-400 hover:bg-orange-50 hover:text-orange-600" title="Modifier"><Pencil className="w-4 h-4" /></button>
                   <button type="button" onClick={() => openDuplicate(f)} className="p-1.5 rounded-lg text-gray-400 hover:bg-blue-50 hover:text-blue-600" title="Dupliquer"><Copy className="w-4 h-4" /></button>
                   {f.statut !== 'payee' && <button type="button" onClick={() => marquerPayee(f)} className="p-1.5 rounded-lg text-gray-400 hover:bg-emerald-50 hover:text-emerald-600" title="Marquer payée"><CheckCircle className="w-4 h-4" /></button>}
@@ -483,7 +524,7 @@ export default function AchatsPage() {
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Fournisseur</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">N° fact. fourn.</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Mode paiement</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Total</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Total TTC</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Statut</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Payé</th>
                   <th className="w-28 px-4 py-3" />
@@ -514,7 +555,7 @@ export default function AchatsPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-600">{f.numeroFactureFournisseur || '—'}</td>
                     <td className="px-4 py-3 text-gray-600">{modePaiementLabel(f.modePaiement ?? '')}</td>
-                    <td className="px-4 py-3 text-right font-semibold tabular-nums">{totalLignes(f.lignes).toFixed(2)} DT</td>
+                    <td className="px-4 py-3 text-right font-semibold tabular-nums">{ttcFacture(f.lignes, f.timbre).toFixed(2)} DT</td>
                     <td className="px-4 py-2">
                       <span className={cn('inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border', FACTURE_FOURNISSEUR_STATUT_CONFIG[f.statut].badge)}>
                         {FACTURE_FOURNISSEUR_STATUT_CONFIG[f.statut].label}
@@ -528,7 +569,9 @@ export default function AchatsPage() {
                       )}
                     </td>
                     <td className="px-4 py-2" onClick={e => e.stopPropagation()}>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <button type="button" onClick={() => printFactureAchat({ ...f, timbre: f.timbre ?? 1 })} className="p-2 rounded-lg text-gray-400 hover:bg-blue-50 hover:text-blue-600" title="Imprimer"><Printer className="w-4 h-4" /></button>
+                        <button type="button" onClick={() => void handleExportPdfAchat(f)} className="p-2 rounded-lg text-gray-400 hover:bg-violet-50 hover:text-violet-600" title="Exporter PDF"><FileDown className="w-4 h-4" /></button>
                         <button type="button" onClick={() => openEdit(f)} className="p-2 rounded-lg text-gray-400 hover:bg-orange-50 hover:text-orange-600" title="Modifier"><Pencil className="w-4 h-4" /></button>
                         <button type="button" onClick={() => openDuplicate(f)} className="p-2 rounded-lg text-gray-400 hover:bg-blue-50 hover:text-blue-600" title="Dupliquer"><Copy className="w-4 h-4" /></button>
                         {f.statut !== 'payee' && <button type="button" onClick={() => marquerPayee(f)} className="p-2 rounded-lg text-gray-400 hover:bg-emerald-50 hover:text-emerald-600" title="Marquer payée"><CheckCircle className="w-4 h-4" /></button>}
@@ -544,11 +587,11 @@ export default function AchatsPage() {
         )}
       </Card>
 
-      {/* Modal créer / modifier achat */}
+      {/* Modal créer / modifier facture fournisseur */}
       <Modal
         open={showModal}
         onClose={() => setShowModal(false)}
-        title={editingId ? `Achat ${form.numero}` : 'Nouvel achat'}
+        title={editingId ? `Facture ${form.numero}` : 'Nouvelle facture fournisseur'}
         subtitle={form.numero}
         maxWidth="lg"
       >
@@ -606,7 +649,7 @@ export default function AchatsPage() {
 
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
-              <h3 className="text-sm font-semibold text-gray-800">Lignes (produits)</h3>
+              <h3 className="text-sm font-semibold text-gray-800">Lignes (produits) — P.U. HT</h3>
               <select
                 value=""
                 onChange={e => {
@@ -623,12 +666,13 @@ export default function AchatsPage() {
               </select>
             </div>
             <div className="border border-gray-200 rounded-xl overflow-x-auto -mx-1">
-              <table className="w-full text-xs sm:text-sm min-w-[280px]">
+              <table className="w-full text-xs sm:text-sm min-w-[360px]">
                 <thead>
                   <tr className="bg-gray-50">
                     <th className="text-left px-3 py-2 font-medium text-gray-600">Produit</th>
                     <th className="text-right px-3 py-2 font-medium text-gray-600 w-20">Qté</th>
-                    <th className="text-right px-3 py-2 font-medium text-gray-600 w-24">Prix unit.</th>
+                    <th className="text-right px-3 py-2 font-medium text-gray-600 w-24">P.U. HT</th>
+                    <th className="text-right px-3 py-2 font-medium text-gray-600 w-28">Total HT</th>
                     <th className="w-10" />
                   </tr>
                 </thead>
@@ -656,6 +700,20 @@ export default function AchatsPage() {
                           className="w-16 sm:w-20 min-w-0 px-1.5 sm:px-2 py-1.5 border border-gray-200 rounded-lg text-xs sm:text-sm text-right"
                         />
                       </td>
+                      <td className="px-3 py-2 text-right">
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={l.quantite > 0 ? Math.round(l.quantite * l.prixUnitaire * 100) / 100 : 0}
+                          onChange={e => {
+                            const total = Number(e.target.value) || 0
+                            setLigne(i, { prixUnitaire: l.quantite > 0 ? total / l.quantite : 0 })
+                          }}
+                          className="w-20 min-w-0 px-1.5 sm:px-2 py-1.5 border border-gray-200 rounded-lg text-xs sm:text-sm text-right"
+                          title="Total HT de la ligne"
+                        />
+                      </td>
                       <td className="px-2 py-1">
                         <button type="button" onClick={() => removeLigne(i)} className="p-1 text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
                       </td>
@@ -664,7 +722,36 @@ export default function AchatsPage() {
                 </tbody>
               </table>
             </div>
-            <p className="text-xs text-gray-500 mt-1.5">Total : <strong>{totalLignes(form.lignes).toFixed(2)} DT</strong></p>
+            <div className="bg-gray-50 rounded-xl p-4 space-y-2 mt-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Total HT</span>
+                <span className="font-semibold tabular-nums">{formTotals.totalHT.toFixed(2)} DT</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">TVA 19%</span>
+                <span className="font-semibold tabular-nums">{formTotals.tva19.toFixed(2)} DT</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Dépenses</span>
+                <span className="font-semibold tabular-nums">{formTotals.depenses.toFixed(2)} DT</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Timbre</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={form.timbre}
+                  onChange={e => setForm(prev => ({ ...prev, timbre: Number(e.target.value) || 0 }))}
+                  className="w-20 px-2 py-1 border border-gray-200 rounded text-right text-sm"
+                />
+              </div>
+              <div className="flex justify-between pt-2 border-t border-gray-200 font-bold text-gray-900">
+                <span>Total TTC</span>
+                <span className="tabular-nums">{formTotals.totalTTC.toFixed(2)} DT</span>
+              </div>
+              <p className="text-xs text-gray-500 italic pt-1">{formatMontantEnLettres(formTotals.totalTTC)}</p>
+            </div>
           </div>
 
           <div>
@@ -697,7 +784,7 @@ export default function AchatsPage() {
       </Modal>
 
       {/* Modal confirmation suppression */}
-      <Modal open={deleteId !== null} onClose={() => setDeleteId(null)} title="Supprimer l'achat" subtitle={deleteId != null ? factures.find(f => f.id === deleteId)?.numero : ''} maxWidth="sm">
+      <Modal open={deleteId !== null} onClose={() => setDeleteId(null)} title="Supprimer la facture" subtitle={deleteId != null ? factures.find(f => f.id === deleteId)?.numero : ''} maxWidth="sm">
         <div className="space-y-4">
           <p className="text-gray-600 text-sm">Cette action est irréversible. Le stock ne sera pas modifié (suppression uniquement de l'enregistrement).</p>
           <div className="flex gap-3">
@@ -708,7 +795,7 @@ export default function AchatsPage() {
                 if (deleteId == null) return
                 const ok = await removeFacture(deleteId)
                 if (ok) {
-                  toast.success('Achat supprimé')
+                  toast.success('Facture supprimée')
                   setDeleteId(null)
                 } else {
                   toast.error('Erreur lors de la suppression')
@@ -751,12 +838,12 @@ export default function AchatsPage() {
                     </div>
                     {panelFiche.dernierAchat && (
                       <div className="border-t border-gray-100 pt-4">
-                        <p className="text-sm font-semibold text-gray-700">Dernier achat</p>
+                        <p className="text-sm font-semibold text-gray-700">Dernière facture</p>
                         <p className="text-sm text-gray-600">{panelFiche.dernierAchat.numero} — {formatDate(panelFiche.dernierAchat.date)} — {panelFiche.dernierAchat.total.toFixed(2)} DT</p>
                       </div>
                     )}
                     <div className="border-t border-gray-100 pt-4">
-                      <p className="text-sm font-semibold text-gray-700 mb-2">Historique ({panelFiche.countAchats} achats)</p>
+                      <p className="text-sm font-semibold text-gray-700 mb-2">Historique ({panelFiche.countAchats} factures)</p>
                       <ul className="space-y-1 max-h-48 overflow-y-auto">
                         {panelFiche.historique.slice(0, 20).map(a => (
                           <li key={a.id} className="flex justify-between text-sm">
@@ -775,7 +862,7 @@ export default function AchatsPage() {
                 (() => {
                   const fournisseur = fournisseurs.find(f => f.nom.toLowerCase() === panelFournisseur.nom.toLowerCase())
                   const achatsFournisseur = factures.filter(a => a.fournisseurNom.trim().toLowerCase() === panelFournisseur.nom.trim().toLowerCase())
-                  const totalCumule = achatsFournisseur.reduce((s, a) => s + totalLignes(a.lignes), 0)
+                  const totalCumule = achatsFournisseur.reduce((s, a) => s + ttcFacture(a.lignes, a.timbre), 0)
                   const dernierAchat = achatsFournisseur.sort((a, b) => b.date.localeCompare(a.date))[0]
                   return (
                     <div className="space-y-4">
@@ -795,17 +882,17 @@ export default function AchatsPage() {
                       </div>
                       {dernierAchat && (
                         <div className="border-t border-gray-100 pt-4">
-                          <p className="text-sm font-semibold text-gray-700">Dernier achat</p>
-                          <p className="text-sm text-gray-600">{dernierAchat.numero} — {formatDate(dernierAchat.date)} — {totalLignes(dernierAchat.lignes).toFixed(2)} DT</p>
+                          <p className="text-sm font-semibold text-gray-700">Dernière facture</p>
+                          <p className="text-sm text-gray-600">{dernierAchat.numero} — {formatDate(dernierAchat.date)} — {ttcFacture(dernierAchat.lignes, dernierAchat.timbre).toFixed(2)} DT</p>
                         </div>
                       )}
                       <div className="border-t border-gray-100 pt-4">
-                        <p className="text-sm font-semibold text-gray-700 mb-2">Historique ({achatsFournisseur.length} achats)</p>
+                        <p className="text-sm font-semibold text-gray-700 mb-2">Historique ({achatsFournisseur.length} factures)</p>
                         <ul className="space-y-1 max-h-48 overflow-y-auto">
                           {achatsFournisseur.slice(0, 20).map(a => (
                             <li key={a.id} className="flex justify-between text-sm">
                               <span>{a.numero} — {formatDate(a.date)}</span>
-                              <span className="font-medium tabular-nums">{totalLignes(a.lignes).toFixed(2)} DT</span>
+                              <span className="font-medium tabular-nums">{ttcFacture(a.lignes, a.timbre).toFixed(2)} DT</span>
                             </li>
                           ))}
                           {achatsFournisseur.length > 20 && <li className="text-xs text-gray-500">… et {achatsFournisseur.length - 20} autres</li>}
@@ -820,13 +907,13 @@ export default function AchatsPage() {
         </div>
       )}
 
-      {/* Panneau latéral : Détail rapide achat */}
+      {/* Panneau latéral : détail facture fournisseur */}
       {panelDetail && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <div className="absolute inset-0 bg-black/40" onClick={() => setPanelDetail(null)} />
           <div className="relative w-full sm:max-w-sm md:max-w-md bg-white shadow-2xl flex flex-col slide-in-from-right max-h-[100dvh] sm:max-h-[90vh] sm:rounded-l-2xl overflow-hidden">
             <div className="flex items-center justify-between p-3 sm:p-4 border-b border-gray-100 shrink-0">
-              <h3 className="text-base sm:text-lg font-bold text-gray-900 truncate pr-2">Achat {panelDetail.numero}</h3>
+              <h3 className="text-base sm:text-lg font-bold text-gray-900 truncate pr-2">Facture {panelDetail.numero}</h3>
               <button onClick={() => setPanelDetail(null)} className="p-2 hover:bg-gray-100 rounded-lg shrink-0 touch-manipulation"><X className="w-5 h-5" /></button>
             </div>
             <div className="overflow-y-auto p-3 sm:p-4 flex-1 min-h-0 space-y-4">
@@ -845,8 +932,8 @@ export default function AchatsPage() {
                     <tr className="border-b border-gray-200">
                       <th className="text-left py-2 font-medium text-gray-600">Produit</th>
                       <th className="text-right py-2 font-medium text-gray-600">Qté</th>
-                      <th className="text-right py-2 font-medium text-gray-600">Prix unit.</th>
-                      <th className="text-right py-2 font-medium text-gray-600">Total</th>
+                      <th className="text-right py-2 font-medium text-gray-600">P.U. HT</th>
+                      <th className="text-right py-2 font-medium text-gray-600">Total HT</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -861,7 +948,13 @@ export default function AchatsPage() {
                   </tbody>
                 </table>
                 </div>
-                <p className="text-sm font-bold text-gray-900 mt-2">Total : {totalLignes(panelDetail.lignes).toFixed(2)} DT</p>
+                <div className="mt-3 space-y-1 text-sm border-t border-gray-100 pt-3">
+                  <div className="flex justify-between text-gray-600"><span>Total HT</span><span className="tabular-nums font-medium">{computeFactureAchatTotals(panelDetail.lignes, panelDetail.timbre ?? 1).totalHT.toFixed(2)} DT</span></div>
+                  <div className="flex justify-between text-gray-600"><span>TVA 19 %</span><span className="tabular-nums font-medium">{computeFactureAchatTotals(panelDetail.lignes, panelDetail.timbre ?? 1).tva19.toFixed(2)} DT</span></div>
+                  <div className="flex justify-between text-gray-600"><span>Timbre</span><span className="tabular-nums font-medium">{(panelDetail.timbre ?? 1).toFixed(2)} DT</span></div>
+                  <div className="flex justify-between font-bold text-gray-900 pt-1"><span>Total TTC</span><span className="tabular-nums">{ttcFacture(panelDetail.lignes, panelDetail.timbre).toFixed(2)} DT</span></div>
+                  <p className="text-xs text-gray-500 italic">{formatMontantEnLettres(ttcFacture(panelDetail.lignes, panelDetail.timbre))}</p>
+                </div>
               </div>
               {panelDetail.commentaire && (
                 <div>
@@ -869,7 +962,18 @@ export default function AchatsPage() {
                   <p className="text-sm text-gray-600 whitespace-pre-wrap">{panelDetail.commentaire}</p>
                 </div>
               )}
-              <div className="flex gap-2 pt-2 border-t border-gray-100">
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => printFactureAchat({ ...panelDetail, timbre: panelDetail.timbre ?? 1 })}
+                  icon={<Printer className="w-4 h-4" />}
+                >
+                  Imprimer
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => void handleExportPdfAchat(panelDetail)} icon={<FileDown className="w-4 h-4" />}>
+                  PDF
+                </Button>
                 <Button size="sm" onClick={() => { openEdit(panelDetail); setPanelDetail(null) }} icon={<Pencil className="w-4 h-4" />}>
                   Modifier
                 </Button>

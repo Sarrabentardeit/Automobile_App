@@ -67,6 +67,13 @@ app.use((0, cors_1.default)({
     credentials: true
 }));
 app.use(express_1.default.json({ limit: '12mb' }));
+/** Évite cache navigateur / proxy sur les réponses JSON (un poste ne doit pas voir d’anciennes données). */
+app.use((req, res, next) => {
+    if (req.path.startsWith('/uploads'))
+        return next();
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    next();
+});
 app.use((0, morgan_1.default)('dev'));
 app.use('/uploads', (req, res, next) => {
     if (!canReadUploads(req))

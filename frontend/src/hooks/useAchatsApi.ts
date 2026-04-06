@@ -75,6 +75,7 @@ export function useAchatsApi() {
           numeroFactureFournisseur: f.numeroFactureFournisseur,
           modePaiement: f.modePaiement,
           commentaire: f.commentaire,
+          timbre: f.timbre ?? 1,
           statut: f.statut,
           paye: f.paye,
           lignes: f.lignes,

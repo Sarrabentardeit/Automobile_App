@@ -121,8 +121,12 @@ model ProduitStock {
   nom             String
   quantite        Int       @default(0)
   valeur_achat_ttc Float    @default(0)
+  /// Dernier prix d'achat unitaire TTC moyen connu (conservé quand quantité = 0 pour réassort / facturation)
+  dernier_prix_unitaire_ttc Float @default(0)
   categorie       String?   @default("")
-  prix_vente      Float?    // prix de vente conseillé
+  prix_vente      Float?    // prix de vente conseillé (souvent calculé : PA × (1 + marge %))
+  prix_achat_unitaire Float? // saisie catalogue (hors huiles)
+  marge_vente_pct Float?    // marge % sur prix d’achat (ex. 25 = +25 %)
   reference       String    @default("")
   unite           String    @default("unité")
   seuil_alerte    Int?
@@ -202,6 +206,7 @@ model Achat {
   fournisseur_nom           String       // dénormalisé pour affichage
   numero_facture_fournisseur String?    // n° facture du fournisseur
   mode_paiement             String?    // especes | virement | cheque | autre
+  timbre                    Float        @default(1) // droit de timbre (TTC), comme facture vente
   statut                    String     @default("brouillon") // brouillon | validee | payee
   paye                      Boolean    @default(false)
   commentaire               String?    // notes, pièces jointes (réf)

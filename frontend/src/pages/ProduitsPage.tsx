@@ -26,10 +26,12 @@ type FormProduit = {
   reference: string
   quantite: number
   unite: string
-  /** Valeur totale stock (TND) — saisie directe hors huiles */
+  /** Valeur totale stock (TND) — si pas de prix d’achat unitaire */
   valeurAchatTTC: number
-  /** Prix unitaire conseillé (huiles) ou optionnel */
+  /** Prix de vente (manuel si pas de PA ; sinon calculé à l’enregistrement) */
   prixVente?: number
+  prixAchatUnitaire?: number
+  margeVentePct?: number
   seuilAlerte?: number
   fluideType: HuileType
 }
@@ -43,9 +45,17 @@ function emptyForm(): FormProduit {
     unite: 'unité',
     valeurAchatTTC: 0,
     prixVente: undefined,
+    prixAchatUnitaire: undefined,
+    margeVentePct: undefined,
     seuilAlerte: undefined,
     fluideType: 'moteur',
   }
+}
+
+function calcPrixVenteDepuisMarge(prixAchat: number, margePct: number): number {
+  const pa = Math.max(0, prixAchat)
+  const m = Math.max(0, margePct)
+  return Math.round(pa * (1 + m / 100) * 100) / 100
 }
 
 export default function ProduitsPage() {
@@ -179,6 +189,18 @@ export default function ProduitsPage() {
     if (huile && qte > 0 && (prixV == null || Number.isNaN(prixV)) && val > 0) {
       prixV = Math.round((val / qte) * 100) / 100
     }
+    let pa = p.prixAchatUnitaire
+    if (!huile && pa == null && qte > 0 && val > 0) pa = val / qte
+    let marge = p.margeVentePct
+    if (
+      marge == null &&
+      pa != null &&
+      pa > 0 &&
+      p.prixVente != null &&
+      p.prixVente > 0
+    ) {
+      marge = Math.round((p.prixVente / pa - 1) * 10000) / 100
+    }
     setForm({
       categorie: p.categorie?.trim() || 'Pièces',
       nom: p.nom,
@@ -187,6 +209,8 @@ export default function ProduitsPage() {
       unite: p.unite ?? 'unité',
       valeurAchatTTC: val,
       prixVente: prixV,
+      prixAchatUnitaire: pa,
+      margeVentePct: marge,
       seuilAlerte: p.seuilAlerte,
       fluideType: normalizeFluideTypeForCategorie(p.categorie, p.fluideType),
     })
@@ -204,9 +228,24 @@ export default function ProduitsPage() {
     const qte = Math.max(0, form.quantite)
     const huile = isHuilesCategorieStock(form.categorie)
     let valeurAchatTTC = Math.max(0, form.valeurAchatTTC)
-    if (huile) {
-      const pu = form.prixVente ?? 0
-      valeurAchatTTC = Math.round(pu * qte * 100) / 100
+    let prixVenteOut = form.prixVente
+    let prixAchatOut: number | undefined
+    let margeOut: number | undefined
+
+    const pa = form.prixAchatUnitaire ?? 0
+    const m = form.margeVentePct ?? 0
+    if (pa > 0) {
+      prixAchatOut = pa
+      margeOut = m
+      prixVenteOut = calcPrixVenteDepuisMarge(pa, m)
+      valeurAchatTTC = qte > 0 ? Math.round(pa * qte * 100) / 100 : 0
+    } else {
+      prixAchatOut = undefined
+      margeOut = undefined
+      if (huile) {
+        const pu = form.prixVente ?? 0
+        valeurAchatTTC = Math.round(pu * qte * 100) / 100
+      }
     }
 
     const payload: Omit<ProduitStock, 'id'> = {
@@ -214,7 +253,9 @@ export default function ProduitsPage() {
       categorie: form.categorie.trim() || undefined,
       quantite: qte,
       valeurAchatTTC,
-      prixVente: form.prixVente,
+      prixVente: prixVenteOut,
+      prixAchatUnitaire: prixAchatOut,
+      margeVentePct: margeOut,
       reference: form.reference.trim(),
       unite: form.unite.trim() || 'unité',
       seuilAlerte: form.seuilAlerte,
@@ -275,6 +316,15 @@ export default function ProduitsPage() {
   const catTrim = form.categorie.trim()
   const isCustomCategorie =
     catTrim.length === 0 || !modalCategoryOptions.includes(catTrim)
+
+  const paNum = form.prixAchatUnitaire ?? 0
+  const margeNum = form.margeVentePct ?? 0
+  const prixVenteCalcule =
+    paNum > 0 ? calcPrixVenteDepuisMarge(paNum, margeNum) : null
+  const valeurStockDepuisPa =
+    paNum > 0 && form.quantite > 0
+      ? Math.round(paNum * form.quantite * 100) / 100
+      : null
 
   if (!user) return null
 
@@ -549,49 +599,179 @@ export default function ProduitsPage() {
                   ))}
                 </select>
               </div>
-              <Input
-                label="Prix unitaire (DT)"
-                type="number"
-                min={0}
-                step={0.1}
-                value={form.prixVente ?? ''}
-                onChange={e =>
-                  setForm(f => ({
-                    ...f,
-                    prixVente: e.target.value === '' ? undefined : Number(e.target.value) || 0,
-                  }))
-                }
-              />
-              <p className="text-xs text-gray-500">
-                Valeur stock estimée :{' '}
-                {((form.prixVente ?? 0) * form.quantite).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} TND
-              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input
+                  label="Prix d’achat unitaire (TND)"
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={form.prixAchatUnitaire ?? ''}
+                  onChange={e =>
+                    setForm(f => ({
+                      ...f,
+                      prixAchatUnitaire:
+                        e.target.value === '' ? undefined : Number(e.target.value) || 0,
+                    }))
+                  }
+                  placeholder="Saisie manuelle"
+                />
+                <Input
+                  label="Marge (%)"
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  value={form.margeVentePct ?? ''}
+                  onChange={e =>
+                    setForm(f => ({
+                      ...f,
+                      margeVentePct:
+                        e.target.value === '' ? undefined : Number(e.target.value) || 0,
+                    }))
+                  }
+                  placeholder="Saisie manuelle"
+                />
+              </div>
+              {prixVenteCalcule != null && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-3 space-y-1">
+                  <p className="text-xs font-medium text-amber-900/85">Prix de vente (calculé automatiquement)</p>
+                  <p className="text-lg font-semibold text-amber-950 tabular-nums">
+                    {prixVenteCalcule.toLocaleString('fr-FR', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}{' '}
+                    DT / {form.unite?.trim() || 'unité'}
+                  </p>
+                  <p className="text-xs text-amber-900/75">Prix d’achat × (1 + marge ÷ 100)</p>
+                </div>
+              )}
+              {paNum <= 0 ? (
+                <>
+                  <Input
+                    label="Prix unitaire de vente (DT)"
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    value={form.prixVente ?? ''}
+                    onChange={e =>
+                      setForm(f => ({
+                        ...f,
+                        prixVente: e.target.value === '' ? undefined : Number(e.target.value) || 0,
+                      }))
+                    }
+                  />
+                  <p className="text-xs text-gray-500">
+                    Valeur stock estimée :{' '}
+                    {((form.prixVente ?? 0) * form.quantite).toLocaleString('fr-FR', {
+                      maximumFractionDigits: 2,
+                    })}{' '}
+                    TND (quantité × prix de vente — sans prix d’achat renseigné)
+                  </p>
+                </>
+              ) : (
+                <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                  <p className="text-xs font-medium text-gray-600">Valeur stock estimée (TND)</p>
+                  <p className="text-base font-semibold text-gray-900 tabular-nums mt-0.5">
+                    {valeurStockDepuisPa != null
+                      ? valeurStockDepuisPa.toLocaleString('fr-FR', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })
+                      : '—'}{' '}
+                    <span className="text-sm font-normal text-gray-500">(quantité × prix d’achat)</span>
+                  </p>
+                </div>
+              )}
             </>
           ) : (
-            <Input
-              label="Valeur totale du stock (TND)"
-              type="number"
-              min={0}
-              step={0.01}
-              value={form.valeurAchatTTC}
-              onChange={e => setForm(f => ({ ...f, valeurAchatTTC: Number(e.target.value) || 0 }))}
-            />
-          )}
-
-          {!huileForm && (
-            <Input
-              label="Prix de vente conseillé (optionnel, DT)"
-              type="number"
-              min={0}
-              step={0.1}
-              value={form.prixVente ?? ''}
-              onChange={e =>
-                setForm(f => ({
-                  ...f,
-                  prixVente: e.target.value === '' ? undefined : Number(e.target.value) || 0,
-                }))
-              }
-            />
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input
+                  label="Prix d’achat unitaire (TND)"
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={form.prixAchatUnitaire ?? ''}
+                  onChange={e =>
+                    setForm(f => ({
+                      ...f,
+                      prixAchatUnitaire:
+                        e.target.value === '' ? undefined : Number(e.target.value) || 0,
+                    }))
+                  }
+                  placeholder="Saisie manuelle"
+                />
+                <Input
+                  label="Marge (%)"
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  value={form.margeVentePct ?? ''}
+                  onChange={e =>
+                    setForm(f => ({
+                      ...f,
+                      margeVentePct:
+                        e.target.value === '' ? undefined : Number(e.target.value) || 0,
+                    }))
+                  }
+                  placeholder="Saisie manuelle"
+                />
+              </div>
+              {prixVenteCalcule != null && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-3 space-y-1">
+                  <p className="text-xs font-medium text-amber-900/85">Prix de vente (calculé automatiquement)</p>
+                  <p className="text-lg font-semibold text-amber-950 tabular-nums">
+                    {prixVenteCalcule.toLocaleString('fr-FR', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}{' '}
+                    DT / {form.unite?.trim() || 'unité'}
+                  </p>
+                  <p className="text-xs text-amber-900/75">
+                    Prix d’achat × (1 + marge ÷ 100)
+                  </p>
+                </div>
+              )}
+              {paNum <= 0 ? (
+                <>
+                  <Input
+                    label="Valeur totale du stock (TND)"
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={form.valeurAchatTTC}
+                    onChange={e =>
+                      setForm(f => ({ ...f, valeurAchatTTC: Number(e.target.value) || 0 }))
+                    }
+                  />
+                  <Input
+                    label="Prix de vente conseillé (optionnel, DT)"
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    value={form.prixVente ?? ''}
+                    onChange={e =>
+                      setForm(f => ({
+                        ...f,
+                        prixVente: e.target.value === '' ? undefined : Number(e.target.value) || 0,
+                      }))
+                    }
+                  />
+                </>
+              ) : (
+                <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                  <p className="text-xs font-medium text-gray-600">Valeur totale du stock (TND)</p>
+                  <p className="text-base font-semibold text-gray-900 tabular-nums mt-0.5">
+                    {valeurStockDepuisPa != null
+                      ? valeurStockDepuisPa.toLocaleString('fr-FR', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })
+                      : '—'}{' '}
+                    <span className="text-sm font-normal text-gray-500">(quantité × prix d’achat)</span>
+                  </p>
+                </div>
+              )}
+            </>
           )}
 
           <Input

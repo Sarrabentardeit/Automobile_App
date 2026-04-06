@@ -1,4 +1,5 @@
-import type { Facture, LigneFacture } from '@/types'
+import type { Facture, FactureFournisseur, LigneFacture } from '@/types'
+import { MODE_PAIEMENT_OPTIONS } from '@/types'
 
 export function computeFactureTotals(lignes: LigneFacture[], timbre: number) {
   const htMainOeuvre = lignes
@@ -317,6 +318,245 @@ export async function exportFacturePdf(facture: Facture): Promise<void> {
     const y = 10
     pdf.addImage(imgData, 'JPEG', x, y, w, h)
     pdf.save(`Facture-${facture.numero.replace(/\//g, '-')}.pdf`)
+  } finally {
+    document.body.removeChild(iframe)
+  }
+}
+
+/** Lignes achat : prix unitaire = HT (comme produits facture vente). */
+export function computeFactureAchatTotals(lignes: { quantite: number; prixUnitaire: number }[], timbre: number) {
+  const totalHT = lignes.reduce((s, l) => s + l.quantite * l.prixUnitaire, 0)
+  const tva19 = totalHT * 0.19
+  const totalTTC = totalHT + tva19 + timbre
+  return { totalHT, tva19, depenses: 0, totalTTC }
+}
+
+function modePaiementAchatLabel(v: string) {
+  return MODE_PAIEMENT_OPTIONS.find(o => o.value === v)?.label ?? v
+}
+
+/** HTML facture d’achat — même gabarit visuel que la facture vente. */
+export function getFactureAchatPrintHtml(f: FactureFournisseur): string {
+  const timbre = f.timbre ?? 1
+  const { totalHT, tva19, depenses, totalTTC } = computeFactureAchatTotals(f.lignes, timbre)
+  const dateFormatted = new Date(f.date + 'T12:00:00').toLocaleDateString('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+
+  function escapeHtml(s: string) {
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+  }
+
+  const rowsProduits = f.lignes
+    .map(
+      l =>
+        `<tr><td>${l.quantite}</td><td>${escapeHtml(l.designation)}</td><td class="text-right">${l.prixUnitaire.toFixed(2)}</td><td class="text-right">${(l.quantite * l.prixUnitaire).toFixed(2)}</td></tr>`
+    )
+    .join('')
+
+  return `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Facture achat ${escapeHtml(f.numero)}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #111827; background: #e5e7eb; margin: 0; padding: 24px; }
+    .invoice-wrapper { max-width: 900px; margin: 0 auto; }
+    .invoice { background: #ffffff; border-radius: 12px; padding: 24px 28px 28px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12); }
+    .invoice-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; border-bottom: 2px solid #059669; padding-bottom: 16px; margin-bottom: 20px; }
+    .company-name { font-size: 18px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #059669; }
+    .company-line { font-size: 11px; color: #6b7280; margin-top: 4px; }
+    .invoice-title { font-size: 20px; font-weight: 700; text-align: right; color: #111827; letter-spacing: 0.08em; text-transform: uppercase; }
+    .invoice-meta { margin-top: 6px; font-size: 11px; color: #4b5563; text-align: right; }
+    .invoice-meta span.label { color: #6b7280; display: inline-block; min-width: 72px; }
+    .section { margin-bottom: 18px; }
+    .card { background: #f9fafb; border-radius: 10px; padding: 12px 14px; border: 1px solid #e5e7eb; }
+    .card-title { font-size: 11px; font-weight: 600; text-transform: uppercase; color: #6b7280; margin-bottom: 6px; }
+    .client-name { font-size: 13px; font-weight: 600; color: #111827; }
+    .client-line { font-size: 11px; color: #4b5563; margin-top: 2px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    thead th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; background: #f3f4f6; color: #6b7280; padding: 8px 10px; border-bottom: 1px solid #e5e7eb; text-align: left; }
+    tbody td { font-size: 11px; padding: 7px 10px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+    tbody tr.category-row td { background: #f9fafb; font-weight: 600; color: #4b5563; border-bottom-color: #e5e7eb; text-transform: uppercase; font-size: 10px; }
+    .text-right { text-align: right; }
+    .muted { color: #9ca3af; }
+    .totaux-wrapper { margin-top: 16px; display: flex; justify-content: flex-end; }
+    .totaux { width: 280px; border-collapse: collapse; font-size: 11px; }
+    .totaux td { padding: 5px 0; }
+    .totaux tr:not(:last-child) td { border-bottom: 1px solid #e5e7eb; }
+    .totaux .label { color: #4b5563; }
+    .totaux .value { text-align: right; font-variant-numeric: tabular-nums; }
+    .totaux .total-ttc-row td { padding-top: 9px; border-bottom: none; }
+    .totaux .total-ttc { font-size: 14px; font-weight: 700; color: #059669; }
+    .montant-lettres { margin-top: 18px; padding: 10px 12px; background: #ecfdf5; border-radius: 10px; border: 1px solid #bbf7d0; font-style: italic; font-size: 11px; color: #166534; }
+    .footer-note { margin-top: 16px; font-size: 10px; color: #9ca3af; text-align: right; }
+    @media print {
+      body { background: #ffffff; padding: 0; }
+      .invoice-wrapper { max-width: 100%; margin: 0; }
+      .invoice { box-shadow: none; border-radius: 0; padding: 16px 24px 24px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="invoice-wrapper">
+    <div class="invoice">
+      <div class="invoice-header">
+        <div>
+          <div class="company-name">EL MECANO GARAGE</div>
+          <div class="company-line">Matricule fiscale : 1864720/M</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="invoice-title">Facture d&apos;achat</div>
+          <div class="invoice-meta">
+            <div><span class="label">N° interne :</span> ${escapeHtml(f.numero)}</div>
+            <div><span class="label">Date :</span> ${dateFormatted}</div>
+            ${f.numeroFactureFournisseur ? `<div><span class="label">N° fact. fourn. :</span> ${escapeHtml(f.numeroFactureFournisseur)}</div>` : ''}
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="card">
+          <div class="card-title">Fournisseur</div>
+          <div class="client-name">${escapeHtml(f.fournisseurNom)}</div>
+          ${f.modePaiement ? `<div class="client-line">Mode de paiement : ${escapeHtml(modePaiementAchatLabel(f.modePaiement))}</div>` : ''}
+        </div>
+      </div>
+
+      <div class="section">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:8%;">Qté</th>
+              <th style="width:55%;">Désignation</th>
+              <th style="width:15%;" class="text-right">P.U. HT</th>
+              <th style="width:22%;" class="text-right">Total HT</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="category-row"><td colspan="4">Produits</td></tr>
+            ${
+              rowsProduits ||
+              '<tr><td colspan="4" class="muted">Aucune ligne</td></tr>'
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="totaux-wrapper">
+        <table class="totaux">
+          <tr>
+            <td class="label">Total HT</td>
+            <td class="value">${totalHT.toFixed(2)} DT</td>
+          </tr>
+          <tr>
+            <td class="label">TVA 19%</td>
+            <td class="value">${tva19.toFixed(2)} DT</td>
+          </tr>
+          <tr>
+            <td class="label">Dépenses</td>
+            <td class="value">${depenses.toFixed(2)} DT</td>
+          </tr>
+          <tr>
+            <td class="label">D. timbre</td>
+            <td class="value">${timbre.toFixed(2)} DT</td>
+          </tr>
+          <tr class="total-ttc-row">
+            <td class="label total-ttc">Total TTC</td>
+            <td class="value total-ttc">${totalTTC.toFixed(2)} DT</td>
+          </tr>
+        </table>
+      </div>
+
+      <div class="montant-lettres">
+        Arrêtée la présente facture à la somme de : <strong>${formatMontantEnLettres(totalTTC)}</strong>
+      </div>
+
+      <div class="footer-note">
+        Document d&apos;achat fournisseur — entrée stock après validation.
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim()
+}
+
+export function printFactureAchat(f: FactureFournisseur): void {
+  const html = getFactureAchatPrintHtml(f)
+  const win = window.open('', '_blank')
+  if (!win) return
+  win.document.write(html)
+  win.document.close()
+  win.focus()
+  setTimeout(() => {
+    win.print()
+    win.close()
+  }, 300)
+}
+
+/** Export PDF facture d’achat (même mécanisme que facture vente). */
+export async function exportFactureAchatPdf(f: FactureFournisseur): Promise<void> {
+  const [html2canvas, jspdfModule] = await Promise.all([import('html2canvas'), import('jspdf')])
+  const jsPDF = jspdfModule.default
+
+  const iframe = document.createElement('iframe')
+  iframe.style.position = 'fixed'
+  iframe.style.left = '0'
+  iframe.style.top = '0'
+  iframe.style.width = '800px'
+  iframe.style.height = '1123px'
+  iframe.style.opacity = '0'
+  iframe.style.pointerEvents = 'none'
+  iframe.style.zIndex = '-1'
+  document.body.appendChild(iframe)
+
+  const doc = iframe.contentDocument
+  if (!doc) {
+    document.body.removeChild(iframe)
+    throw new Error('Impossible de créer le document PDF')
+  }
+
+  doc.open()
+  doc.write(getFactureAchatPrintHtml(f))
+  doc.close()
+
+  const body = doc.body
+
+  await new Promise<void>(resolve => {
+    setTimeout(() => resolve(), 200)
+  })
+
+  try {
+    const canvas = await html2canvas.default(body, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+      windowWidth: 800,
+    })
+
+    const imgData = canvas.toDataURL('image/jpeg', 0.98)
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
+    const pdfW = pdf.internal.pageSize.getWidth()
+    const pdfH = pdf.internal.pageSize.getHeight()
+    const imgW = canvas.width
+    const imgH = canvas.height
+    const ratio = Math.min((pdfW - 20) / imgW, (pdfH - 20) / imgH) * 0.95
+    const w = imgW * ratio
+    const h = imgH * ratio
+    const x = (pdfW - w) / 2
+    const y = 10
+    pdf.addImage(imgData, 'JPEG', x, y, w, h)
+    pdf.save(`Facture-achat-${f.numero.replace(/\//g, '-')}.pdf`)
   } finally {
     document.body.removeChild(iframe)
   }

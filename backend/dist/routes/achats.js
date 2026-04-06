@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const prisma_1 = require("../lib/prisma");
 const auth_1 = require("../middleware/auth");
+const achatTotals_1 = require("../lib/achatTotals");
 const router = (0, express_1.Router)();
 const db = prisma_1.prisma;
 const STATUTS = ['brouillon', 'validee', 'payee'];
@@ -16,6 +17,7 @@ function toAchat(a) {
         numeroFactureFournisseur: a.numero_facture_fournisseur ?? '',
         modePaiement: a.mode_paiement ?? '',
         commentaire: a.commentaire ?? '',
+        timbre: typeof a.timbre === 'number' ? a.timbre : 1,
         statut: a.statut,
         paye: a.paye,
         lignes: a.lignes.map(l => ({
@@ -44,13 +46,16 @@ async function appliquerEntreeStock(lignes, numero, date) {
         const qte = Math.max(0, Math.floor(Number(l.quantite) || 0));
         if (qte <= 0)
             continue;
-        const valeurAjout = qte * (Number(l.prix_unitaire) || 0);
+        const valeurAjout = (0, achatTotals_1.valeurLigneStockTTC)(qte, Number(l.prix_unitaire) || 0);
+        const newQty = produit.quantite + qte;
+        const newVal = produit.valeur_achat_ttc + valeurAjout;
         await db.$transaction([
             db.produitStock.update({
                 where: { id: l.productId },
                 data: {
-                    quantite: produit.quantite + qte,
-                    valeur_achat_ttc: produit.valeur_achat_ttc + valeurAjout,
+                    quantite: newQty,
+                    valeur_achat_ttc: newVal,
+                    dernier_prix_unitaire_ttc: newQty > 0 ? newVal / newQty : produit.dernier_prix_unitaire_ttc ?? 0,
                 },
             }),
             db.mouvementStock.create({
@@ -149,6 +154,7 @@ router.post('/', (0, auth_1.authenticate)(), async (req, res) => {
             if (fournisseur)
                 fournisseurNom = fournisseur.nom;
         }
+        const timbre = body.timbre != null && !Number.isNaN(Number(body.timbre)) ? Number(body.timbre) : 1;
         const a = (await db.achat.create({
             data: {
                 numero,
@@ -158,6 +164,7 @@ router.post('/', (0, auth_1.authenticate)(), async (req, res) => {
                 numero_facture_fournisseur: (body.numeroFactureFournisseur ?? '').trim() || null,
                 mode_paiement: (body.modePaiement ?? '').trim() || null,
                 commentaire: (body.commentaire ?? '').trim() || null,
+                timbre,
                 statut,
                 paye: Boolean(body.paye),
                 lignes: {
@@ -233,6 +240,7 @@ router.put('/:id', (0, auth_1.authenticate)(), async (req, res) => {
                         ...(body.numeroFactureFournisseur !== undefined && { numero_facture_fournisseur: (body.numeroFactureFournisseur ?? '').trim() || null }),
                         ...(body.modePaiement !== undefined && { mode_paiement: (body.modePaiement ?? '').trim() || null }),
                         ...(body.commentaire !== undefined && { commentaire: (body.commentaire ?? '').trim() || null }),
+                        ...(body.timbre !== undefined && { timbre: Number(body.timbre) || 0 }),
                         ...(body.statut !== undefined && { statut: body.statut }),
                         ...(body.paye !== undefined && { paye: body.paye }),
                         lignes: { create: dataLignes },
@@ -255,6 +263,7 @@ router.put('/:id', (0, auth_1.authenticate)(), async (req, res) => {
                 ...(body.numeroFactureFournisseur !== undefined && { numero_facture_fournisseur: (body.numeroFactureFournisseur ?? '').trim() || null }),
                 ...(body.modePaiement !== undefined && { mode_paiement: (body.modePaiement ?? '').trim() || null }),
                 ...(body.commentaire !== undefined && { commentaire: (body.commentaire ?? '').trim() || null }),
+                ...(body.timbre !== undefined && { timbre: Number(body.timbre) || 0 }),
                 ...(body.statut !== undefined && { statut: body.statut }),
                 ...(body.paye !== undefined && { paye: body.paye }),
             },
