@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useStockGeneral } from '@/contexts/StockGeneralContext'
 import { useFacturation } from '@/contexts/FacturationContext'
+import { useAchats } from '@/contexts/AchatsContext'
 import { useToast } from '@/contexts/ToastContext'
 import type { ProduitStock } from '@/types'
 import { PRODUIT_CATEGORIES_PRESET, isLegacyHuilesLiquidesCombinedLabel } from '@/types'
@@ -14,6 +15,7 @@ import { Package, Plus, Search, Trash2, Layers, ShoppingCart, Pencil, AlertTrian
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { prixUnitaireStockAffiche } from '@/lib/stockUtils'
+import { computeFactureAchatTotals, computeFactureTotals } from '@/lib/factureUtils'
 
 function formatMontant(n: number): string {
   return n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TND'
@@ -25,7 +27,8 @@ export default function StockGeneralPage() {
   const navigate = useNavigate()
   const { user, permissions } = useAuth()
   const { produits, mouvementsStock, loading, updateProduit, removeProduit, refetch } = useStockGeneral()
-  const { factures } = useFacturation()
+  const { factures: facturesVente } = useFacturation()
+  const { factures: facturesAchat } = useAchats()
   const toast = useToast()
   const [search, setSearch] = useState('')
   const [filterCategorie, setFilterCategorie] = useState<string>('')
@@ -120,7 +123,34 @@ export default function StockGeneralPage() {
     return { from, to }
   }, [totalFilteredCount, pageStock])
 
-  const totalValeurStock = useMemo(() => filteredProduits.reduce((s, p) => s + p.valeurAchatTTC, 0), [filteredProduits])
+  const totalAchatGlobal = useMemo(
+    () =>
+      (facturesAchat ?? []).reduce(
+        (sum, f) => sum + computeFactureAchatTotals(f.lignes, f.timbre ?? 1).totalTTC,
+        0
+      ),
+    [facturesAchat]
+  )
+
+  const totalVenduGlobal = useMemo(
+    () =>
+      (facturesVente ?? []).reduce((sum, f) => {
+        if (f.statut === 'annulee') return sum
+        return sum + computeFactureTotals(f.lignes, f.timbre ?? 1).totalTTC
+      }, 0),
+    [facturesVente]
+  )
+
+  const expectedRevenus = useMemo(
+    () =>
+      produits.reduce((sum, p) => {
+        const qte = p.quantite ?? 0
+        const pv = p.prixVente ?? 0
+        if (qte <= 0 || pv <= 0) return sum
+        return sum + qte * pv
+      }, 0),
+    [produits]
+  )
 
   const derniersMouvements = useMemo(() => [...(mouvementsStock ?? [])].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id).slice(0, 15), [mouvementsStock])
 
@@ -154,7 +184,7 @@ export default function StockGeneralPage() {
 
   const produitsPlusVendus = useMemo(() => {
     const map = new Map<number, { nom: string; qte: number }>()
-    for (const f of factures ?? []) {
+    for (const f of facturesVente ?? []) {
       if (f.statut === 'annulee') continue
       const [y, m] = f.date.split('-')
       if (`${y}-${m}` !== ceMois) continue
@@ -167,7 +197,7 @@ export default function StockGeneralPage() {
       }
     }
     return [...map.entries()].map(([id, v]) => ({ productId: id, ...v })).sort((a, b) => b.qte - a.qte).slice(0, 5)
-  }, [factures, ceMois])
+  }, [facturesVente, ceMois])
 
   const openEditProduit = (p: ProduitStock, e?: React.MouseEvent) => {
     e?.stopPropagation()
@@ -336,21 +366,42 @@ export default function StockGeneralPage() {
         </Card>
       )}
 
-      {/* Valeur totale — compact */}
-      <Card padding="sm" className="mb-4 bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100">
-        <div className="flex items-center justify-between">
+      {/* KPI financiers globaux */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+        <Card padding="sm" className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
-              <Layers className="w-5 h-5 text-amber-600" />
+              <ShoppingCart className="w-5 h-5 text-amber-600" />
             </div>
             <div>
-              <p className="text-xs font-medium text-amber-700/80">Valeur totale du stock</p>
-              <p className="text-lg sm:text-xl font-bold text-gray-900 tabular-nums">{formatMontant(totalValeurStock)}</p>
+              <p className="text-xs font-medium text-amber-700/80">Valeur achat total</p>
+              <p className="text-lg font-bold text-gray-900 tabular-nums">{formatMontant(totalAchatGlobal)}</p>
             </div>
           </div>
-          <p className="text-xs text-gray-500 hidden sm:block">Entrées : Achats · Sorties : Facturation vente</p>
-        </div>
-      </Card>
+        </Card>
+        <Card padding="sm" className="bg-gradient-to-br from-emerald-50 to-green-50 border border-emerald-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+              <TrendingUp className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-emerald-700/80">Valeur vendu total</p>
+              <p className="text-lg font-bold text-gray-900 tabular-nums">{formatMontant(totalVenduGlobal)}</p>
+            </div>
+          </div>
+        </Card>
+        <Card padding="sm" className="bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
+              <Layers className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-blue-700/80">Expected revenus</p>
+              <p className="text-lg font-bold text-gray-900 tabular-nums">{formatMontant(expectedRevenus)}</p>
+            </div>
+          </div>
+        </Card>
+      </div>
 
       {/* Recherche + Catégorie + Tri */}
       <div className="mb-4 flex flex-col gap-3">
