@@ -74,10 +74,6 @@ app.use((req, res, next) => {
   next()
 })
 app.use(morgan('dev'))
-app.use('/uploads', (req, res, next) => {
-  if (!canReadUploads(req)) return res.status(401).json({ error: 'Unauthorized file access' })
-  return next()
-})
 app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')))
 
 app.get('/health', (_req, res) => {

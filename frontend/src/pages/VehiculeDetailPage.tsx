@@ -194,9 +194,13 @@ export default function VehiculeDetailPage() {
               {vehiculeImages.map(img => (
                 <div key={img.id} className="rounded-lg border border-gray-100 overflow-hidden bg-white">
                   <img
-                    src={`${import.meta.env.VITE_API_URL ?? 'http://localhost:4000'}${img.url_path}${accessToken ? `?accessToken=${encodeURIComponent(accessToken)}` : ''}`}
+                    src={`${import.meta.env.VITE_API_URL ?? 'http://localhost:4000'}${img.url_path}`}
                     alt={img.note || img.original_name || `Photo ${img.id}`}
-                    className="w-full h-28 object-cover"
+                    loading="lazy"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/vite.svg'; // fallback
+                    }}
+                    className="w-full h-32 md:h-40 object-cover rounded-xl shadow-sm hover:scale-[1.02] transition-transform duration-200 group-hover:scale-[1.02]"
                   />
                   <div className="p-2 space-y-1">
                     <p className="text-[11px] text-gray-700 truncate" title={img.note || img.original_name}>
