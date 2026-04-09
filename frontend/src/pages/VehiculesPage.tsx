@@ -132,7 +132,7 @@ export default function VehiculesPage() {
   const myVehicules = permissions.vehiculeVisibility === 'all'
     ? vehicules
     : permissions.vehiculeVisibility === 'own'
-      ? vehicules.filter(v => v.technicien_id === user.id)
+    ? vehicules.filter(v => v.technicien_id === user.id || v.responsable_id === user.id) // ✅
       : []
 
   const etats: EtatVehicule[] = ['orange', 'mauve', 'bleu', 'rouge', 'vert', 'retour']
@@ -380,46 +380,49 @@ export default function VehiculesPage() {
       {/* Add/Edit Form Modal */}
       {showAddForm && (
         <VehiculeForm
-          vehicule={editingVehicule}
-          onClose={() => { setShowAddForm(false); setEditingVehicule(null) }}
-          onSubmit={async (data, images) => {
-            const techId = data.technicien_id
-            try {
-              let savedVehiculeId: number | null = null
-              if (editingVehicule) {
-                const updated = await editVehicule(editingVehicule.id, data)
-                savedVehiculeId = updated.id
-                if (techId) addNotification(techId, `Vous avez été assigné au véhicule ${data.modele} ${data.immatriculation ? `(${data.immatriculation})` : ''} - ${data.defaut}`)
-                toast.success('Véhicule modifié avec succès')
-              } else {
-                const created = await addVehicule(data, user.id, user.nom_complet)
-                savedVehiculeId = created.id
-                if (techId) addNotification(techId, `Nouveau véhicule assigné : ${data.modele} ${data.immatriculation ? `(${data.immatriculation})` : ''} - ${data.defaut}`)
-                toast.success('Véhicule ajouté avec succès')
-              }
-              if (savedVehiculeId && images.length > 0) {
-                let failed = 0
-                for (const image of images) {
-                  try {
-                    await uploadVehiculeImage(savedVehiculeId, image)
-                  } catch {
-                    failed += 1
-                  }
-                }
-                if (failed > 0) {
-                  toast.error(`${failed} photo(s) n'ont pas pu être envoyées.`)
-                } else {
-                  toast.success(`${images.length} photo(s) enregistrée(s).`)
-                }
-              }
-              setShowAddForm(false)
-              setEditingVehicule(null)
-              loadVehicules()
-            } catch (err) {
-              toast.error(err instanceof Error ? err.message : 'Erreur')
-            }
-          }}
-        />
+  vehicule={editingVehicule}
+  onClose={() => { setShowAddForm(false); setEditingVehicule(null) }}
+  onSubmit={async (data, images) => {
+    const techId = data.technicien_id
+    const respId = data.responsable_id
+    try {
+      let savedVehiculeId: number | null = null
+      if (editingVehicule) {
+        const updated = await editVehicule(editingVehicule.id, data)
+        savedVehiculeId = updated.id
+        if (techId) addNotification(techId, `Vous avez été assigné au véhicule ${data.modele} ${data.immatriculation ? `(${data.immatriculation})` : ''} - ${data.defaut}`)
+        if (respId && respId !== techId) addNotification(respId, `Vous avez été assigné comme responsable : ${data.modele} ${data.immatriculation ? `(${data.immatriculation})` : ''} - ${data.defaut}`)
+        toast.success('Véhicule modifié avec succès')
+      } else {
+        const created = await addVehicule(data, user.id, user.nom_complet)
+        savedVehiculeId = created.id
+        if (techId) addNotification(techId, `Nouveau véhicule assigné : ${data.modele} ${data.immatriculation ? `(${data.immatriculation})` : ''} - ${data.defaut}`)
+        if (respId && respId !== techId) addNotification(respId, `Vous avez été assigné comme responsable : ${data.modele} ${data.immatriculation ? `(${data.immatriculation})` : ''} - ${data.defaut}`)
+        toast.success('Véhicule ajouté avec succès')
+      }
+      if (savedVehiculeId && images.length > 0) {
+        let failed = 0
+        for (const image of images) {
+          try {
+            await uploadVehiculeImage(savedVehiculeId, image)
+          } catch {
+            failed += 1
+          }
+        }
+        if (failed > 0) {
+          toast.error(`${failed} photo(s) n'ont pas pu être envoyées.`)
+        } else {
+          toast.success(`${images.length} photo(s) enregistrée(s).`)
+        }
+      }
+      setShowAddForm(false)
+      setEditingVehicule(null)
+      loadVehicules()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur')
+    }
+  }}
+/>
       )}
 
       <VehiculeFicheFinanciereModal

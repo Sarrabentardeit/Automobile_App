@@ -210,10 +210,17 @@ function buildVehiculesWhere(query: {
   if (includeEtat && query.etat && ETATS.includes(query.etat as (typeof ETATS)[number])) {
     where.etat_actuel = query.etat
   }
+
   if (query.technicien_id) {
     const tid = parseInt(query.technicien_id, 10)
-    if (!isNaN(tid)) where.technicien_id = tid
+    if (!isNaN(tid)) {
+      where.OR = [
+        { technicien_id: tid },
+        { responsable_id: tid }
+      ]
+    }
   }
+
   if (query.type && TYPES.includes(query.type as (typeof TYPES)[number])) {
     where.type = query.type
   }

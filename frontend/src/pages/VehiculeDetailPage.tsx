@@ -289,7 +289,9 @@ setCurrentImageUrl(`/api${img.url_path}`);
                 else toast.success(`${images.length} photo(s) ajoutée(s).`)
               }
               const techId = data.technicien_id
+              const respId = data.responsable_id
               if (techId) addNotification(techId, `Vous avez été assigné au véhicule ${data.modele ?? vehicule.modele} ${(data.immatriculation ?? vehicule.immatriculation) ? `(${data.immatriculation ?? vehicule.immatriculation})` : ''} - ${data.defaut ?? vehicule.defaut}`)
+              if (respId && respId !== techId) addNotification(respId, `Vous avez été assigné en tant que responsable au véhicule ${data.modele ?? vehicule.modele} ${(data.immatriculation ?? vehicule.immatriculation) ? `(${data.immatriculation ?? vehicule.immatriculation})` : ''} - ${data.defaut ?? vehicule.defaut}`)
               toast.success('Véhicule modifié avec succès')
               setShowEdit(false)
             } catch (err) {

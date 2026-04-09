@@ -152,11 +152,18 @@ export function useVehicules() {
 
   useEffect(() => {
     const ownOnly = user?.permissions?.vehiculeVisibility === 'own'
+    const filterParam = ownOnly && user ? { 
+      OR: [
+        { technicien_id: user.id },
+        { responsable_id: user.id }
+      ]
+    } : {}
     fetchVehicules({
       page: 1,
       limit: 20,
-      ...(ownOnly && user ? { technicien_id: user.id } : {}),
+      ...filterParam,
     })
+
     fetchStats()
     fetchDashboardSummary()
   }, [fetchVehicules, fetchStats, fetchDashboardSummary, user])
