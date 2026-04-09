@@ -66,7 +66,7 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
   const [imageNote, setImageNote] = useState('')
 
   const techniciens = users.filter(u => u.statut === 'actif' && u.permissions.canChangeEtat && u.permissions.vehiculeVisibility === 'own')
-  const responsables = users.filter(u => u.statut === 'actif' && u.permissions.canAssignTechnicien)
+const responsables = users.filter(u => u.statut === 'actif' && (u.role === 'admin' || u.role === 'responsable' || u.role === 'technicien'))
 
   const update = (field: keyof VehiculeFormData, value: unknown) => {
     setForm(prev => ({ ...prev, [field]: value }))

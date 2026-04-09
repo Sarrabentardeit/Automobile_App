@@ -25,7 +25,6 @@ export default function ChangeEtatModal({ vehicule, onClose, onConfirm }: Props)
 
   const handleNext = () => {
     if (!selected) return setError('Choisissez un nouvel état')
-    if (!commentaire.trim()) return setError('Le commentaire est obligatoire')
     setError('')
     setStep('confirm')
   }
@@ -94,7 +93,7 @@ export default function ChangeEtatModal({ vehicule, onClose, onConfirm }: Props)
           </div>
 
           {/* Comment */}
-          <Textarea id="commentaire" label="Commentaire" required rows={2}
+          <Textarea id="commentaire" label="Commentaire" rows={2}
             value={commentaire} onChange={e => { setCommentaire(e.target.value); setError('') }}
             placeholder="Justification du changement..."
           />
