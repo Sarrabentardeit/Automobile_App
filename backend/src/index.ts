@@ -74,8 +74,7 @@ app.use((req, res, next) => {
   next()
 })
 app.use(morgan('dev'))
-app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')))
-
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', env: env.NODE_ENV })
 })

@@ -196,11 +196,11 @@ export default function VehiculeDetailPage() {
               {vehiculeImages.map(img => (
                 <div key={img.id} className="rounded-lg border border-gray-100 overflow-hidden bg-white cursor-pointer group">
                   <img
-                    src={`${import.meta.env.VITE_API_URL ?? 'http://localhost:4000'}${img.url_path}`}
+src={`/api${img.url_path}`}
                     alt={img.note || img.original_name || `Photo ${img.id}`}
                     loading="lazy"
                     onClick={() => {
-                      setCurrentImageUrl(`${import.meta.env.VITE_API_URL ?? 'http://localhost:4000'}${img.url_path}`);
+setCurrentImageUrl(`/api${img.url_path}`);
                       setShowImageModal(true);
                     }}
                     className="w-full h-32 md:h-40 object-cover rounded-xl shadow-sm hover:scale-[1.02] transition-transform duration-200 cursor-pointer"
