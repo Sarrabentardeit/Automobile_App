@@ -38,6 +38,8 @@ export default function VehiculeDetailPage() {
   const [showChangeEtat, setShowChangeEtat] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [loadingDetail, setLoadingDetail] = useState(false)
+  const [showImageModal, setShowImageModal] = useState(false)
+  const [currentImageUrl, setCurrentImageUrl] = useState('')
 
   const vehiculeId = Number(id)
   let vehicule = getVehicule(vehiculeId)
@@ -190,17 +192,19 @@ export default function VehiculeDetailPage() {
           {vehiculeImages.length === 0 ? (
             <p className="text-sm text-gray-500">Aucune photo enregistrée pour ce véhicule.</p>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+            <div key={vehiculeId} className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
               {vehiculeImages.map(img => (
-                <div key={img.id} className="rounded-lg border border-gray-100 overflow-hidden bg-white">
+                <div key={img.id} className="rounded-lg border border-gray-100 overflow-hidden bg-white cursor-pointer group">
                   <img
                     src={`${import.meta.env.VITE_API_URL ?? 'http://localhost:4000'}${img.url_path}`}
                     alt={img.note || img.original_name || `Photo ${img.id}`}
                     loading="lazy"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = '/vite.svg'; // fallback
+                    onClick={() => {
+                      setCurrentImageUrl(`${import.meta.env.VITE_API_URL ?? 'http://localhost:4000'}${img.url_path}`);
+                      setShowImageModal(true);
                     }}
-                    className="w-full h-32 md:h-40 object-cover rounded-xl shadow-sm hover:scale-[1.02] transition-transform duration-200 group-hover:scale-[1.02]"
+                    className="w-full h-32 md:h-40 object-cover rounded-xl shadow-sm hover:scale-[1.02] transition-transform duration-200 cursor-pointer"
+                    title="Cliquez pour agrandir"
                   />
                   <div className="p-2 space-y-1">
                     <p className="text-[11px] text-gray-700 truncate" title={img.note || img.original_name}>
@@ -210,7 +214,8 @@ export default function VehiculeDetailPage() {
                     {permissions.canEditVehicule && (
                       <button
                         type="button"
-                        onClick={async () => {
+                        onClick={async (e) => {
+                          e.stopPropagation();
                           const ok = await deleteVehiculeImage(vehiculeId, img.id)
                           if (ok) toast.success('Photo supprimée')
                           else toast.error('Suppression impossible')
@@ -228,6 +233,26 @@ export default function VehiculeDetailPage() {
           )}
         </Card>
       </div>
+
+      {showImageModal && (
+        <div 
+          className="fixed inset-0 z-[1000] bg-black/95 flex items-center justify-center p-4"
+          onClick={() => setShowImageModal(false)}
+        >
+          <button 
+            className="absolute top-6 right-6 text-white text-2xl hover:text-gray-300 z-[1001]"
+            onClick={() => setShowImageModal(false)}
+          >
+            ×
+          </button>
+          <img
+            src={currentImageUrl}
+            alt="Image plein écran"
+            className="max-h-screen max-w-screen object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
 
       {/* Modals */}
       {showChangeEtat && (
