@@ -835,6 +835,13 @@ export interface DailyChecklistData {
   sections: ChecklistSection[]
 }
 
+/** Réponse GET `/checklists/admin/templates` ; PUT peut n’envoyer qu’un sous-ensemble de profils dans `templates`. */
+export interface ChecklistTemplatesAdminPayload {
+  effective: Record<ChecklistRole, DailyChecklistData>
+  defaults: Record<ChecklistRole, DailyChecklistData>
+  usingCustom: Record<ChecklistRole, boolean>
+}
+
 export interface DailyChecklist {
   id: number
   userId: number

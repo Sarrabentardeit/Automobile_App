@@ -40,6 +40,15 @@ function roundMoney(n: number): number {
 }
 
 type Tab = 'all' | 'in' | 'out'
+type MovementView = 'liste' | 'jour'
+type MovementDisplayValue = 'liste-all' | 'liste-in' | 'liste-out' | 'jour'
+
+function movementDisplayValue(view: MovementView, t: Tab): MovementDisplayValue {
+  if (view === 'jour') return 'jour'
+  if (t === 'in') return 'liste-in'
+  if (t === 'out') return 'liste-out'
+  return 'liste-all'
+}
 
 export default function MoneyPage() {
   const { permissions, getAccessToken } = useAuth()
@@ -49,6 +58,7 @@ export default function MoneyPage() {
     return { year: now.getFullYear(), month: now.getMonth() + 1 }
   })
   const [tab, setTab] = useState<Tab>('all')
+  const [movementView, setMovementView] = useState<MovementView>('liste')
   const { ins, outs, loading, addIn, updateIn, removeIn, addOut, updateOut, removeOut } = useMoney()
   const toast = useToast()
   const { charges, totalCharges } = useCharges()
@@ -407,6 +417,28 @@ export default function MoneyPage() {
     return activity
   }, [activity, tab])
 
+  const dailySummary = useMemo(() => {
+    const byDay = new Map<string, { in: number; out: number }>()
+    const bump = (date: string, field: 'in' | 'out', amount: number) => {
+      const cur = byDay.get(date) ?? { in: 0, out: 0 }
+      cur[field] += amount
+      byDay.set(date, cur)
+    }
+    filteredIns.forEach(r => bump(r.date, 'in', r.amount))
+    filteredOuts.forEach(r => bump(r.date, 'out', r.amount))
+    if (totalCharges > 0) {
+      bump(`${monthStr}-01`, 'out', totalCharges)
+    }
+    return Array.from(byDay.entries())
+      .map(([date, v]) => ({
+        date,
+        totalIn: roundMoney(v.in),
+        totalOut: roundMoney(v.out),
+        net: roundMoney(v.in - v.out),
+      }))
+      .sort((a, b) => b.date.localeCompare(a.date))
+  }, [filteredIns, filteredOuts, totalCharges, monthStr])
+
   const SectionTitle = ({ children }: { children: ReactNode }) => (
     <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">{children}</h2>
   )
@@ -546,21 +578,32 @@ export default function MoneyPage() {
       <section>
         <SectionTitle>Mouvements</SectionTitle>
         <Card padding="none">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 border-b border-gray-100">
-            <div className="inline-flex p-1 rounded-lg bg-gray-100">
-              {(['all', 'in', 'out'] as const).map(t => (
-                <button
-                  key={t}
-                  onClick={() => setTab(t)}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                    tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  {t === 'all' ? 'Tout' : t === 'in' ? 'Entrées' : 'Sorties'}
-                </button>
-              ))}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border-b border-gray-100">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <label htmlFor="money-mouvements-affichage" className="text-xs text-gray-500 shrink-0">
+                Affichage
+              </label>
+              <select
+                id="money-mouvements-affichage"
+                value={movementDisplayValue(movementView, tab)}
+                onChange={e => {
+                  const v = e.target.value as MovementDisplayValue
+                  if (v === 'jour') {
+                    setMovementView('jour')
+                    return
+                  }
+                  setMovementView('liste')
+                  setTab(v === 'liste-in' ? 'in' : v === 'liste-out' ? 'out' : 'all')
+                }}
+                className="min-w-0 flex-1 max-w-[min(100%,20rem)] text-sm text-gray-900 font-medium border border-gray-200 rounded-lg px-3 py-2 bg-white shadow-sm outline-none transition-colors hover:border-gray-300 focus:ring-2 focus:ring-orange-500/30 focus:border-orange-400 cursor-pointer"
+              >
+                <option value="liste-all">Liste détaillée — tout</option>
+                <option value="liste-in">Liste détaillée — entrées</option>
+                <option value="liste-out">Liste détaillée — sorties</option>
+                <option value="jour">Synthèse par jour</option>
+              </select>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 sm:flex-shrink-0">
               <Button size="sm" variant="outline" onClick={openAddOut}>Sortie</Button>
               <Button size="sm" onClick={openAddIn} icon={<Plus className="w-4 h-4" />}>Entrée</Button>
             </div>
@@ -570,6 +613,54 @@ export default function MoneyPage() {
               <div className="text-center py-12">
                 <p className="text-gray-500 font-medium">Chargement des mouvements...</p>
               </div>
+            ) : movementView === 'jour' ? (
+              dailySummary.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-3">
+                    <Sparkles className="w-6 h-6 text-gray-400" />
+                  </div>
+                  <p className="text-gray-500 font-medium">Aucun mouvement ce mois</p>
+                  <p className="text-sm text-gray-400 mt-1">Ajoutez une entrée ou une sortie</p>
+                  <div className="flex justify-center gap-2 mt-4">
+                    <Button size="sm" variant="outline" onClick={openAddOut}>Sortie</Button>
+                    <Button size="sm" onClick={openAddIn} icon={<Plus className="w-4 h-4" />}>Entrée</Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="overflow-x-auto -mx-2 px-2">
+                    <table className="w-full text-sm min-w-[320px]">
+                      <thead>
+                        <tr className="text-left text-gray-500 border-b border-gray-100">
+                          <th className="pb-2 pr-3 font-semibold">Jour</th>
+                          <th className="pb-2 pr-3 font-semibold text-right tabular-nums">Entrées</th>
+                          <th className="pb-2 pr-3 font-semibold text-right tabular-nums">Sorties</th>
+                          <th className="pb-2 font-semibold text-right tabular-nums">Net</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dailySummary.map(row => (
+                          <tr key={row.date} className="border-b border-gray-50 last:border-0">
+                            <td className="py-2.5 pr-3 text-gray-900 whitespace-nowrap">{formatDate(row.date)}</td>
+                            <td className="py-2.5 pr-3 text-right tabular-nums text-emerald-600 font-medium">
+                              {row.totalIn > 0 ? formatAmount(row.totalIn) : '—'}
+                            </td>
+                            <td className="py-2.5 pr-3 text-right tabular-nums text-orange-600 font-medium">
+                              {row.totalOut > 0 ? formatAmount(row.totalOut) : '—'}
+                            </td>
+                            <td className={`py-2.5 text-right tabular-nums font-semibold ${row.net >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                              {row.net >= 0 ? '+' : '−'}{formatAmount(Math.abs(row.net))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {totalCharges > 0 && (
+                    <p className="text-xs text-gray-400">Les charges fixes du mois sont regroupées sur le 1er, comme dans la liste détaillée.</p>
+                  )}
+                </div>
+              )
             ) : filteredActivity.length === 0 ? (
               <div className="text-center py-12">
                 <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-3">

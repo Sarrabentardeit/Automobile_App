@@ -106,6 +106,76 @@ function createSection(id: string, title: string, labels: string[]): ChecklistSe
   }
 }
 
+const CHECKLIST_TEMPLATES_KEY = 'checklist_templates'
+type ChecklistRoleKey = 'chef_atelier' | 'coordinateur' | 'technicien'
+const CHECKLIST_ROLES: ChecklistRoleKey[] = ['chef_atelier', 'coordinateur', 'technicien']
+
+function resetAllTodo(data: ChecklistData): ChecklistData {
+  return {
+    version: 1,
+    sections: data.sections.map(section => ({
+      ...section,
+      items: section.items.map(item => ({
+        ...item,
+        status: 'todo' as const,
+        comment: '',
+      })),
+    })),
+  }
+}
+
+async function loadRawTemplateStore(): Promise<Record<string, unknown> | null> {
+  const row = await db.appSetting.findUnique({ where: { key: CHECKLIST_TEMPLATES_KEY } })
+  const v = row?.value
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  return v as Record<string, unknown>
+}
+
+async function loadTemplateStore(): Promise<Partial<Record<ChecklistRoleKey, ChecklistData>> | null> {
+  const raw = await loadRawTemplateStore()
+  if (!raw) return null
+  const out: Partial<Record<ChecklistRoleKey, ChecklistData>> = {}
+  for (const r of CHECKLIST_ROLES) {
+    const part = raw[r]
+    if (part) {
+      const normalized = normalizeData(part, r)
+      if (normalized.sections.length > 0) out[r] = resetAllTodo(normalized)
+    }
+  }
+  return Object.keys(out).length ? out : null
+}
+
+function effectiveTemplateForRole(
+  role: ChecklistRoleKey,
+  store: Partial<Record<ChecklistRoleKey, ChecklistData>> | null,
+): ChecklistData {
+  const custom = store?.[role]
+  if (custom && custom.sections.length > 0) return custom
+  return createTemplate(role)
+}
+
+function validateAdminTemplatePayload(data: unknown, role: ChecklistRoleKey): ChecklistData | null {
+  const normalized = normalizeData(data ?? {}, role)
+  if (normalized.sections.length === 0) return null
+  if (normalized.sections.length > 25) return null
+  let totalItems = 0
+  for (const s of normalized.sections) {
+    if (!String(s.title ?? '').trim()) return null
+    if (s.items.length === 0 || s.items.length > 80) return null
+    for (const it of s.items) {
+      if (!String(it.label ?? '').trim()) return null
+      if (it.label.length > 600) return null
+      totalItems += 1
+    }
+  }
+  if (totalItems > 300) return null
+  return resetAllTodo(normalized)
+}
+
+function isChecklistAdmin(req: AuthRequest): boolean {
+  return (req.user?.role ?? '').toLowerCase() === 'admin'
+}
+
 function createTemplate(role: 'chef_atelier' | 'coordinateur' | 'technicien'): ChecklistData {
   if (role === 'chef_atelier') {
     return {
@@ -217,6 +287,63 @@ function normalizeData(data: unknown, fallbackRole: 'chef_atelier' | 'coordinate
       }
     })
   return { version: 1, sections }
+}
+
+function toChecklistRoleKey(role: string): ChecklistRoleKey {
+  const r = String(role ?? '').toLowerCase()
+  if (r === 'chef_atelier' || r === 'coordinateur' || r === 'technicien') return r
+  return 'technicien'
+}
+
+function checklistsDataEqual(a: ChecklistData, b: ChecklistData): boolean {
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
+/**
+ * Structure et libellés = modèle courant ; statut / commentaire repris si même id de section et de tâche.
+ * Nouvelles tâches → todo ; tâches supprimées du modèle → absentes du résultat.
+ */
+function reconcileSavedWithTemplate(saved: ChecklistData, template: ChecklistData): ChecklistData {
+  const savedSectionsById = new Map(saved.sections.map(s => [s.id, s]))
+  const sections: ChecklistSection[] = template.sections.map(ts => {
+    const oldSec = savedSectionsById.get(ts.id)
+    const oldItemsById = oldSec ? new Map(oldSec.items.map(i => [i.id, i])) : new Map<string, ChecklistItem>()
+    const items: ChecklistItem[] = ts.items.map(ti => {
+      const old = oldItemsById.get(ti.id)
+      let status: ChecklistStatus = 'todo'
+      if (old && (old.status === 'done' || old.status === 'na' || old.status === 'todo')) status = old.status
+      const comment = old && typeof old.comment === 'string' ? old.comment : ''
+      return {
+        id: ti.id,
+        label: ti.label,
+        status,
+        comment,
+      }
+    })
+    return { id: ts.id, title: ts.title, items }
+  })
+  return { version: 1, sections }
+}
+
+async function syncChecklistRowWithEffectiveTemplate(
+  checklist: any,
+  templateStore: Awaited<ReturnType<typeof loadTemplateStore>>,
+): Promise<any> {
+  const st = checklist.status as ChecklistWorkflow
+  if (st !== 'draft' && st !== 'rejected') return checklist
+  const roleKey = toChecklistRoleKey(String(checklist.role))
+  const template = effectiveTemplateForRole(roleKey, templateStore)
+  const saved = normalizeData(checklist.data, roleKey)
+  const reconciled = reconcileSavedWithTemplate(saved, template)
+  if (checklistsDataEqual(saved, reconciled)) return checklist
+  await db.dailyChecklist.update({
+    where: { id: checklist.id },
+    data: { data: reconciled as object },
+  })
+  return await db.dailyChecklist.findUnique({
+    where: { id: checklist.id },
+    include: { user: true, validator: true },
+  })
 }
 
 function mapChecklist(row: any) {
@@ -335,6 +462,107 @@ function canReadChecklist(user: NonNullable<AuthRequest['user']>, checklistUserI
 
 router.use(authenticate())
 
+router.get('/admin/templates', async (req: AuthRequest, res) => {
+  try {
+    if (!ensureChecklistModel(res)) return
+    if (!isChecklistAdmin(req)) return res.status(403).json({ error: 'Réservé aux administrateurs' })
+    const store = await loadTemplateStore()
+    const effective = Object.fromEntries(
+      CHECKLIST_ROLES.map(r => [r, effectiveTemplateForRole(r, store)]),
+    ) as Record<ChecklistRoleKey, ChecklistData>
+    const defaults = Object.fromEntries(CHECKLIST_ROLES.map(r => [r, createTemplate(r)])) as Record<
+      ChecklistRoleKey,
+      ChecklistData
+    >
+    const usingCustom = Object.fromEntries(CHECKLIST_ROLES.map(r => [r, Boolean(store?.[r])])) as Record<
+      ChecklistRoleKey,
+      boolean
+    >
+    return res.json({ effective, defaults, usingCustom })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+router.put('/admin/templates', async (req: AuthRequest, res) => {
+  try {
+    if (!ensureChecklistModel(res)) return
+    if (!isChecklistAdmin(req)) return res.status(403).json({ error: 'Réservé aux administrateurs' })
+    const body = req.body as { templates?: unknown }
+    const t = body?.templates
+    if (!t || typeof t !== 'object' || Array.isArray(t)) {
+      return res.status(400).json({ error: 'Body "templates" (objet) requis' })
+    }
+    const src = t as Record<string, unknown>
+    const keysToUpdate = CHECKLIST_ROLES.filter(
+      r => Object.prototype.hasOwnProperty.call(src, r) && src[r] !== undefined && src[r] !== null,
+    )
+    if (keysToUpdate.length === 0) {
+      return res.status(400).json({ error: 'Indiquez au moins un profil dans templates (ex. { templates: { technicien: {...} } })' })
+    }
+    const validated: Partial<Record<ChecklistRoleKey, ChecklistData>> = {}
+    for (const r of keysToUpdate) {
+      const v = validateAdminTemplatePayload(src[r], r)
+      if (!v) return res.status(400).json({ error: `Modèle invalide pour le profil: ${r}` })
+      validated[r] = v
+    }
+    const existingRow = await db.appSetting.findUnique({ where: { key: CHECKLIST_TEMPLATES_KEY } })
+    const base =
+      existingRow?.value && typeof existingRow.value === 'object' && !Array.isArray(existingRow.value)
+        ? { ...(existingRow.value as Record<string, unknown>) }
+        : {}
+    for (const r of keysToUpdate) {
+      base[r] = validated[r]!
+    }
+    await db.appSetting.upsert({
+      where: { key: CHECKLIST_TEMPLATES_KEY },
+      create: { key: CHECKLIST_TEMPLATES_KEY, value: base as object },
+      update: { value: base as object },
+    })
+    const store = await loadTemplateStore()
+    const effective = Object.fromEntries(
+      CHECKLIST_ROLES.map(r => [r, effectiveTemplateForRole(r, store)]),
+    ) as Record<ChecklistRoleKey, ChecklistData>
+    const defaults = Object.fromEntries(CHECKLIST_ROLES.map(r => [r, createTemplate(r)])) as Record<
+      ChecklistRoleKey,
+      ChecklistData
+    >
+    const usingCustom = Object.fromEntries(CHECKLIST_ROLES.map(r => [r, Boolean(store?.[r])])) as Record<
+      ChecklistRoleKey,
+      boolean
+    >
+    return res.json({ effective, defaults, usingCustom })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+router.delete('/admin/templates/:role', async (req: AuthRequest, res) => {
+  try {
+    if (!ensureChecklistModel(res)) return
+    if (!isChecklistAdmin(req)) return res.status(403).json({ error: 'Réservé aux administrateurs' })
+    const role = String(req.params.role || '') as ChecklistRoleKey
+    if (!CHECKLIST_ROLES.includes(role)) return res.status(400).json({ error: 'Profil inconnu' })
+    const existing = await db.appSetting.findUnique({ where: { key: CHECKLIST_TEMPLATES_KEY } })
+    if (!existing?.value || typeof existing.value !== 'object' || Array.isArray(existing.value)) {
+      return res.json({ ok: true })
+    }
+    const raw = { ...(existing.value as Record<string, unknown>) }
+    if (!(role in raw)) return res.json({ ok: true })
+    delete raw[role]
+    await db.appSetting.update({
+      where: { key: CHECKLIST_TEMPLATES_KEY },
+      data: { value: raw as object },
+    })
+    return res.json({ ok: true })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
 router.get('/me/today', async (req: AuthRequest, res) => {
   try {
     if (!ensureChecklistModel(res)) return
@@ -342,6 +570,7 @@ router.get('/me/today', async (req: AuthRequest, res) => {
     if (!user) return res.status(401).json({ error: 'Authentification requise' })
     const date = (String(req.query.date ?? '') || getTodayDate()).slice(0, 10)
     const mappedRole = mapChecklistRole(user.role)
+    const templateStore = await loadTemplateStore()
 
     let checklist = await db.dailyChecklist.findUnique({
       where: { userId_date: { userId: user.sub, date } },
@@ -355,7 +584,7 @@ router.get('/me/today', async (req: AuthRequest, res) => {
           role: mappedRole,
           date,
           status: 'draft',
-          data: createTemplate(mappedRole),
+          data: effectiveTemplateForRole(mappedRole, templateStore),
         },
         include: { user: true, validator: true },
       })
@@ -367,6 +596,8 @@ router.get('/me/today', async (req: AuthRequest, res) => {
         snapshot: checklist.data as ChecklistData,
       })
     }
+
+    checklist = await syncChecklistRowWithEffectiveTemplate(checklist, templateStore)
 
     return res.json(mapChecklist(checklist))
   } catch (err) {
@@ -588,7 +819,9 @@ router.get('/item/:id', async (req: AuthRequest, res) => {
     if (!canReadChecklist(user, checklist.userId)) {
       return res.status(403).json({ error: 'Acces refuse' })
     }
-    return res.json(mapChecklist(checklist))
+    const templateStore = await loadTemplateStore()
+    const synced = await syncChecklistRowWithEffectiveTemplate(checklist, templateStore)
+    return res.json(mapChecklist(synced))
   } catch (err) {
     console.error(err)
     return res.status(500).json({ error: 'Internal server error' })
@@ -616,12 +849,15 @@ router.put('/:id', async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Checklist soumise. Attendez validation ou rejet.' })
     }
 
-    const role = existing.role as 'chef_atelier' | 'coordinateur' | 'technicien'
-    const normalized = normalizeData((req.body as { data?: unknown }).data, role)
+    const roleKey = toChecklistRoleKey(String(existing.role))
+    const templateStore = await loadTemplateStore()
+    const template = effectiveTemplateForRole(roleKey, templateStore)
+    const clientData = normalizeData((req.body as { data?: unknown }).data, roleKey)
+    const reconciled = reconcileSavedWithTemplate(clientData, template)
     const updated = await db.dailyChecklist.update({
       where: { id },
       data: {
-        data: normalized,
+        data: reconciled as object,
         status: existing.status === 'rejected' ? 'draft' : existing.status,
       },
       include: { user: true, validator: true },
@@ -658,12 +894,22 @@ router.post('/:id/submit', async (req: AuthRequest, res) => {
     if (existing.status === 'validated') {
       return res.status(400).json({ error: 'Checklist deja validee.' })
     }
+    if (existing.status === 'submitted') {
+      return res.status(400).json({ error: 'Checklist deja soumise.' })
+    }
+
+    const roleKey = toChecklistRoleKey(String(existing.role))
+    const templateStore = await loadTemplateStore()
+    const template = effectiveTemplateForRole(roleKey, templateStore)
+    const saved = normalizeData(existing.data, roleKey)
+    const reconciled = reconcileSavedWithTemplate(saved, template)
 
     const updated = await db.dailyChecklist.update({
       where: { id },
       data: {
         status: 'submitted',
         submittedAt: new Date(),
+        data: reconciled as object,
       },
       include: { user: true, validator: true },
     })

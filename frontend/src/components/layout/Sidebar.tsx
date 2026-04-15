@@ -1,9 +1,9 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
-import type { Permissions, TogglePermissionKey } from '@/types'
+import type { Permissions, Role, TogglePermissionKey } from '@/types'
 import { ROLE_CONFIG } from '@/types'
 import { useState, useRef, useEffect } from 'react'
-import { LayoutDashboard, Car, Users, Wallet, X, LogOut, Package, DollarSign, Wrench, UsersRound, CalendarDays, AlertCircle, UserCircle, CreditCard, ClipboardList, Layers, Phone, BarChart2, Truck, Receipt, Bell, Shield, FileText, Import, Archive } from 'lucide-react'
+import { LayoutDashboard, Car, Users, Wallet, X, LogOut, Package, DollarSign, Wrench, UsersRound, CalendarDays, AlertCircle, UserCircle, CreditCard, ClipboardList, Layers, Phone, BarChart2, Truck, Receipt, Bell, Shield, FileText, Import, Archive, SlidersHorizontal } from 'lucide-react'
 import { useNotifications } from '@/contexts/NotificationsContext'
 import { cn } from '@/lib/utils'
 
@@ -13,6 +13,8 @@ interface NavItemConfig {
   icon: typeof Car
   requiredPermission?: TogglePermissionKey
   requireVehiculeAccess?: boolean
+  /** Visible uniquement pour le rôle admin (modèles checklist, etc.) */
+  requireAdmin?: boolean
   disabled?: boolean
 }
 
@@ -73,14 +75,16 @@ const NAV_STRUCTURE: NavCategory[] = [
     label: 'AUTRES',
     items: [
       { name: 'Checklists', href: '/checklists', icon: ClipboardList },
+      { name: 'Modèles checklists', href: '/checklists/modeles', icon: SlidersHorizontal, requireAdmin: true },
       { name: 'Contacts Importants', href: '/contacts-importants', icon: Phone },
       { name: 'Rapports', href: '#', icon: BarChart2, disabled: true },
     ],
   },
 ]
 
-function hasAccess(permissions: Permissions, item: NavItemConfig): boolean {
+function hasAccess(permissions: Permissions, item: NavItemConfig, role: Role): boolean {
   if (item.disabled) return false
+  if (item.requireAdmin && role !== 'admin') return false
   if (item.requireVehiculeAccess && permissions.vehiculeVisibility === 'none') return false
   if (item.requiredPermission && !permissions[item.requiredPermission]) return false
   return true
@@ -235,7 +239,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
 
         <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-6">
           {NAV_STRUCTURE.map((category) => {
-            const visibleItems = category.items.filter((item) => hasAccess(permissions, item) || item.disabled)
+            const visibleItems = category.items.filter((item) => hasAccess(permissions, item, user.role) || item.disabled)
             if (visibleItems.length === 0) return null
 
             return (

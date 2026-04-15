@@ -47,6 +47,7 @@ import FacturationPage from '@/pages/FacturationPage'
 import AchatsPage from '@/pages/AchatsPage'
 import ChecklistsPage from '@/pages/ChecklistsPage'
 import ChecklistsHistoryPage from '@/pages/ChecklistsHistoryPage'
+import ChecklistTemplatesPage from '@/pages/ChecklistTemplatesPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 
 export default function App() {
@@ -105,6 +106,7 @@ export default function App() {
               <Route path="/outils/ahmed" element={<OutilsAhmedPage />} />
               <Route path="/checklists" element={<ChecklistsPage />} />
               <Route path="/checklists/history" element={<ChecklistsHistoryPage />} />
+              <Route path="/checklists/modeles" element={<ChecklistTemplatesPage />} />
             </Route>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<NotFoundPage />} />

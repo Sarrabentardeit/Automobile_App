@@ -7,7 +7,7 @@ import type { ChecklistAuditLog, ChecklistItemStatus, ChecklistMonthlyKpi, Check
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
-import { ClipboardList, CheckCircle2, AlertTriangle, Send, Save, Eye, History } from 'lucide-react'
+import { ClipboardList, CheckCircle2, AlertTriangle, Send, Save, Eye, History, SlidersHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const ROLE_LABELS = {
@@ -58,6 +58,7 @@ export default function ChecklistsPage() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false)
 
   const canReview = user?.role === 'admin' || user?.role === 'responsable'
+  const isAdmin = user?.role === 'admin'
   const readOnly = checklist?.status === 'submitted' || checklist?.status === 'validated'
   const { done, total } = completion(checklist)
   const percent = total > 0 ? Math.round((done / total) * 100) : 0
@@ -269,9 +270,21 @@ export default function ChecklistsPage() {
             <p className="text-sm font-semibold text-gray-900">Résumé historique rapide</p>
             <p className="text-xs text-gray-500">Vue légère sur la période mensuelle actuelle.</p>
           </div>
-          <Button size="sm" variant="outline" onClick={() => navigate('/checklists/history')} icon={<History className="w-4 h-4" />}>
-            Voir tout l’historique
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {isAdmin && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => navigate('/checklists/modeles')}
+                icon={<SlidersHorizontal className="w-4 h-4" />}
+              >
+                Modèles (admin)
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={() => navigate('/checklists/history')} icon={<History className="w-4 h-4" />}>
+              Voir tout l’historique
+            </Button>
+          </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
           {[
