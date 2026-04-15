@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import type { Permissions, TogglePermissionKey } from '@/types'
 import { ROLE_CONFIG } from '@/types'
 import { useState, useRef, useEffect } from 'react'
-import { LayoutDashboard, Car, Users, Wallet, X, LogOut, Package, DollarSign, Wrench, UsersRound, CalendarDays, AlertCircle, UserCircle, CreditCard, ClipboardList, Layers, Phone, BarChart2, Truck, Receipt, Bell, Shield, FileText, Import } from 'lucide-react'
+import { LayoutDashboard, Car, Users, Wallet, X, LogOut, Package, DollarSign, Wrench, UsersRound, CalendarDays, AlertCircle, UserCircle, CreditCard, ClipboardList, Layers, Phone, BarChart2, Truck, Receipt, Bell, Shield, FileText, Import, Archive } from 'lucide-react'
 import { useNotifications } from '@/contexts/NotificationsContext'
 import { cn } from '@/lib/utils'
 
@@ -43,6 +43,7 @@ const NAV_STRUCTURE: NavCategory[] = [
       { name: 'Clients', href: '/clients', icon: UserCircle },
       { name: 'Réclamations', href: '/reclamation', icon: AlertCircle },
       { name: 'Véhicules', href: '/vehicules', icon: Car, requireVehiculeAccess: true },
+      { name: 'Archives véhicules', href: '/vehicules/archives', icon: Archive, requireVehiculeAccess: true },
 
     ],
   },

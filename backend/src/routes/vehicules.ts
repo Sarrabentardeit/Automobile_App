@@ -200,6 +200,7 @@ function toHistorique(h: { id: number; vehiculeId: number; etat_precedent: strin
 
 function buildVehiculesWhere(query: {
   etat?: string
+  exclude_etat?: string
   technicien_id?: string
   type?: string
   date_debut?: string
@@ -209,6 +210,8 @@ function buildVehiculesWhere(query: {
   const where: Record<string, unknown> = {}
   if (includeEtat && query.etat && ETATS.includes(query.etat as (typeof ETATS)[number])) {
     where.etat_actuel = query.etat
+  } else if (query.exclude_etat && ETATS.includes(query.exclude_etat as (typeof ETATS)[number])) {
+    where.etat_actuel = { not: query.exclude_etat }
   }
 
   if (query.technicien_id) {
@@ -356,6 +359,7 @@ router.get('/dashboard-summary', authenticate(), async (req: AuthRequest, res) =
 router.get('/', authenticate(), async (req, res) => {
   try {
     const etat = req.query.etat as string | undefined
+    const exclude_etat = req.query.exclude_etat as string | undefined
     const technicien_id = req.query.technicien_id as string | undefined
     const type = req.query.type as string | undefined
     const date_debut = req.query.date_debut as string | undefined
@@ -364,7 +368,7 @@ router.get('/', authenticate(), async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page as string, 10) || 1)
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string, 10) || 20))
 
-    const where = buildVehiculesWhere({ etat, technicien_id, type, date_debut, date_fin, q }, true)
+    const where = buildVehiculesWhere({ etat, exclude_etat, technicien_id, type, date_debut, date_fin, q }, true)
 
     const [list, total] = await Promise.all([
       db.vehicule.findMany({
@@ -387,6 +391,7 @@ router.get('/', authenticate(), async (req, res) => {
 router.get('/counts', authenticate(), async (req, res) => {
   try {
     const etat = req.query.etat as string | undefined
+    const exclude_etat = req.query.exclude_etat as string | undefined
     const technicien_id = req.query.technicien_id as string | undefined
     const type = req.query.type as string | undefined
     const date_debut = req.query.date_debut as string | undefined
@@ -394,7 +399,7 @@ router.get('/counts', authenticate(), async (req, res) => {
     const q = (req.query.q as string)?.trim()
     const includeEtat = String(req.query.includeEtat ?? 'false').toLowerCase() === 'true'
 
-    const where = buildVehiculesWhere({ etat, technicien_id, type, date_debut, date_fin, q }, includeEtat)
+    const where = buildVehiculesWhere({ etat, exclude_etat, technicien_id, type, date_debut, date_fin, q }, includeEtat)
 
     const [total, grouped] = await Promise.all([
       db.vehicule.count({ where: Object.keys(where).length ? where : undefined }),

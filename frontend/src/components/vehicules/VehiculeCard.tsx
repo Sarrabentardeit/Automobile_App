@@ -13,9 +13,18 @@ interface Props {
   onEdit: () => void
   onFicheFinanciere: () => void
   onDelete?: () => void
+  allowChangeEtatWhenValidated?: boolean
 }
 
-export default function VehiculeCard({ vehicule: v, permissions, onChangeEtat, onEdit, onFicheFinanciere, onDelete }: Props) {
+export default function VehiculeCard({
+  vehicule: v,
+  permissions,
+  onChangeEtat,
+  onEdit,
+  onFicheFinanciere,
+  onDelete,
+  allowChangeEtatWhenValidated = false,
+}: Props) {
   const navigate = useNavigate()
   const { users } = useUsers()
   const cfg = ETAT_CONFIG[v.etat_actuel]
@@ -48,7 +57,7 @@ export default function VehiculeCard({ vehicule: v, permissions, onChangeEtat, o
 
             {/* Actions */}
             <div className="flex items-center gap-1 flex-shrink-0">
-              {permissions.canChangeEtat && v.etat_actuel !== 'vert' && (
+              {permissions.canChangeEtat && (v.etat_actuel !== 'vert' || allowChangeEtatWhenValidated) && (
                 <button onClick={onChangeEtat} title="Changer l'état"
                   className="p-1.5 sm:p-2 rounded-lg bg-orange-50 text-orange-600 hover:bg-orange-100 active:bg-orange-200 transition-colors"
                 >

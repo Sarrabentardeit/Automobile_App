@@ -16,6 +16,7 @@ import { useAuth } from '@/contexts/AuthContext'
 export interface VehiculesFilters {
   type?: 'voiture' | 'moto'
   etat?: EtatVehicule
+  exclude_etat?: EtatVehicule
   technicien_id?: number
   date_debut?: string
   date_fin?: string
@@ -74,6 +75,7 @@ export function useVehicules() {
         }
         if (filters?.type) params.type = filters.type
         if (filters?.etat) params.etat = filters.etat
+        if (filters?.exclude_etat) params.exclude_etat = filters.exclude_etat
         if (filters?.technicien_id) params.technicien_id = filters.technicien_id
         if (filters?.date_debut) params.date_debut = filters.date_debut
         if (filters?.date_fin) params.date_fin = filters.date_fin
@@ -137,6 +139,7 @@ export function useVehicules() {
         }
         if (filters?.type) params.type = filters.type
         if (filters?.etat) params.etat = filters.etat
+        if (filters?.exclude_etat) params.exclude_etat = filters.exclude_etat
         if (filters?.technicien_id) params.technicien_id = filters.technicien_id
         if (filters?.date_debut) params.date_debut = filters.date_debut
         if (filters?.date_fin) params.date_fin = filters.date_fin

@@ -25,6 +25,7 @@ import LoginPage from '@/pages/LoginPage'
 import RegisterPage from '@/pages/RegisterPage'
 import DashboardPage from '@/pages/DashboardPage'
 import VehiculesPage from '@/pages/VehiculesPage'
+import VehiculesArchivesPage from '@/pages/VehiculesArchivesPage'
 import VehiculeDetailPage from '@/pages/VehiculeDetailPage'
 import UtilisateursPage from '@/pages/UtilisateursPage'
 import CaissePage from '@/pages/CaissePage'
@@ -83,6 +84,7 @@ export default function App() {
               <Route path="/facturation-achat" element={<AchatsPage />} />
               <Route path="/achats" element={<Navigate to="/facturation-achat" replace />} />
               <Route path="/vehicules" element={<VehiculesPage />} />
+              <Route path="/vehicules/archives" element={<VehiculesArchivesPage />} />
               <Route path="/vehicules/:id" element={<VehiculeDetailPage />} />
               <Route path="/utilisateurs" element={<UtilisateursPage />} />
               <Route path="/caisse" element={<CaissePage />} />

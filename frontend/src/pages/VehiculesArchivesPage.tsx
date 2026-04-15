@@ -1,17 +1,17 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useVehiculesContext } from '@/contexts/VehiculesContext'
 import { useUsers } from '@/contexts/UsersContext'
 import { useToast } from '@/contexts/ToastContext'
-import { useNotifications } from '@/contexts/NotificationsContext'
-import { ETAT_CONFIG, type EtatVehicule, type VehiculeType, type Vehicule } from '@/types'
+import { apiFetch } from '@/lib/api'
+import { downloadVehiculesCsv } from '@/lib/exportVehiculesCsv'
+import type { VehiculeType, Vehicule } from '@/types'
 import type { VehiculesFilters } from '@/hooks/useVehicules'
 import VehiculeCard from '@/components/vehicules/VehiculeCard'
 import VehiculeForm from '@/components/vehicules/VehiculeForm'
 import VehiculeFicheFinanciereModal from '@/components/vehicules/VehiculeFicheFinanciereModal'
 import ChangeEtatModal from '@/components/vehicules/ChangeEtatModal'
-import { Car, Bike, Search, Plus, Filter, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Car, Bike, Search, Filter, ChevronLeft, ChevronRight, Archive, Trash2, Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const PAGE_SIZE = 20
@@ -41,24 +41,21 @@ function getDateRange(mode: string, dateFilter: string): { date_debut?: string; 
   return {}
 }
 
-export default function VehiculesPage() {
-  const { user, permissions } = useAuth()
+export default function VehiculesArchivesPage() {
+  const { user, permissions, getAccessToken } = useAuth()
   const { users } = useUsers()
   const {
     vehicules,
     total,
     page,
     limit,
-    stats,
-    filteredCounts,
     loading,
-    addVehicule,
+    fetchVehicules,
+    changeEtat,
+    fetchFilteredCounts,
     editVehicule,
     deleteVehicule,
-    changeEtat,
     uploadVehiculeImage,
-    fetchVehicules,
-    fetchFilteredCounts,
     fetchFicheFinanciere,
     patchFicheFinanciereAvance,
     createDepense,
@@ -67,38 +64,24 @@ export default function VehiculesPage() {
     createDepenseFromStock,
   } = useVehiculesContext()
   const toast = useToast()
-  const { addNotification } = useNotifications()
-  const [searchParams, setSearchParams] = useSearchParams()
 
   const [tab, setTab] = useState<VehiculeType>('voiture')
-  const [filtreEtat, setFiltreEtat] = useState<EtatVehicule | 'tous'>(
-    (searchParams.get('etat') as EtatVehicule) || 'tous'
-  )
   const [recherche, setRecherche] = useState('')
   const [rechercheDebounced, setRechercheDebounced] = useState('')
   const [technicienId, setTechnicienId] = useState<number | undefined>()
   const [dateFilterMode, setDateFilterMode] = useState<'toutes' | 'aujourdhui' | 'hier' | 'semaine' | 'date'>('toutes')
   const [dateFilter, setDateFilter] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
-  const [showAddForm, setShowAddForm] = useState(false)
-  const [editingVehicule, setEditingVehicule] = useState<Vehicule | null>(null)
   const [changeEtatVehicule, setChangeEtatVehicule] = useState<Vehicule | null>(null)
+  const [editingVehicule, setEditingVehicule] = useState<Vehicule | null>(null)
+  const [showEditForm, setShowEditForm] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<Vehicule | null>(null)
   const [ficheVehicule, setFicheVehicule] = useState<Vehicule | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   if (!user || !permissions) return null
 
-  const canEditFicheFinanciere = permissions.canEditVehicule || permissions.canViewFinance
-
   const techniciens = (users ?? []).filter(u => u.role === 'technicien')
-
-  useEffect(() => {
-    if (filtreEtat !== 'vert') return
-    setFiltreEtat('tous')
-    const next = new URLSearchParams(searchParams)
-    next.delete('etat')
-    setSearchParams(next)
-  }, [filtreEtat, searchParams, setSearchParams])
 
   useEffect(() => {
     const t = setTimeout(() => setRechercheDebounced(recherche), 300)
@@ -109,8 +92,7 @@ export default function VehiculesPage() {
     const { date_debut, date_fin } = getDateRange(dateFilterMode, dateFilter)
     const filters: VehiculesFilters = {
       type: tab,
-      etat: filtreEtat === 'tous' ? undefined : filtreEtat,
-      exclude_etat: 'vert',
+      etat: 'vert',
       technicien_id: permissions.vehiculeVisibility === 'own' ? user.id : technicienId,
       date_debut,
       date_fin,
@@ -119,10 +101,9 @@ export default function VehiculesPage() {
       limit: PAGE_SIZE,
     }
     fetchVehicules(filters)
-    fetchFilteredCounts(filters, false)
+    fetchFilteredCounts(filters, true)
   }, [
     tab,
-    filtreEtat,
     technicienId,
     dateFilterMode,
     dateFilter,
@@ -141,110 +122,113 @@ export default function VehiculesPage() {
   const myVehicules = permissions.vehiculeVisibility === 'all'
     ? vehicules
     : permissions.vehiculeVisibility === 'own'
-    ? vehicules.filter(v => v.technicien_id === user.id || v.responsable_id === user.id) // ✅
+      ? vehicules.filter(v => v.technicien_id === user.id || v.responsable_id === user.id)
       : []
 
-  const etats: EtatVehicule[] = ['orange', 'mauve', 'bleu', 'rouge', 'retour']
-  const countByEtat = (etat: EtatVehicule) => filteredCounts?.byEtat?.[etat] ?? myVehicules.filter(v => v.etat_actuel === etat).length
-  const totalAll = filteredCounts?.total ?? myVehicules.length
-
-  const handleFilterEtat = (etat: EtatVehicule | 'tous') => {
-    setFiltreEtat(etat)
-    setCurrentPage(1)
-    const next = new URLSearchParams(searchParams)
-    if (etat === 'tous') next.delete('etat')
-    else next.set('etat', etat)
-    setSearchParams(next)
-  }
-
-  const handleTabChange = (t: VehiculeType) => {
-    setTab(t)
-    setCurrentPage(1)
-  }
-
   const totalPages = Math.ceil(total / limit) || 1
-  const visibleVehicules = filtreEtat === 'tous'
-    ? myVehicules
-    : myVehicules.filter(v => v.etat_actuel === filtreEtat)
+  const canEditFicheFinanciere = permissions.canEditVehicule || permissions.canViewFinance
 
   const handleDelete = async (v: Vehicule) => {
     const ok = await deleteVehicule(v.id)
     if (ok) {
       toast.success('Véhicule supprimé')
       setDeleteConfirm(null)
+      loadVehicules()
     } else {
       toast.error('Erreur lors de la suppression')
     }
   }
 
+  const handleExportExcel = async () => {
+    const token = getAccessToken()
+    if (!token) {
+      toast.error('Non authentifié')
+      return
+    }
+    setExporting(true)
+    try {
+      const { date_debut, date_fin } = getDateRange(dateFilterMode, dateFilter)
+      const all: Vehicule[] = []
+      let pageNum = 1
+      const pageLimit = 50
+      for (;;) {
+        const params: Record<string, string | number | undefined> = {
+          page: pageNum,
+          limit: pageLimit,
+          etat: 'vert',
+          type: tab,
+        }
+        if (permissions.vehiculeVisibility === 'own') params.technicien_id = user.id
+        else if (technicienId) params.technicien_id = technicienId
+        if (date_debut) params.date_debut = date_debut
+        if (date_fin) params.date_fin = date_fin
+        if (rechercheDebounced.trim()) params.q = rechercheDebounced.trim()
+
+        const res = await apiFetch<{ data: Vehicule[]; total: number }>('/vehicules', { token, params })
+        const chunk = Array.isArray(res.data) ? res.data : []
+        all.push(...chunk)
+        const tot = res.total ?? 0
+        if (all.length >= tot || chunk.length === 0) break
+        pageNum += 1
+      }
+
+      const labelType = tab === 'moto' ? 'motos' : 'voitures'
+      downloadVehiculesCsv(
+        all,
+        users ?? [],
+        `archives-${labelType}-${new Date().toISOString().slice(0, 10)}.csv`
+      )
+      toast.success(all.length > 0 ? `${all.length} véhicule(s) exporté(s)` : 'Export vide (aucun résultat)')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Export impossible')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <div className="space-y-4 sm:space-y-5">
-      {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Véhicules</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 inline-flex items-center gap-2">
+            <Archive className="w-5 h-5 sm:w-6 sm:h-6" />
+            Archives véhicules validés
+          </h1>
           <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
-            {permissions.vehiculeVisibility === 'all'
-              ? `${totalAll} véhicule(s) (vue filtrée)`
-              : `${myVehicules.length} véhicule(s) assigné(s)`}
+            {total} véhicule(s) validé(s)
           </p>
         </div>
-        {permissions.canAddVehicule && (
-          <button onClick={() => { setEditingVehicule(null); setShowAddForm(true) }}
-            className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-semibold text-xs sm:text-sm rounded-xl transition-all shadow-lg shadow-orange-500/25 flex-shrink-0"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Ajouter un véhicule</span>
-            <span className="sm:hidden">Ajouter</span>
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => void handleExportExcel()}
+          disabled={exporting || loading}
+          className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-800 font-semibold text-xs sm:text-sm rounded-xl transition-all shadow-sm flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Download className="w-4 h-4" />
+          <span className="hidden sm:inline">{exporting ? 'Export…' : 'Exporter Excel'}</span>
+          <span className="sm:hidden">{exporting ? '…' : 'Excel'}</span>
+        </button>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-1 bg-white rounded-xl p-1 shadow-sm border border-gray-100">
         {([['voiture', Car, 'Voitures'] as const, ['moto', Bike, 'Motos'] as const]).map(([type, Icon, label]) => (
-          <button key={type} onClick={() => handleTabChange(type)}
+          <button
+            key={type}
+            onClick={() => {
+              setTab(type)
+              setCurrentPage(1)
+            }}
             className={cn(
               'flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all',
-              tab === type ? 'bg-gray-900 text-white shadow' : 'text-gray-500 hover:bg-gray-50 active:bg-gray-100',
+              tab === type ? 'bg-gray-900 text-white shadow' : 'text-gray-500 hover:bg-gray-50 active:bg-gray-100'
             )}
           >
-            <Icon className="w-4 h-4" />{label} ({type === 'voiture'
-              ? myVehicules.filter(v => v.type === 'voiture').length
-              : myVehicules.filter(v => v.type === 'moto').length})
+            <Icon className="w-4 h-4" />
+            {label}
           </button>
         ))}
       </div>
 
-      {/* Color filters */}
-      <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap sm:overflow-visible">
-        <button onClick={() => handleFilterEtat('tous')}
-          className={cn('px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs font-bold border-2 transition-all whitespace-nowrap flex-shrink-0',
-            filtreEtat === 'tous' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
-          )}
-        >
-          Tous ({totalAll})
-        </button>
-        {etats.map(etat => {
-          const cfg = ETAT_CONFIG[etat]
-          const count = countByEtat(etat)
-          return (
-            <button key={etat} onClick={() => handleFilterEtat(etat)}
-              className={cn('px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs font-bold border-2 transition-all whitespace-nowrap flex-shrink-0',
-                filtreEtat === etat ? 'scale-105 shadow-md' : 'opacity-70 hover:opacity-100'
-              )}
-              style={{
-                backgroundColor: filtreEtat === etat ? `${cfg.color}15` : 'white',
-                borderColor: cfg.color, color: cfg.color,
-              }}
-            >
-              {cfg.label} ({count})
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Search + Date + Technicien filters */}
       <div className="space-y-2">
         <div className="relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -311,34 +295,33 @@ export default function VehiculesPage() {
         </div>
       </div>
 
-      {/* Vehicle list */}
       <div className="space-y-2.5 sm:space-y-3">
         {loading ? (
           <div className="bg-white rounded-2xl p-10 sm:p-16 text-center shadow-sm border border-gray-100">
             <p className="text-gray-500 font-medium text-sm sm:text-base">Chargement...</p>
           </div>
-        ) : visibleVehicules.length === 0 ? (
+        ) : myVehicules.length === 0 ? (
           <div className="bg-white rounded-2xl p-10 sm:p-16 text-center shadow-sm border border-gray-100">
             <Filter className="w-10 h-10 sm:w-12 sm:h-12 text-gray-200 mx-auto mb-3" />
-            <p className="text-gray-500 font-medium text-sm sm:text-base">Aucun véhicule trouvé</p>
+            <p className="text-gray-500 font-medium text-sm sm:text-base">Aucun véhicule validé trouvé</p>
             <p className="text-xs sm:text-sm text-gray-400 mt-1">Essayez de modifier les filtres</p>
           </div>
         ) : (
-          visibleVehicules.map(v => (
+          myVehicules.map(v => (
             <VehiculeCard
               key={v.id}
               vehicule={v}
               permissions={permissions}
               onChangeEtat={() => setChangeEtatVehicule(v)}
+              allowChangeEtatWhenValidated
               onFicheFinanciere={() => setFicheVehicule(v)}
-              onEdit={() => { setEditingVehicule(v); setShowAddForm(true) }}
+              onEdit={() => { setEditingVehicule(v); setShowEditForm(true) }}
               onDelete={permissions.canEditVehicule ? () => setDeleteConfirm(v) : undefined}
             />
           ))
         )}
       </div>
 
-      {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs sm:text-sm text-gray-500">
@@ -363,7 +346,23 @@ export default function VehiculesPage() {
         </div>
       )}
 
-      {/* Delete confirmation modal */}
+      {changeEtatVehicule && (
+        <ChangeEtatModal
+          vehicule={changeEtatVehicule}
+          onClose={() => setChangeEtatVehicule(null)}
+          onConfirm={async (nouvelEtat, commentaire, pieces) => {
+            const ok = await changeEtat(changeEtatVehicule.id, nouvelEtat, user.id, user.nom_complet, commentaire, pieces)
+            if (ok) {
+              toast.success('État mis à jour avec succès')
+              setChangeEtatVehicule(null)
+              loadVehicules()
+            } else {
+              toast.error('Transition non autorisée')
+            }
+          }}
+        />
+      )}
+
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
@@ -380,58 +379,44 @@ export default function VehiculesPage() {
               <button onClick={() => handleDelete(deleteConfirm)}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-500 text-white hover:bg-red-600"
               >
-                <Trash2 className="w-4 h-4" /></button>
+                <Trash2 className="w-4 h-4" />
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Add/Edit Form Modal */}
-      {showAddForm && (
+      {showEditForm && editingVehicule && (
         <VehiculeForm
-  vehicule={editingVehicule}
-  onClose={() => { setShowAddForm(false); setEditingVehicule(null) }}
-  onSubmit={async (data, images) => {
-    const techId = data.technicien_id
-    const respId = data.responsable_id
-    try {
-      let savedVehiculeId: number | null = null
-      if (editingVehicule) {
-        const updated = await editVehicule(editingVehicule.id, data)
-        savedVehiculeId = updated.id
-        if (techId) addNotification(techId, `Vous avez été assigné au véhicule ${data.modele} ${data.immatriculation ? `(${data.immatriculation})` : ''} - ${data.defaut}`)
-        if (respId && respId !== techId) addNotification(respId, `Vous avez été assigné comme responsable : ${data.modele} ${data.immatriculation ? `(${data.immatriculation})` : ''} - ${data.defaut}`)
-        toast.success('Véhicule modifié avec succès')
-      } else {
-        const created = await addVehicule(data, user.id, user.nom_complet)
-        savedVehiculeId = created.id
-        if (techId) addNotification(techId, `Nouveau véhicule assigné : ${data.modele} ${data.immatriculation ? `(${data.immatriculation})` : ''} - ${data.defaut}`)
-        if (respId && respId !== techId) addNotification(respId, `Vous avez été assigné comme responsable : ${data.modele} ${data.immatriculation ? `(${data.immatriculation})` : ''} - ${data.defaut}`)
-        toast.success('Véhicule ajouté avec succès')
-      }
-      if (savedVehiculeId && images.length > 0) {
-        let failed = 0
-        for (const image of images) {
-          try {
-            await uploadVehiculeImage(savedVehiculeId, image)
-          } catch {
-            failed += 1
-          }
-        }
-        if (failed > 0) {
-          toast.error(`${failed} photo(s) n'ont pas pu être envoyées.`)
-        } else {
-          toast.success(`${images.length} photo(s) enregistrée(s).`)
-        }
-      }
-      setShowAddForm(false)
-      setEditingVehicule(null)
-      loadVehicules()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur')
-    }
-  }}
-/>
+          vehicule={editingVehicule}
+          onClose={() => { setShowEditForm(false); setEditingVehicule(null) }}
+          onSubmit={async (data, images) => {
+            try {
+              const updated = await editVehicule(editingVehicule.id, data)
+              if (images.length > 0) {
+                let failed = 0
+                for (const image of images) {
+                  try {
+                    await uploadVehiculeImage(updated.id, image)
+                  } catch {
+                    failed += 1
+                  }
+                }
+                if (failed > 0) {
+                  toast.error(`${failed} photo(s) n'ont pas pu être envoyées.`)
+                } else {
+                  toast.success(`${images.length} photo(s) enregistrée(s).`)
+                }
+              }
+              toast.success('Véhicule modifié avec succès')
+              setShowEditForm(false)
+              setEditingVehicule(null)
+              loadVehicules()
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : 'Erreur')
+            }
+          }}
+        />
       )}
 
       <VehiculeFicheFinanciereModal
@@ -446,23 +431,6 @@ export default function VehiculesPage() {
         onDeleteDepense={deleteDepense}
         onAddDepenseFromStock={createDepenseFromStock}
       />
-
-      {/* Change Etat Modal */}
-      {changeEtatVehicule && (
-        <ChangeEtatModal
-          vehicule={changeEtatVehicule}
-          onClose={() => setChangeEtatVehicule(null)}
-          onConfirm={async (nouvelEtat, commentaire, pieces) => {
-            const ok = await changeEtat(changeEtatVehicule.id, nouvelEtat, user.id, user.nom_complet, commentaire, pieces)
-            if (ok) {
-              toast.success('État mis à jour avec succès')
-              setChangeEtatVehicule(null)
-            } else {
-              toast.error('Transition non autorisée')
-            }
-          }}
-        />
-      )}
     </div>
   )
 }

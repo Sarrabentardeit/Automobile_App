@@ -213,6 +213,7 @@ const responsables = users.filter(u => u.statut === 'actif' && (u.role === 'admi
             <option value="diagnostic_approfondi">Diagnostic approfondi</option>
             <option value="service_rapide">Service rapide</option>
             <option value="reprogrammation">Reprogrammation</option>
+            <option value="mecanique">Mécanique</option>
             <option value="autre">Autre</option>
           </select>
         </div>

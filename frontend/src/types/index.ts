@@ -140,7 +140,7 @@ export const ETAT_CONFIG: Record<EtatVehicule, EtatConfig> = {
     border: 'border-cyan-400',
   },
   rouge: {
-    label: 'PROBLÈME',
+    label: 'PROBLÈME À RÉSOUDRE',
     description: 'Problème technique détecté',
     color: '#ef4444',
     bg: 'bg-red-500',
@@ -181,7 +181,7 @@ export interface Vehicule {
   modele: string
   type: VehiculeType
   etat_actuel: EtatVehicule
-  service_type?: 'diagnostic' | 'diagnostic_approfondi' | 'service_rapide' | 'reprogrammation' | 'autre'
+  service_type?: 'diagnostic' | 'diagnostic_approfondi' | 'service_rapide' | 'reprogrammation' | 'mecanique' | 'autre'
   technicien_id: number | null
   responsable_id: number | null
   defaut: string
@@ -246,7 +246,7 @@ export interface VehiculeFormData {
   responsable_id: number | null
   client_telephone: string
   notes: string
-  service_type?: 'diagnostic' | 'diagnostic_approfondi' | 'service_rapide' | 'reprogrammation' | 'autre'
+  service_type?: 'diagnostic' | 'diagnostic_approfondi' | 'service_rapide' | 'reprogrammation' | 'mecanique' | 'autre'
 }
 
 export interface VehiculeImageUploadInput {
