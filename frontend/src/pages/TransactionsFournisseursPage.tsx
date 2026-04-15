@@ -1,7 +1,6 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFournisseurs } from '@/contexts/FournisseursContext'
-import { useAchats } from '@/contexts/AchatsContext'
 import { useTransactionsFournisseurs } from '@/contexts/TransactionsFournisseursContext'
 import { useToast } from '@/contexts/ToastContext'
 import type { TransactionFournisseur, TransactionFournisseurType } from '@/types'
@@ -42,7 +41,6 @@ const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet'
 export default function TransactionsFournisseursPage() {
   const { user, permissions } = useAuth()
   const { fournisseurs } = useFournisseurs()
-  const { factures } = useAchats()
   const { transactions, loading, addTransaction, updateTransaction, removeTransaction } = useTransactionsFournisseurs()
   const toast = useToast()
   const [tab, setTab] = useState<TabType>('achat')
@@ -104,35 +102,20 @@ export default function TransactionsFournisseursPage() {
     }
   }, [transactions, period, inPeriod])
 
-  const ttcFacture = useCallback((lignes: { quantite: number; prixUnitaire: number }[], timbre?: number) => {
-    const totalHT = lignes.reduce((s, l) => s + (Number(l.quantite) || 0) * (Number(l.prixUnitaire) || 0), 0)
-    const tva19 = totalHT * 0.19
-    return totalHT + tva19 + (timbre ?? 1)
-  }, [])
-
   const synthese = useMemo(() => {
-    const inPeriodAchats = factures.filter(f => inPeriod(f.date))
-    const byFournisseur: Record<string, { facture: number; payeStatut: number; payeTransactions: number }> = {}
+    const inPeriodList = transactions.filter(t => inPeriod(t.date))
+    const byFournisseur: Record<string, { facture: number; paye: number }> = {}
 
-    for (const f of inPeriodAchats) {
-      const nom = (f.fournisseurNom || '').trim() || '(Sans fournisseur)'
-      if (!byFournisseur[nom]) byFournisseur[nom] = { facture: 0, payeStatut: 0, payeTransactions: 0 }
-      const ttc = ttcFacture(f.lignes, f.timbre)
-      byFournisseur[nom].facture += ttc
-      if (f.paye) byFournisseur[nom].payeStatut += ttc
-    }
-
-    const inPeriodPaiements = transactions.filter(t => t.type === 'paiement' && inPeriod(t.date))
-    for (const t of inPeriodPaiements) {
+    for (const t of inPeriodList) {
       const nom = (t.fournisseur || '').trim() || '(Sans fournisseur)'
-      if (!byFournisseur[nom]) byFournisseur[nom] = { facture: 0, payeStatut: 0, payeTransactions: 0 }
-      byFournisseur[nom].payeTransactions += t.montant
+      if (!byFournisseur[nom]) byFournisseur[nom] = { facture: 0, paye: 0 }
+      if (t.type === 'achat') byFournisseur[nom].facture += t.montant
+      if (t.type === 'paiement') byFournisseur[nom].paye += t.montant
     }
 
     return Object.entries(byFournisseur)
       .map(([fournisseur, v]) => {
-        const payeBase = v.payeTransactions > 0 ? v.payeTransactions : v.payeStatut
-        const totalPaye = Math.min(v.facture, Math.max(0, payeBase))
+        const totalPaye = Math.min(v.facture, Math.max(0, v.paye))
         const reste = Math.max(0, v.facture - totalPaye)
         return {
           fournisseur,
@@ -143,7 +126,7 @@ export default function TransactionsFournisseursPage() {
       })
       .filter(r => r.totalFacture > 0 || r.totalPaye > 0)
       .sort((a, b) => b.totalFacture - a.totalFacture)
-  }, [factures, transactions, inPeriod, ttcFacture])
+  }, [transactions, inPeriod])
 
   const syntheseChartData = useMemo(
     () =>
@@ -358,7 +341,7 @@ export default function TransactionsFournisseursPage() {
               <>
                 <div className="rounded-xl border border-gray-100 bg-white p-3">
                   <p className="text-xs text-gray-500 mb-1">Top 15 fournisseurs (mise à jour automatique selon la période)</p>
-                  <p className="text-[11px] text-gray-400 mb-2">Facturé = factures achat, Payé = paiements saisis (ou fallback factures marquées payées), Reste = Facturé - Payé</p>
+                  <p className="text-[11px] text-gray-400 mb-2">Facturé = transactions type Achat, Payé = transactions type Paiement, Reste = Facturé - Payé</p>
                   <div className="h-[420px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={syntheseChartData} layout="vertical" margin={{ top: 8, right: 18, left: 28, bottom: 8 }}>
