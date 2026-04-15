@@ -769,7 +769,8 @@ export const FACTURE_STATUT_CONFIG: Record<
 export type FactureFournisseurStatut = 'brouillon' | 'validee' | 'payee'
 
 export interface LigneAchat {
-  productId: number
+  productId?: number | null
+  type?: 'produit' | 'service'
   designation: string
   quantite: number
   prixUnitaire: number

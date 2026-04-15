@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFournisseurs } from '@/contexts/FournisseursContext'
+import { useAchats } from '@/contexts/AchatsContext'
 import { useTransactionsFournisseurs } from '@/contexts/TransactionsFournisseursContext'
 import { useToast } from '@/contexts/ToastContext'
 import type { TransactionFournisseur, TransactionFournisseurType } from '@/types'
@@ -21,6 +22,7 @@ import {
   BarChart2,
   FileSpreadsheet,
 } from 'lucide-react'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList } from 'recharts'
 import { cn } from '@/lib/utils'
 
 function formatMontant(n: number): string {
@@ -40,6 +42,7 @@ const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet'
 export default function TransactionsFournisseursPage() {
   const { user, permissions } = useAuth()
   const { fournisseurs } = useFournisseurs()
+  const { factures } = useAchats()
   const { transactions, loading, addTransaction, updateTransaction, removeTransaction } = useTransactionsFournisseurs()
   const toast = useToast()
   const [tab, setTab] = useState<TabType>('achat')
@@ -101,26 +104,58 @@ export default function TransactionsFournisseursPage() {
     }
   }, [transactions, period, inPeriod])
 
+  const ttcFacture = useCallback((lignes: { quantite: number; prixUnitaire: number }[], timbre?: number) => {
+    const totalHT = lignes.reduce((s, l) => s + (Number(l.quantite) || 0) * (Number(l.prixUnitaire) || 0), 0)
+    const tva19 = totalHT * 0.19
+    return totalHT + tva19 + (timbre ?? 1)
+  }, [])
+
   const synthese = useMemo(() => {
-    const inPeriodList = transactions.filter(t => inPeriod(t.date))
-    const byFournisseur: Record<string, { in: number; out: number }> = {}
-    inPeriodList.forEach(t => {
-      if (t.type === 'revenue') {
-        const f = t.fournisseur.trim() || '(Sans fournisseur)'
-        if (!byFournisseur[f]) byFournisseur[f] = { in: 0, out: 0 }
-        byFournisseur[f].in += t.montant
-      }
-      if (t.type === 'paiement') {
-        const f = t.fournisseur.trim() || '(Sans fournisseur)'
-        if (!byFournisseur[f]) byFournisseur[f] = { in: 0, out: 0 }
-        byFournisseur[f].out += t.montant
-      }
-    })
+    const inPeriodAchats = factures.filter(f => inPeriod(f.date))
+    const byFournisseur: Record<string, { facture: number; payeStatut: number; payeTransactions: number }> = {}
+
+    for (const f of inPeriodAchats) {
+      const nom = (f.fournisseurNom || '').trim() || '(Sans fournisseur)'
+      if (!byFournisseur[nom]) byFournisseur[nom] = { facture: 0, payeStatut: 0, payeTransactions: 0 }
+      const ttc = ttcFacture(f.lignes, f.timbre)
+      byFournisseur[nom].facture += ttc
+      if (f.paye) byFournisseur[nom].payeStatut += ttc
+    }
+
+    const inPeriodPaiements = transactions.filter(t => t.type === 'paiement' && inPeriod(t.date))
+    for (const t of inPeriodPaiements) {
+      const nom = (t.fournisseur || '').trim() || '(Sans fournisseur)'
+      if (!byFournisseur[nom]) byFournisseur[nom] = { facture: 0, payeStatut: 0, payeTransactions: 0 }
+      byFournisseur[nom].payeTransactions += t.montant
+    }
+
     return Object.entries(byFournisseur)
-      .map(([name, { in: inv, out }]) => ({ fournisseur: name, totalIn: inv, totalOut: out, solde: inv - out }))
-      .filter(r => r.totalIn > 0 || r.totalOut > 0)
-      .sort((a, b) => b.solde - a.solde)
-  }, [transactions, period, inPeriod])
+      .map(([fournisseur, v]) => {
+        const payeBase = v.payeTransactions > 0 ? v.payeTransactions : v.payeStatut
+        const totalPaye = Math.min(v.facture, Math.max(0, payeBase))
+        const reste = Math.max(0, v.facture - totalPaye)
+        return {
+          fournisseur,
+          totalFacture: v.facture,
+          totalPaye,
+          reste,
+        }
+      })
+      .filter(r => r.totalFacture > 0 || r.totalPaye > 0)
+      .sort((a, b) => b.totalFacture - a.totalFacture)
+  }, [factures, transactions, inPeriod, ttcFacture])
+
+  const syntheseChartData = useMemo(
+    () =>
+      synthese.slice(0, 15).map(r => ({
+        fournisseur: r.fournisseur,
+        fournisseurCourt: r.fournisseur.length > 22 ? `${r.fournisseur.slice(0, 22)}...` : r.fournisseur,
+        facture: Math.round(r.totalFacture * 100) / 100,
+        paye: Math.round(r.totalPaye * 100) / 100,
+        reste: Math.round(r.reste * 100) / 100,
+      })),
+    [synthese]
+  )
 
   const openNew = () => {
     setForm({
@@ -207,7 +242,7 @@ export default function TransactionsFournisseursPage() {
             </span>
             Transactions Fournisseurs
           </h1>
-          <p className="text-sm text-gray-500 mt-1">Feuille 1 : Achats, Revenus (IN), Paiements (OUT) et synthèse</p>
+          <p className="text-sm text-gray-500 mt-1">Feuille 1 : Achats, Revenus (IN), Paiements (OUT) et reste à payer fournisseurs</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center rounded-xl border border-gray-200 bg-white overflow-hidden">
@@ -316,35 +351,69 @@ export default function TransactionsFournisseursPage() {
         {loading ? (
           <div className="px-4 py-12 text-center text-gray-500">Chargement des transactions...</div>
         ) : tab === 'synthese' && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-teal-50 border-b border-teal-100">
-                  <th className="px-4 py-3 text-left font-semibold text-gray-900">Fournisseur</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-900">Total Revenus (IN)</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-900">Total Paiements (OUT)</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-900">Solde</th>
-                </tr>
-              </thead>
-              <tbody>
-                {synthese.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-12 text-center text-gray-500">
-                      Aucune donnée pour {periodLabel}
-                    </td>
-                  </tr>
-                ) : (
-                  synthese.map(r => (
-                    <tr key={r.fournisseur} className="border-b border-gray-50 hover:bg-teal-50/30">
-                      <td className="px-4 py-3 font-medium text-gray-900">{r.fournisseur}</td>
-                      <td className="px-4 py-3 text-right text-emerald-600 tabular-nums">{formatMontant(r.totalIn)}</td>
-                      <td className="px-4 py-3 text-right text-rose-600 tabular-nums">{formatMontant(r.totalOut)}</td>
-                      <td className={cn('px-4 py-3 text-right font-semibold tabular-nums', r.solde >= 0 ? 'text-teal-600' : 'text-orange-600')}>{formatMontant(r.solde)}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+          <div className="space-y-4 p-4">
+            {synthese.length === 0 ? (
+              <div className="px-4 py-12 text-center text-gray-500">Aucune donnée pour {periodLabel}</div>
+            ) : (
+              <>
+                <div className="rounded-xl border border-gray-100 bg-white p-3">
+                  <p className="text-xs text-gray-500 mb-1">Top 15 fournisseurs (mise à jour automatique selon la période)</p>
+                  <p className="text-[11px] text-gray-400 mb-2">Facturé = factures achat, Payé = paiements saisis (ou fallback factures marquées payées), Reste = Facturé - Payé</p>
+                  <div className="h-[420px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={syntheseChartData} layout="vertical" margin={{ top: 8, right: 18, left: 28, bottom: 8 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis type="number" tick={{ fontSize: 11 }} />
+                        <YAxis dataKey="fournisseurCourt" type="category" tick={{ fontSize: 11 }} width={150} />
+                        <Tooltip
+                          formatter={(value: unknown) => {
+                            const v = Array.isArray(value) ? Number(value[0]) : Number(value)
+                            return formatMontant(Number.isFinite(v) ? v : 0)
+                          }}
+                          labelFormatter={(_, payload) => {
+                            const row = payload?.[0]?.payload as { fournisseur?: string } | undefined
+                            return row?.fournisseur ?? ''
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="facture" name="Facturé" fill="#334155" radius={[4, 4, 4, 4]} />
+                        <Bar dataKey="paye" name="Payé" fill="#16a34a" radius={[4, 4, 4, 4]}>
+                          <LabelList dataKey="paye" position="right" formatter={(v: unknown) => (Number(v) > 0 ? Number(v).toFixed(0) : '')} fontSize={10} fill="#065f46" />
+                        </Bar>
+                        <Bar dataKey="reste" name="Reste" fill="#ea580c" radius={[4, 4, 4, 4]}>
+                          <LabelList dataKey="reste" position="right" formatter={(v: unknown) => (Number(v) > 0 ? Number(v).toFixed(0) : '')} fontSize={10} fill="#9a3412" />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-teal-50 border-b border-teal-100">
+                        <th className="px-4 py-3 text-left font-semibold text-gray-900">Fournisseur</th>
+                        <th className="px-4 py-3 text-right font-semibold text-gray-900">Total facturé</th>
+                        <th className="px-4 py-3 text-right font-semibold text-gray-900">Total payé</th>
+                        <th className="px-4 py-3 text-right font-semibold text-gray-900">Reste à payer</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {synthese.map(r => (
+                        <tr key={r.fournisseur} className="border-b border-gray-50 hover:bg-teal-50/30">
+                          <td className="px-4 py-3 font-medium text-gray-900">{r.fournisseur}</td>
+                          <td className="px-4 py-3 text-right text-gray-900 tabular-nums">{formatMontant(r.totalFacture)}</td>
+                          <td className="px-4 py-3 text-right text-emerald-600 tabular-nums">{formatMontant(r.totalPaye)}</td>
+                          <td className={cn('px-4 py-3 text-right font-semibold tabular-nums', r.reste <= 0 ? 'text-teal-600' : 'text-orange-600')}>
+                            {formatMontant(r.reste)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </div>
         )}
         {!loading && tab === 'achat' && (

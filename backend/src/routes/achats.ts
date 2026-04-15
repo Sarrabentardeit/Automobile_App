@@ -23,7 +23,8 @@ type AchatRow = {
   createdAt: Date
   lignes: {
     id: number
-    productId: number
+    productId: number | null
+    type: string | null
     designation: string
     quantite: number
     prix_unitaire: number
@@ -44,7 +45,8 @@ function toAchat(a: AchatRow) {
     statut: a.statut as 'brouillon' | 'validee' | 'payee',
     paye: a.paye,
     lignes: a.lignes.map(l => ({
-      productId: l.productId,
+      productId: l.productId ?? null,
+      type: l.type === 'service' ? 'service' : 'produit',
       designation: l.designation,
       quantite: l.quantite,
       prixUnitaire: l.prix_unitaire,
@@ -64,11 +66,12 @@ function getNextNumero(achats: { numero: string }[]): string {
 }
 
 async function appliquerEntreeStock(
-  lignes: { productId: number; quantite: number; prix_unitaire: number; designation: string }[],
+  lignes: { productId: number | null; quantite: number; prix_unitaire: number; designation: string; type?: string | null }[],
   numero: string,
   date: string
 ) {
   for (const l of lignes) {
+    if (l.type === 'service' || l.productId == null) continue
     const produit = await db.produitStock.findUnique({ where: { id: l.productId } })
     if (!produit) throw new Error(`Produit ${l.productId} introuvable`)
     const qte = Math.max(0, Math.floor(Number(l.quantite) || 0))
@@ -171,7 +174,7 @@ router.post('/', authenticate(), async (req, res) => {
       timbre?: number
       statut?: string
       paye?: boolean
-      lignes?: { productId: number; designation: string; quantite: number; prixUnitaire: number }[]
+      lignes?: { productId?: number | null; type?: string; designation: string; quantite: number; prixUnitaire: number }[]
     }
 
     if (!body.fournisseurNom?.trim()) {
@@ -181,7 +184,7 @@ router.post('/', authenticate(), async (req, res) => {
     const lignesInput = Array.isArray(body.lignes) ? body.lignes : []
     const lignesValides = lignesInput.filter(l => (l.quantite ?? 0) > 0)
     if (lignesValides.length === 0) {
-      return res.status(400).json({ error: 'Au moins une ligne produit avec quantité > 0 est requise' })
+      return res.status(400).json({ error: 'Au moins une ligne avec quantité > 0 est requise' })
     }
 
     let numero = (body.numero ?? '').trim()
@@ -215,7 +218,8 @@ router.post('/', authenticate(), async (req, res) => {
         paye: Boolean(body.paye),
         lignes: {
           create: lignesValides.map(l => ({
-            productId: l.productId,
+            productId: l.type === 'service' ? null : (l.productId ?? null),
+            type: l.type === 'service' ? 'service' : 'produit',
             designation: String(l.designation ?? '').trim(),
             quantite: Number(l.quantite) || 0,
             prix_unitaire: Number(l.prixUnitaire) || 0,
@@ -253,7 +257,7 @@ router.put('/:id', authenticate(), async (req, res) => {
       timbre?: number
       statut?: string
       paye?: boolean
-      lignes?: { productId: number; designation: string; quantite: number; prixUnitaire: number }[]
+      lignes?: { productId?: number | null; type?: string; designation: string; quantite: number; prixUnitaire: number }[]
     }
 
     const existing = (await db.achat.findUnique({
@@ -282,11 +286,12 @@ router.put('/:id', authenticate(), async (req, res) => {
     if (body.lignes !== undefined) {
       const lignesValides = Array.isArray(body.lignes) ? body.lignes.filter(l => (l.quantite ?? 0) > 0) : []
       if (lignesValides.length === 0 && (body.statut === 'validee' || body.statut === 'payee')) {
-        return res.status(400).json({ error: 'Au moins une ligne produit avec quantité > 0 est requise pour valider' })
+        return res.status(400).json({ error: 'Au moins une ligne avec quantité > 0 est requise pour valider' })
       }
 
       const dataLignes = lignesValides.map(l => ({
-        productId: l.productId,
+        productId: l.type === 'service' ? null : (l.productId ?? null),
+        type: l.type === 'service' ? 'service' : 'produit',
         designation: String(l.designation ?? '').trim(),
         quantite: Number(l.quantite) || 0,
         prix_unitaire: Number(l.prixUnitaire) || 0,

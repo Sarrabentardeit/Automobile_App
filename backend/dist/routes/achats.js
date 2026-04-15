@@ -21,7 +21,8 @@ function toAchat(a) {
         statut: a.statut,
         paye: a.paye,
         lignes: a.lignes.map(l => ({
-            productId: l.productId,
+            productId: l.productId ?? null,
+            type: l.type === 'service' ? 'service' : 'produit',
             designation: l.designation,
             quantite: l.quantite,
             prixUnitaire: l.prix_unitaire,
@@ -40,6 +41,8 @@ function getNextNumero(achats) {
 }
 async function appliquerEntreeStock(lignes, numero, date) {
     for (const l of lignes) {
+        if (l.type === 'service' || l.productId == null)
+            continue;
         const produit = await db.produitStock.findUnique({ where: { id: l.productId } });
         if (!produit)
             throw new Error(`Produit ${l.productId} introuvable`);
@@ -139,7 +142,7 @@ router.post('/', (0, auth_1.authenticate)(), async (req, res) => {
         const lignesInput = Array.isArray(body.lignes) ? body.lignes : [];
         const lignesValides = lignesInput.filter(l => (l.quantite ?? 0) > 0);
         if (lignesValides.length === 0) {
-            return res.status(400).json({ error: 'Au moins une ligne produit avec quantité > 0 est requise' });
+            return res.status(400).json({ error: 'Au moins une ligne avec quantité > 0 est requise' });
         }
         let numero = (body.numero ?? '').trim();
         if (!numero) {
@@ -169,7 +172,8 @@ router.post('/', (0, auth_1.authenticate)(), async (req, res) => {
                 paye: Boolean(body.paye),
                 lignes: {
                     create: lignesValides.map(l => ({
-                        productId: l.productId,
+                        productId: l.type === 'service' ? null : (l.productId ?? null),
+                        type: l.type === 'service' ? 'service' : 'produit',
                         designation: String(l.designation ?? '').trim(),
                         quantite: Number(l.quantite) || 0,
                         prix_unitaire: Number(l.prixUnitaire) || 0,
@@ -220,10 +224,11 @@ router.put('/:id', (0, auth_1.authenticate)(), async (req, res) => {
         if (body.lignes !== undefined) {
             const lignesValides = Array.isArray(body.lignes) ? body.lignes.filter(l => (l.quantite ?? 0) > 0) : [];
             if (lignesValides.length === 0 && (body.statut === 'validee' || body.statut === 'payee')) {
-                return res.status(400).json({ error: 'Au moins une ligne produit avec quantité > 0 est requise pour valider' });
+                return res.status(400).json({ error: 'Au moins une ligne avec quantité > 0 est requise pour valider' });
             }
             const dataLignes = lignesValides.map(l => ({
-                productId: l.productId,
+                productId: l.type === 'service' ? null : (l.productId ?? null),
+                type: l.type === 'service' ? 'service' : 'produit',
                 designation: String(l.designation ?? '').trim(),
                 quantite: Number(l.quantite) || 0,
                 prix_unitaire: Number(l.prixUnitaire) || 0,

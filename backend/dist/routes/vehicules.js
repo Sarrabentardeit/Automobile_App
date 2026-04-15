@@ -163,10 +163,17 @@ function buildVehiculesWhere(query, includeEtat) {
     if (includeEtat && query.etat && ETATS.includes(query.etat)) {
         where.etat_actuel = query.etat;
     }
+    else if (query.exclude_etat && ETATS.includes(query.exclude_etat)) {
+        where.etat_actuel = { not: query.exclude_etat };
+    }
     if (query.technicien_id) {
         const tid = parseInt(query.technicien_id, 10);
-        if (!isNaN(tid))
-            where.technicien_id = tid;
+        if (!isNaN(tid)) {
+            where.OR = [
+                { technicien_id: tid },
+                { responsable_id: tid }
+            ];
+        }
     }
     if (query.type && TYPES.includes(query.type)) {
         where.type = query.type;
@@ -298,6 +305,7 @@ router.get('/dashboard-summary', (0, auth_1.authenticate)(), async (req, res) =>
 router.get('/', (0, auth_1.authenticate)(), async (req, res) => {
     try {
         const etat = req.query.etat;
+        const exclude_etat = req.query.exclude_etat;
         const technicien_id = req.query.technicien_id;
         const type = req.query.type;
         const date_debut = req.query.date_debut;
@@ -305,7 +313,7 @@ router.get('/', (0, auth_1.authenticate)(), async (req, res) => {
         const q = req.query.q?.trim();
         const page = Math.max(1, parseInt(req.query.page, 10) || 1);
         const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
-        const where = buildVehiculesWhere({ etat, technicien_id, type, date_debut, date_fin, q }, true);
+        const where = buildVehiculesWhere({ etat, exclude_etat, technicien_id, type, date_debut, date_fin, q }, true);
         const [list, total] = await Promise.all([
             db.vehicule.findMany({
                 where: Object.keys(where).length ? where : undefined,
@@ -327,13 +335,14 @@ router.get('/', (0, auth_1.authenticate)(), async (req, res) => {
 router.get('/counts', (0, auth_1.authenticate)(), async (req, res) => {
     try {
         const etat = req.query.etat;
+        const exclude_etat = req.query.exclude_etat;
         const technicien_id = req.query.technicien_id;
         const type = req.query.type;
         const date_debut = req.query.date_debut;
         const date_fin = req.query.date_fin;
         const q = req.query.q?.trim();
         const includeEtat = String(req.query.includeEtat ?? 'false').toLowerCase() === 'true';
-        const where = buildVehiculesWhere({ etat, technicien_id, type, date_debut, date_fin, q }, includeEtat);
+        const where = buildVehiculesWhere({ etat, exclude_etat, technicien_id, type, date_debut, date_fin, q }, includeEtat);
         const [total, grouped] = await Promise.all([
             db.vehicule.count({ where: Object.keys(where).length ? where : undefined }),
             db.vehicule.groupBy({

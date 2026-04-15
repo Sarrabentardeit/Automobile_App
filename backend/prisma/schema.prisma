@@ -218,7 +218,8 @@ model AchatLigne {
   id               Int    @id @default(autoincrement())
   achat            Achat  @relation(fields: [achatId], references: [id], onDelete: Cascade)
   achatId          Int
-  productId        Int
+  productId        Int?
+  type             String @default("produit") // produit | service
   designation      String
   quantite         Float
   prix_unitaire    Float

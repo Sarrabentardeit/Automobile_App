@@ -14,6 +14,8 @@ function toProduit(p) {
         dernierPrixUnitaireTTC: p.dernier_prix_unitaire_ttc ?? 0,
         categorie: p.categorie ?? undefined,
         prixVente: p.prix_vente ?? undefined,
+        prixAchatUnitaire: p.prix_achat_unitaire ?? undefined,
+        margeVentePct: p.marge_vente_pct ?? undefined,
         reference: p.reference ?? '',
         unite: p.unite ?? 'unité',
         seuilAlerte: p.seuil_alerte ?? undefined,
@@ -117,6 +119,12 @@ router.post('/produits', (0, auth_1.authenticate)(), async (req, res) => {
                 dernier_prix_unitaire_ttc: q0 > 0 ? v0 / q0 : 0,
                 categorie: (body.categorie ?? '').trim() || null,
                 prix_vente: body.prixVente != null ? Number(body.prixVente) : null,
+                prix_achat_unitaire: body.prixAchatUnitaire != null && Number.isFinite(Number(body.prixAchatUnitaire))
+                    ? Number(body.prixAchatUnitaire)
+                    : null,
+                marge_vente_pct: body.margeVentePct != null && Number.isFinite(Number(body.margeVentePct))
+                    ? Number(body.margeVentePct)
+                    : null,
                 reference: (body.reference ?? '').toString().trim(),
                 unite: (body.unite ?? 'unité').toString().trim() || 'unité',
                 seuil_alerte: body.seuilAlerte != null ? Number(body.seuilAlerte) : null,
@@ -151,6 +159,18 @@ router.put('/produits/:id', (0, auth_1.authenticate)(), async (req, res) => {
             data.categorie = (body.categorie ?? '').trim() || null;
         if (body.prixVente !== undefined)
             data.prix_vente = body.prixVente != null ? Number(body.prixVente) : null;
+        if (body.prixAchatUnitaire !== undefined) {
+            data.prix_achat_unitaire =
+                body.prixAchatUnitaire != null && !Number.isNaN(Number(body.prixAchatUnitaire))
+                    ? Number(body.prixAchatUnitaire)
+                    : null;
+        }
+        if (body.margeVentePct !== undefined) {
+            data.marge_vente_pct =
+                body.margeVentePct != null && !Number.isNaN(Number(body.margeVentePct))
+                    ? Number(body.margeVentePct)
+                    : null;
+        }
         if (body.reference !== undefined)
             data.reference = (body.reference ?? '').toString().trim();
         if (body.unite !== undefined)

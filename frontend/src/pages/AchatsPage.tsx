@@ -207,7 +207,14 @@ export default function AchatsPage() {
     const prixUnitaire = ttcUnit > 0 ? Math.round((ttcUnit / 1.19) * 10000) / 10000 : 0
     setForm(prev => ({
       ...prev,
-      lignes: [...prev.lignes, { productId: p.id, designation: p.nom, quantite: 1, prixUnitaire }],
+      lignes: [...prev.lignes, { type: 'produit', productId: p.id, designation: p.nom, quantite: 1, prixUnitaire }],
+    }))
+  }
+
+  const addLigneService = () => {
+    setForm(prev => ({
+      ...prev,
+      lignes: [...prev.lignes, { type: 'service', productId: null, designation: '', quantite: 1, prixUnitaire: 0 }],
     }))
   }
 
@@ -229,7 +236,7 @@ export default function AchatsPage() {
     }
     const lignesValides = form.lignes.filter(l => l.quantite > 0)
     if (lignesValides.length === 0) {
-      toast.error('Ajoutez au moins une ligne produit')
+      toast.error('Ajoutez au moins une ligne')
       return
     }
 
@@ -649,27 +656,36 @@ export default function AchatsPage() {
 
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
-              <h3 className="text-sm font-semibold text-gray-800">Lignes (produits) — P.U. HT</h3>
-              <select
-                value=""
-                onChange={e => {
-                  const id = Number(e.target.value)
-                  if (id) addLigne(id)
-                  e.target.value = ''
-                }}
-                className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs sm:text-sm bg-white w-full sm:w-auto min-w-0"
-              >
-                <option value="">+ Ajouter un produit</option>
-                {produits.map(p => (
-                  <option key={p.id} value={p.id}>{p.nom} (stock: {p.quantite})</option>
-                ))}
-              </select>
+              <h3 className="text-sm font-semibold text-gray-800">Lignes (produits + services) — P.U. HT</h3>
+              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={addLigneService}
+                  className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs sm:text-sm bg-white hover:bg-gray-50"
+                >
+                  + Ajouter service/frais
+                </button>
+                <select
+                  value=""
+                  onChange={e => {
+                    const id = Number(e.target.value)
+                    if (id) addLigne(id)
+                    e.target.value = ''
+                  }}
+                  className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs sm:text-sm bg-white w-full sm:w-auto min-w-0"
+                >
+                  <option value="">+ Ajouter un produit</option>
+                  {produits.map(p => (
+                    <option key={p.id} value={p.id}>{p.nom} (stock: {p.quantite})</option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className="border border-gray-200 rounded-xl overflow-x-auto -mx-1">
               <table className="w-full text-xs sm:text-sm min-w-[360px]">
                 <thead>
                   <tr className="bg-gray-50">
-                    <th className="text-left px-3 py-2 font-medium text-gray-600">Produit</th>
+                    <th className="text-left px-3 py-2 font-medium text-gray-600">Produit / Service</th>
                     <th className="text-right px-3 py-2 font-medium text-gray-600 w-20">Qté</th>
                     <th className="text-right px-3 py-2 font-medium text-gray-600 w-24">P.U. HT</th>
                     <th className="text-right px-3 py-2 font-medium text-gray-600 w-28">Total HT</th>
@@ -679,7 +695,24 @@ export default function AchatsPage() {
                 <tbody>
                   {form.lignes.map((l, i) => (
                     <tr key={i} className="border-t border-gray-100">
-                      <td className="px-3 py-2">{l.designation}</td>
+                      <td className="px-3 py-2">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className={cn(
+                              'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium',
+                              l.type === 'service' ? 'bg-blue-50 text-blue-700' : 'bg-emerald-50 text-emerald-700'
+                            )}>
+                              {l.type === 'service' ? 'Service' : 'Produit'}
+                            </span>
+                          </div>
+                          <input
+                            type="text"
+                            value={l.designation}
+                            onChange={e => setLigne(i, { designation: e.target.value })}
+                            className="w-full min-w-0 px-1.5 sm:px-2 py-1.5 border border-gray-200 rounded-lg text-xs sm:text-sm"
+                          />
+                        </div>
+                      </td>
                       <td className="px-3 py-2 text-right">
                         <input
                           type="number"

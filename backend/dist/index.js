@@ -75,12 +75,7 @@ app.use((req, res, next) => {
     next();
 });
 app.use((0, morgan_1.default)('dev'));
-app.use('/uploads', (req, res, next) => {
-    if (!canReadUploads(req))
-        return res.status(401).json({ error: 'Unauthorized file access' });
-    return next();
-});
-app.use('/uploads', express_1.default.static(path_1.default.resolve(process.cwd(), 'uploads')));
+app.use('/uploads', express_1.default.static(path_1.default.join(__dirname, '..', 'uploads')));
 app.get('/health', (_req, res) => {
     res.json({ status: 'ok', env: env_1.env.NODE_ENV });
 });
