@@ -22,6 +22,7 @@ import {
   Settings2,
   Pencil,
   Trash2,
+  X,
 } from 'lucide-react'
 
 import { apiFetch } from '@/lib/api'
@@ -59,6 +60,8 @@ export default function MoneyPage() {
   })
   const [tab, setTab] = useState<Tab>('all')
   const [movementView, setMovementView] = useState<MovementView>('liste')
+  /** Panneau latéral : détail des sources pour un jour (synthèse par jour) */
+  const [dayPanelDate, setDayPanelDate] = useState<string | null>(null)
   const { ins, outs, loading, addIn, updateIn, removeIn, addOut, updateOut, removeOut } = useMoney()
   const toast = useToast()
   const { charges, totalCharges } = useCharges()
@@ -126,6 +129,14 @@ export default function MoneyPage() {
       }
     })()
   }, [getAccessToken])
+
+  useEffect(() => {
+    setDayPanelDate(null)
+  }, [period.year, period.month])
+
+  useEffect(() => {
+    if (movementView !== 'jour') setDayPanelDate(null)
+  }, [movementView])
 
   const persistCustomInTypes = async (types: string[]) => {
     const token = getAccessToken()
@@ -439,6 +450,45 @@ export default function MoneyPage() {
       .sort((a, b) => b.date.localeCompare(a.date))
   }, [filteredIns, filteredOuts, totalCharges, monthStr])
 
+  type DayMoneyLine = { key: string; title: string; detail: string; amount: number; isCharge?: boolean }
+  const dailyDetailedSummary = useMemo(() => {
+    const firstOfMonth = `${monthStr}-01`
+    return dailySummary.map(row => {
+      const d = row.date
+      const ins = filteredIns.filter(r => r.date === d)
+      const outs = filteredOuts.filter(r => r.date === d)
+      const linesIn: DayMoneyLine[] = ins.map(r => ({
+        key: `in-${r.id}`,
+        title: (r.description && r.description.trim()) ? r.description.trim() : r.type,
+        detail: `${r.type} · ${r.paymentMethod ?? 'ESPECE'}`,
+        amount: r.amount,
+      }))
+      const linesOut: DayMoneyLine[] = outs.map(r => ({
+        key: `out-${r.id}`,
+        title: (r.description && r.description.trim()) ? r.description.trim() : r.category,
+        detail: [r.category, r.beneficiary?.trim()].filter(Boolean).join(' · '),
+        amount: r.amount,
+      }))
+      if (totalCharges > 0 && d === firstOfMonth) {
+        for (const c of charges) {
+          linesOut.push({
+            key: `charge-${c.id}`,
+            title: c.name,
+            detail: 'Charge fixe mensuelle',
+            amount: c.amount,
+            isCharge: true,
+          })
+        }
+      }
+      return { ...row, linesIn, linesOut }
+    })
+  }, [dailySummary, filteredIns, filteredOuts, charges, monthStr, totalCharges])
+
+  const dayPanelDetail = useMemo(() => {
+    if (!dayPanelDate) return null
+    return dailyDetailedSummary.find(r => r.date === dayPanelDate) ?? null
+  }, [dayPanelDate, dailyDetailedSummary])
+
   const SectionTitle = ({ children }: { children: ReactNode }) => (
     <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">{children}</h2>
   )
@@ -640,7 +690,20 @@ export default function MoneyPage() {
                       </thead>
                       <tbody>
                         {dailySummary.map(row => (
-                          <tr key={row.date} className="border-b border-gray-50 last:border-0">
+                          <tr
+                            key={row.date}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setDayPanelDate(row.date)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                setDayPanelDate(row.date)
+                              }
+                            }}
+                            className="border-b border-gray-50 last:border-0 cursor-pointer hover:bg-orange-50/60 transition-colors"
+                            title="Voir le détail des mouvements"
+                          >
                             <td className="py-2.5 pr-3 text-gray-900 whitespace-nowrap">{formatDate(row.date)}</td>
                             <td className="py-2.5 pr-3 text-right tabular-nums text-emerald-600 font-medium">
                               {row.totalIn > 0 ? formatAmount(row.totalIn) : '—'}
@@ -657,7 +720,7 @@ export default function MoneyPage() {
                     </table>
                   </div>
                   {totalCharges > 0 && (
-                    <p className="text-xs text-gray-400">Les charges fixes du mois sont regroupées sur le 1er, comme dans la liste détaillée.</p>
+                    <p className="text-xs text-gray-400">Charges fixes : total le 1er du mois.</p>
                   )}
                 </div>
               )
@@ -724,6 +787,93 @@ export default function MoneyPage() {
           </div>
         </Card>
       </section>
+
+      {/* Panneau latéral : détail jour (synthèse par jour) */}
+      {dayPanelDetail && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setDayPanelDate(null)}
+            aria-hidden
+          />
+          <div className="relative w-full sm:max-w-md bg-white shadow-2xl flex flex-col slide-in-from-right max-h-[100dvh] sm:max-h-[90vh] sm:rounded-l-2xl overflow-hidden">
+            <div className="flex items-start justify-between gap-3 p-3 sm:p-4 border-b border-gray-100 shrink-0">
+              <div className="min-w-0">
+                <h3 className="text-base sm:text-lg font-bold text-gray-900">Détail du jour</h3>
+                <p className="text-sm text-gray-500 mt-0.5">{formatDate(dayPanelDetail.date)}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDayPanelDate(null)}
+                className="p-2 hover:bg-gray-100 rounded-lg shrink-0 touch-manipulation"
+                aria-label="Fermer"
+              >
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-3 sm:p-4 flex-1 min-h-0 space-y-5">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3">
+                  <p className="text-xs text-gray-500 font-medium">Entrées</p>
+                  <p className="text-lg font-bold text-emerald-600 tabular-nums mt-0.5">
+                    {dayPanelDetail.totalIn > 0 ? formatAmount(dayPanelDetail.totalIn) : '—'}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3">
+                  <p className="text-xs text-gray-500 font-medium">Sorties</p>
+                  <p className="text-lg font-bold text-orange-600 tabular-nums mt-0.5">
+                    {dayPanelDetail.totalOut > 0 ? formatAmount(dayPanelDetail.totalOut) : '—'}
+                  </p>
+                </div>
+                <div className="col-span-2 rounded-xl border border-gray-100 p-3">
+                  <p className="text-xs text-gray-500 font-medium">Net</p>
+                  <p className={`text-lg font-bold tabular-nums mt-0.5 ${dayPanelDetail.net >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                    {dayPanelDetail.net >= 0 ? '+' : '−'}{formatAmount(Math.abs(dayPanelDetail.net))}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-2">Sources entrées</p>
+                {dayPanelDetail.linesIn.length === 0 ? (
+                  <p className="text-sm text-gray-400">Aucune entrée ce jour.</p>
+                ) : (
+                  <ul className="space-y-3">
+                    {dayPanelDetail.linesIn.map(line => (
+                      <li key={line.key} className="flex justify-between gap-3 text-sm border-b border-gray-50 pb-3 last:border-0 last:pb-0">
+                        <span className="min-w-0 text-gray-800">
+                          <span className="font-medium block">{line.title}</span>
+                          <span className="text-gray-500 text-xs">{line.detail}</span>
+                        </span>
+                        <span className="tabular-nums text-emerald-600 font-semibold shrink-0">+{formatAmount(line.amount)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide mb-2">Sources sorties</p>
+                {dayPanelDetail.linesOut.length === 0 ? (
+                  <p className="text-sm text-gray-400">Aucune sortie ce jour.</p>
+                ) : (
+                  <ul className="space-y-3">
+                    {dayPanelDetail.linesOut.map(line => (
+                      <li key={line.key} className="flex justify-between gap-3 text-sm border-b border-gray-50 pb-3 last:border-0 last:pb-0">
+                        <span className="min-w-0 text-gray-800">
+                          <span className="font-medium block">{line.title}</span>
+                          <span className="text-gray-500 text-xs">{line.detail}</span>
+                        </span>
+                        <span className="tabular-nums text-orange-600 font-semibold shrink-0">−{formatAmount(line.amount)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modals */}
       <Modal open={addingIn} onClose={() => setAddingIn(false)} title="Nouvelle entrée" subtitle="Encaissement">
