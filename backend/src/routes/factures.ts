@@ -58,6 +58,30 @@ function toFacture(f: FactureRow) {
           prixUnitaireHT: l.prix_unitaire_ht ?? 0,
         }
       }
+      if (l.type === 'pieces' || l.type === 'piece_hors_stock') {
+        return {
+          type: 'pieces' as const,
+          designation: l.designation,
+          qte: l.qte ?? 0,
+          mtHT: l.mt_ht ?? 0,
+        }
+      }
+      if (l.type === 'autre_produit') {
+        return {
+          type: 'autre_produit' as const,
+          designation: l.designation,
+          qte: l.qte ?? 0,
+          mtHT: l.mt_ht ?? 0,
+        }
+      }
+      if (l.type === 'divers') {
+        return {
+          type: 'divers' as const,
+          designation: l.designation,
+          qte: l.qte ?? 0,
+          mtHT: l.mt_ht ?? 0,
+        }
+      }
       return {
         type: 'main_oeuvre' as const,
         designation: l.designation,
@@ -167,7 +191,8 @@ router.post('/', authenticate(), async (req, res) => {
 
     const dataLignes = lignesInput.map((raw) => {
       const l = raw as any
-      const type = l.type as string
+      const rawType = l.type as string
+      const type = rawType === 'piece_hors_stock' ? 'pieces' : rawType
       if (type === 'depense') {
         return {
           type: 'depense',
@@ -182,6 +207,14 @@ router.post('/', authenticate(), async (req, res) => {
           qte: Number(l.qte) || 0,
           productId: Number(l.productId) || null,
           prix_unitaire_ht: Number(l.prixUnitaireHT) || 0,
+        }
+      }
+      if (type === 'main_oeuvre' || type === 'pieces' || type === 'autre_produit' || type === 'divers') {
+        return {
+          type,
+          designation: String(l.designation ?? '').trim(),
+          qte: Number(l.qte) || 0,
+          mt_ht: Number(l.mtHT) || 0,
         }
       }
       return {
@@ -245,7 +278,8 @@ router.put('/:id', authenticate(), async (req, res) => {
 
       const dataLignes = lignesInput.map((raw) => {
         const l = raw as any
-        const type = l.type as string
+        const rawType = l.type as string
+        const type = rawType === 'piece_hors_stock' ? 'pieces' : rawType
         if (type === 'depense') {
           return {
             type: 'depense',
@@ -260,6 +294,14 @@ router.put('/:id', authenticate(), async (req, res) => {
             qte: Number(l.qte) || 0,
             productId: Number(l.productId) || null,
             prix_unitaire_ht: Number(l.prixUnitaireHT) || 0,
+          }
+        }
+        if (type === 'main_oeuvre' || type === 'pieces' || type === 'autre_produit' || type === 'divers') {
+          return {
+            type,
+            designation: String(l.designation ?? '').trim(),
+            qte: Number(l.qte) || 0,
+            mt_ht: Number(l.mtHT) || 0,
           }
         }
         return {

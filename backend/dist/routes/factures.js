@@ -34,6 +34,30 @@ function toFacture(f) {
                     prixUnitaireHT: l.prix_unitaire_ht ?? 0,
                 };
             }
+            if (l.type === 'pieces' || l.type === 'piece_hors_stock') {
+                return {
+                    type: 'pieces',
+                    designation: l.designation,
+                    qte: l.qte ?? 0,
+                    mtHT: l.mt_ht ?? 0,
+                };
+            }
+            if (l.type === 'autre_produit') {
+                return {
+                    type: 'autre_produit',
+                    designation: l.designation,
+                    qte: l.qte ?? 0,
+                    mtHT: l.mt_ht ?? 0,
+                };
+            }
+            if (l.type === 'divers') {
+                return {
+                    type: 'divers',
+                    designation: l.designation,
+                    qte: l.qte ?? 0,
+                    mtHT: l.mt_ht ?? 0,
+                };
+            }
             return {
                 type: 'main_oeuvre',
                 designation: l.designation,
@@ -130,7 +154,8 @@ router.post('/', (0, auth_1.authenticate)(), async (req, res) => {
         const lignesInput = Array.isArray(body.lignes) ? body.lignes : [];
         const dataLignes = lignesInput.map((raw) => {
             const l = raw;
-            const type = l.type;
+            const rawType = l.type;
+            const type = rawType === 'piece_hors_stock' ? 'pieces' : rawType;
             if (type === 'depense') {
                 return {
                     type: 'depense',
@@ -145,6 +170,14 @@ router.post('/', (0, auth_1.authenticate)(), async (req, res) => {
                     qte: Number(l.qte) || 0,
                     productId: Number(l.productId) || null,
                     prix_unitaire_ht: Number(l.prixUnitaireHT) || 0,
+                };
+            }
+            if (type === 'main_oeuvre' || type === 'pieces' || type === 'autre_produit' || type === 'divers') {
+                return {
+                    type,
+                    designation: String(l.designation ?? '').trim(),
+                    qte: Number(l.qte) || 0,
+                    mt_ht: Number(l.mtHT) || 0,
                 };
             }
             return {
@@ -193,7 +226,8 @@ router.put('/:id', (0, auth_1.authenticate)(), async (req, res) => {
             const lignesInput = Array.isArray(body.lignes) ? body.lignes : [];
             const dataLignes = lignesInput.map((raw) => {
                 const l = raw;
-                const type = l.type;
+                const rawType = l.type;
+                const type = rawType === 'piece_hors_stock' ? 'pieces' : rawType;
                 if (type === 'depense') {
                     return {
                         type: 'depense',
@@ -208,6 +242,14 @@ router.put('/:id', (0, auth_1.authenticate)(), async (req, res) => {
                         qte: Number(l.qte) || 0,
                         productId: Number(l.productId) || null,
                         prix_unitaire_ht: Number(l.prixUnitaireHT) || 0,
+                    };
+                }
+                if (type === 'main_oeuvre' || type === 'pieces' || type === 'autre_produit' || type === 'divers') {
+                    return {
+                        type,
+                        designation: String(l.designation ?? '').trim(),
+                        qte: Number(l.qte) || 0,
+                        mt_ht: Number(l.mtHT) || 0,
                     };
                 }
                 return {

@@ -48,8 +48,8 @@ export default function ReclamationPage() {
     techniciens: [],
   })
 
-  const techniciensNames = useMemo(
-    () => users.filter(u => u.role === 'technicien' && u.statut === 'actif').map(u => u.nom_complet),
+  const assignableUserNames = useMemo(
+    () => users.filter(u => u.statut === 'actif').map(u => u.nom_complet),
     [users]
   )
 
@@ -249,7 +249,7 @@ export default function ReclamationPage() {
                                 {r.assigneA
                                   ? r.techniciens.length
                                   : r.techniciens.length - 1}
-                                {' '}tech)
+                                {' '}pers.)
                               </span>
                             </>
                           )}
@@ -309,13 +309,13 @@ export default function ReclamationPage() {
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
               >
                 <option value="">— Non assigné —</option>
-                {techniciensNames.map(n => (
+                {assignableUserNames.map(n => (
                   <option key={n} value={n}>{n}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Autres techniciens</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Autres assignés</label>
               <select
                 multiple
                 value={form.techniciens ?? []}
@@ -327,7 +327,7 @@ export default function ReclamationPage() {
                 }
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 min-h-[90px]"
               >
-                {techniciensNames.map(n => (
+                {assignableUserNames.map(n => (
                   <option key={n} value={n}>{n}</option>
                 ))}
               </select>

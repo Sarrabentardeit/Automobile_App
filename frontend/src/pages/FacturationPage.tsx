@@ -40,7 +40,15 @@ import { prixUnitaireAchatTTC } from '@/lib/stockUtils'
 
 type FormLigne = LigneFacture
 
-const emptyLigneMainOeuvre = (): FormLigne => ({ type: 'main_oeuvre', designation: '', qte: 1, mtHT: 0 })
+const emptyLigneMainOeuvre = (): FormLigne => ({
+  type: 'main_oeuvre',
+  designation: '',
+  qte: 1,
+  mtHT: 0,
+})
+const emptyLignePieces = (): FormLigne => ({ type: 'pieces', designation: '', qte: 1, mtHT: 0 })
+const emptyLigneAutreProduit = (): FormLigne => ({ type: 'autre_produit', designation: '', qte: 1, mtHT: 0 })
+const emptyLigneDivers = (): FormLigne => ({ type: 'divers', designation: '', qte: 1, mtHT: 0 })
 const emptyLigneDepense = (): FormLigne => ({ type: 'depense', designation: '', montant: 0 })
 function ligneFromProduit(p: ProduitStock): FormLigne {
   if (p.prixVente != null && p.prixVente > 0) {
@@ -196,8 +204,13 @@ export default function FacturationPage() {
       ...prev,
       lignes: prev.lignes.map((l, i) => {
         if (i !== index) return l
-        if (l.type === 'main_oeuvre') {
-          return { type: 'main_oeuvre' as const, designation: patch.designation ?? l.designation, qte: patch.qte ?? l.qte, mtHT: patch.mtHT ?? l.mtHT }
+        if (l.type === 'main_oeuvre' || l.type === 'pieces' || l.type === 'autre_produit' || l.type === 'divers') {
+          return {
+            type: l.type,
+            designation: patch.designation ?? l.designation,
+            qte: patch.qte ?? l.qte,
+            mtHT: patch.mtHT ?? l.mtHT,
+          }
         }
         if (l.type === 'produit') {
           return { type: 'produit' as const, productId: l.productId, designation: patch.designation ?? l.designation, qte: patch.qte ?? l.qte, prixUnitaireHT: patch.prixUnitaireHT ?? l.prixUnitaireHT }
@@ -207,14 +220,25 @@ export default function FacturationPage() {
     }))
   }
 
-  const addLigne = (type: 'main_oeuvre' | 'depense' | 'produit', product?: ProduitStock) => {
+  const addLigne = (type: 'main_oeuvre' | 'pieces' | 'autre_produit' | 'divers' | 'depense' | 'produit', product?: ProduitStock) => {
     if (type === 'produit' && product) {
       setForm(prev => ({ ...prev, lignes: [...prev.lignes, ligneFromProduit(product)] }))
       return
     }
     setForm(prev => ({
       ...prev,
-      lignes: [...prev.lignes, type === 'main_oeuvre' ? emptyLigneMainOeuvre() : emptyLigneDepense()],
+      lignes: [
+        ...prev.lignes,
+        type === 'main_oeuvre'
+          ? emptyLigneMainOeuvre()
+          : type === 'pieces'
+            ? emptyLignePieces()
+            : type === 'autre_produit'
+              ? emptyLigneAutreProduit()
+            : type === 'divers'
+              ? emptyLigneDivers()
+              : emptyLigneDepense(),
+      ],
     }))
   }
 
@@ -227,6 +251,16 @@ export default function FacturationPage() {
       toast.error('Indiquez le client')
       return
     }
+    const lignesPayload: LigneFacture[] = form.lignes.map((l): LigneFacture => {
+      if (l.type === 'main_oeuvre' || l.type === 'pieces' || l.type === 'autre_produit' || l.type === 'divers') {
+        return { type: l.type, designation: l.designation, qte: l.qte, mtHT: l.mtHT }
+      }
+      if (l.type === 'depense') {
+        return { type: 'depense', designation: l.designation, montant: l.montant }
+      }
+      return { type: 'produit', productId: l.productId, designation: l.designation, qte: l.qte, prixUnitaireHT: l.prixUnitaireHT }
+    })
+
     const payload = {
       numero: form.numero,
       date: form.date,
@@ -236,8 +270,8 @@ export default function FacturationPage() {
       clientTelephone: form.clientTelephone.trim(),
       clientAdresse: form.clientAdresse.trim() || undefined,
       clientMatriculeFiscale: form.clientMatriculeFiscale.trim() || undefined,
-      lignes: form.lignes.filter(l => {
-        if (l.type === 'main_oeuvre') return l.designation.trim() || l.mtHT !== 0
+      lignes: lignesPayload.filter(l => {
+        if (l.type === 'main_oeuvre' || l.type === 'pieces' || l.type === 'autre_produit' || l.type === 'divers') return l.designation.trim() || l.mtHT !== 0
         if (l.type === 'depense') return l.designation.trim() || l.montant !== 0
         if (l.type === 'produit') return l.qte > 0
         return false
@@ -785,6 +819,15 @@ export default function FacturationPage() {
                 <Button size="sm" variant="outline" onClick={() => addLigne('main_oeuvre')}>
                   + Main d'œuvre
                 </Button>
+                <Button size="sm" variant="outline" onClick={() => addLigne('pieces')}>
+                  + Pièce
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => addLigne('autre_produit')}>
+                  + Produit hors stock
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => addLigne('divers')}>
+                  + Divers
+                </Button>
                 <Button size="sm" variant="outline" onClick={() => addLigne('depense')}>
                   + Dépense
                 </Button>
@@ -823,7 +866,17 @@ export default function FacturationPage() {
                   {form.lignes.map((l, i) => (
                     <tr key={i} className="border-t border-gray-100">
                       <td className="px-3 py-2 text-gray-500">
-                        {l.type === 'main_oeuvre' ? 'Main d\'œuvre' : l.type === 'depense' ? 'Dépense' : 'Produit'}
+                        {l.type === 'main_oeuvre'
+                          ? 'Main d\'œuvre'
+                          : l.type === 'pieces'
+                            ? 'Pièce'
+                            : l.type === 'autre_produit'
+                              ? 'Autre produit'
+                            : l.type === 'divers'
+                              ? 'Divers'
+                              : l.type === 'depense'
+                            ? 'Dépense'
+                            : 'Produit'}
                       </td>
                       <td className="px-3 py-2">
                         <input
@@ -840,14 +893,14 @@ export default function FacturationPage() {
                             type="number"
                             min={0}
                             step={l.type === 'produit' ? 0.01 : 1}
-                            value={l.type === 'main_oeuvre' ? l.qte : l.type === 'produit' ? l.qte : 0}
+                            value={l.type === 'produit' ? l.qte : l.qte}
                             onChange={e => setLigne(i, { qte: Number(e.target.value) || 0 })}
                             className="w-16 px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-right"
                           />
                         )}
                       </td>
                       <td className="px-3 py-2 text-right">
-                        {l.type === 'main_oeuvre' && (
+                        {(l.type === 'main_oeuvre' || l.type === 'pieces' || l.type === 'autre_produit' || l.type === 'divers') && (
                           <input
                             type="number"
                             min={0}
@@ -898,7 +951,7 @@ export default function FacturationPage() {
           {/* Totaux */}
           <div className="bg-gray-50 rounded-xl p-4 space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Total HT (main d'œuvre)</span>
+              <span className="text-gray-600">Total HT</span>
               <span className="font-semibold tabular-nums">{totals.totalHT.toFixed(2)} DT</span>
             </div>
             <div className="flex justify-between text-sm">

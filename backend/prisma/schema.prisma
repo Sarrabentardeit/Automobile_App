@@ -188,7 +188,7 @@ model FactureLigne {
   id               Int      @id @default(autoincrement())
   facture          Facture  @relation(fields: [factureId], references: [id], onDelete: Cascade)
   factureId        Int
-  type             String   // main_oeuvre | depense | produit
+  type             String   // main_oeuvre | pieces | autre_produit | divers | depense | produit
   designation      String
   qte              Float?   // pour main_oeuvre et produit
   mt_ht            Float?   // montant HT pour main_oeuvre

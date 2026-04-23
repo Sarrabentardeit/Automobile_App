@@ -3,7 +3,10 @@ import { MODE_PAIEMENT_OPTIONS } from '@/types'
 
 export function computeFactureTotals(lignes: LigneFacture[], timbre: number) {
   const htMainOeuvre = lignes
-    .filter((l): l is LigneFacture & { type: 'main_oeuvre' } => l.type === 'main_oeuvre')
+    .filter(
+      (l): l is LigneFacture & { type: 'main_oeuvre' | 'pieces' | 'autre_produit' | 'divers' } =>
+        l.type === 'main_oeuvre' || l.type === 'pieces' || l.type === 'autre_produit' || l.type === 'divers'
+    )
     .reduce((s, l) => s + l.qte * l.mtHT, 0)
   const htProduits = lignes
     .filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
@@ -63,10 +66,35 @@ export function getFacturePrintHtml(facture: Facture): string {
   })
 
   const lignesMainOeuvre = facture.lignes.filter((l): l is LigneFacture & { type: 'main_oeuvre' } => l.type === 'main_oeuvre')
+  const lignesPiecesHorsStock = facture.lignes.filter(
+    (l): l is LigneFacture & { type: 'pieces' } => l.type === 'pieces',
+  )
+  const lignesAutresProduits = facture.lignes.filter(
+    (l): l is LigneFacture & { type: 'autre_produit' } => l.type === 'autre_produit',
+  )
+  const lignesDivers = facture.lignes.filter((l): l is LigneFacture & { type: 'divers' } => l.type === 'divers')
   const lignesProduits = facture.lignes.filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
   const lignesDepenses = facture.lignes.filter((l): l is LigneFacture & { type: 'depense' } => l.type === 'depense')
 
   const rowsMain = lignesMainOeuvre
+    .map(
+      l =>
+        `<tr><td>${l.qte}</td><td>${escapeHtml(l.designation)}</td><td></td><td class="text-right">${l.mtHT.toFixed(2)}</td><td class="text-right">${(l.qte * l.mtHT).toFixed(2)}</td></tr>`
+    )
+    .join('')
+  const rowsPiecesHorsStock = lignesPiecesHorsStock
+    .map(
+      l =>
+        `<tr><td>${l.qte}</td><td>${escapeHtml(l.designation)}</td><td></td><td class="text-right">${l.mtHT.toFixed(2)}</td><td class="text-right">${(l.qte * l.mtHT).toFixed(2)}</td></tr>`
+    )
+    .join('')
+  const rowsAutresProduits = lignesAutresProduits
+    .map(
+      l =>
+        `<tr><td>${l.qte}</td><td>${escapeHtml(l.designation)}</td><td></td><td class="text-right">${l.mtHT.toFixed(2)}</td><td class="text-right">${(l.qte * l.mtHT).toFixed(2)}</td></tr>`
+    )
+    .join('')
+  const rowsDivers = lignesDivers
     .map(
       l =>
         `<tr><td>${l.qte}</td><td>${escapeHtml(l.designation)}</td><td></td><td class="text-right">${l.mtHT.toFixed(2)}</td><td class="text-right">${(l.qte * l.mtHT).toFixed(2)}</td></tr>`
@@ -184,6 +212,21 @@ export function getFacturePrintHtml(facture: Facture): string {
             ${
               rowsMain ||
               '<tr><td colspan="4" class="muted">Aucune ligne de main d\'œuvre</td></tr>'
+            }
+            ${
+              rowsPiecesHorsStock
+                ? `<tr class="category-row"><td colspan="4">Pièces</td></tr>${rowsPiecesHorsStock}`
+                : ''
+            }
+            ${
+              rowsAutresProduits
+                ? `<tr class="category-row"><td colspan="4">Autres produits</td></tr>${rowsAutresProduits}`
+                : ''
+            }
+            ${
+              rowsDivers
+                ? `<tr class="category-row"><td colspan="4">Divers / autres</td></tr>${rowsDivers}`
+                : ''
             }
             ${
               rowsProduits

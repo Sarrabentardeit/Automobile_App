@@ -709,6 +709,9 @@ export type FactureStatut = 'brouillon' | 'envoyee' | 'payee' | 'annulee'
 
 export type LigneFacture =
   | { type: 'main_oeuvre'; designation: string; qte: number; mtHT: number }
+  | { type: 'pieces'; designation: string; qte: number; mtHT: number }
+  | { type: 'autre_produit'; designation: string; qte: number; mtHT: number }
+  | { type: 'divers'; designation: string; qte: number; mtHT: number }
   | { type: 'depense'; designation: string; montant: number }
   | { type: 'produit'; productId: number; designation: string; qte: number; prixUnitaireHT: number }
 
