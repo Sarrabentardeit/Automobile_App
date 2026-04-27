@@ -98,6 +98,7 @@ export default function CalendarPage() {
     clientTelephone: '',
     members: [] as string[],
   })
+  const canManageCalendar = user?.role !== 'technicien'
 
   const memberNames = useMemo(
     () =>
@@ -140,6 +141,13 @@ export default function CalendarPage() {
   const openDay = (date: string) => {
     setSelectedDate(date)
     setNewAssign(prev => ({ ...prev, date }))
+    if (!canManageCalendar) return
+    const dayAssignments = assignmentsByDate.get(date) ?? []
+    if (dayAssignments.length > 0) {
+      openEditAssignment(dayAssignments[0])
+      return
+    }
+    openAddForDate(date)
   }
 
   const openAddForDate = (date: string) => {
@@ -259,8 +267,6 @@ export default function CalendarPage() {
   }
 
   if (!user) return null
-
-  const canManageCalendar = user.role !== 'technicien'
 
   return (
     <div className="max-w-6xl mx-auto pb-12">
@@ -427,7 +433,7 @@ export default function CalendarPage() {
       <Modal
         open={showAddModal}
         onClose={() => setShowAddModal(false)}
-        title="Nouvelle affectation"
+        title={editingId ? 'Modifier affectation' : 'Nouvelle affectation'}
         subtitle={newAssign.date ? formatDate(newAssign.date) : ''}
         maxWidth="md"
       >
@@ -530,7 +536,7 @@ export default function CalendarPage() {
               Annuler
             </Button>
             <Button onClick={handleAddAssignment} className="flex-1" disabled={!newAssign.memberName.trim()}>
-              Enregistrer
+              {editingId ? 'Mettre à jour' : 'Enregistrer'}
             </Button>
           </div>
         </div>

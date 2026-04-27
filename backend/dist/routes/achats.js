@@ -6,7 +6,8 @@ const auth_1 = require("../middleware/auth");
 const achatTotals_1 = require("../lib/achatTotals");
 const router = (0, express_1.Router)();
 const db = prisma_1.prisma;
-const STATUTS = ['brouillon', 'validee', 'payee'];
+const STATUTS = ['brouillon', 'validee', 'partiellement_payee', 'payee'];
+const EPS = 0.01;
 function toAchat(a) {
     return {
         id: a.id,
@@ -20,6 +21,15 @@ function toAchat(a) {
         timbre: typeof a.timbre === 'number' ? a.timbre : 1,
         statut: a.statut,
         paye: a.paye,
+        montantPaye: a.montant_paye ?? 0,
+        paiements: (a.paiements ?? []).map(p => ({
+            id: p.id,
+            date: p.date,
+            montant: p.montant,
+            mode: p.mode ?? undefined,
+            note: p.note ?? undefined,
+            createdAt: p.createdAt.toISOString(),
+        })),
         lignes: a.lignes.map(l => ({
             productId: l.productId ?? null,
             type: l.type === 'service' ? 'service' : 'produit',
@@ -30,6 +40,10 @@ function toAchat(a) {
         createdAt: a.createdAt.toISOString(),
     };
 }
+function round2(n) {
+    return Math.round(n * 100) / 100;
+}
+const achatInclude = { lignes: true, paiements: { orderBy: { id: 'asc' } } };
 function getNextNumero(achats) {
     const year = new Date().getFullYear().toString().slice(-2);
     const sameYear = achats.filter(a => a.numero.startsWith('A' + year + '-'));
@@ -93,7 +107,7 @@ router.get('/', (0, auth_1.authenticate)(), async (req, res) => {
         const list = (await db.achat.findMany({
             where: Object.keys(where).length ? where : undefined,
             orderBy: [{ date: 'desc' }, { id: 'desc' }],
-            include: { lignes: true },
+            include: achatInclude,
         }));
         return res.json(list.map(toAchat));
     }
@@ -113,6 +127,75 @@ router.get('/next-numero', (0, auth_1.authenticate)(), async (_req, res) => {
         return res.status(500).json({ error: 'Internal server error' });
     }
 });
+// POST /achats/:id/paiements - paiement partiel fournisseur
+router.post('/:id/paiements', (0, auth_1.authenticate)(), async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        if (isNaN(id))
+            return res.status(400).json({ error: 'ID invalide' });
+        const body = req.body;
+        if (!body.date?.trim() || typeof body.montant !== 'number' || body.montant <= 0) {
+            return res.status(400).json({ error: 'date et montant (positif) requis' });
+        }
+        const achat = (await db.achat.findUnique({
+            where: { id },
+            include: achatInclude,
+        }));
+        if (!achat)
+            return res.status(404).json({ error: 'Achat introuvable' });
+        if (achat.statut !== 'validee' && achat.statut !== 'partiellement_payee') {
+            return res.status(400).json({ error: 'Paiement possible uniquement sur une facture validée non soldée' });
+        }
+        const totalTTC = round2((0, achatTotals_1.totalTTCAchat)(achat.lignes, achat.timbre ?? 1));
+        const deja = round2(achat.montant_paye ?? 0);
+        const reste = round2(totalTTC - deja);
+        if (reste <= EPS)
+            return res.status(400).json({ error: 'Facture déjà soldée' });
+        const montant = round2(Math.min(body.montant, reste));
+        const newPaye = round2(deja + montant);
+        const isSolde = totalTTC - newPaye <= EPS;
+        const nextStatut = isSolde ? 'payee' : 'partiellement_payee';
+        const mode = (body.mode ?? '').trim() || null;
+        const note = (body.note ?? '').trim() || null;
+        await db.$transaction(async (tx) => {
+            await tx.achatPaiement.create({
+                data: {
+                    achatId: id,
+                    date: body.date.trim(),
+                    montant,
+                    mode,
+                    note,
+                },
+            });
+            await tx.moneyOut.create({
+                data: {
+                    date: body.date.trim(),
+                    amount: montant,
+                    category: 'FOURNISSEUR',
+                    description: `Paiement achat ${achat.numero} — ${achat.fournisseur_nom}`,
+                    beneficiary: achat.fournisseur_nom || null,
+                },
+            });
+            await tx.achat.update({
+                where: { id },
+                data: {
+                    statut: nextStatut,
+                    paye: isSolde,
+                    montant_paye: newPaye,
+                },
+            });
+        });
+        const out = (await db.achat.findUnique({
+            where: { id },
+            include: achatInclude,
+        }));
+        return res.status(201).json(toAchat(out));
+    }
+    catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
 // GET /achats/:id - détail
 router.get('/:id', (0, auth_1.authenticate)(), async (req, res) => {
     try {
@@ -121,7 +204,7 @@ router.get('/:id', (0, auth_1.authenticate)(), async (req, res) => {
             return res.status(400).json({ error: 'ID invalide' });
         const a = (await db.achat.findUnique({
             where: { id },
-            include: { lignes: true },
+            include: achatInclude,
         }));
         if (!a)
             return res.status(404).json({ error: 'Achat introuvable' });
@@ -180,7 +263,7 @@ router.post('/', (0, auth_1.authenticate)(), async (req, res) => {
                     })),
                 },
             },
-            include: { lignes: true },
+            include: achatInclude,
         }));
         if (statut === 'validee' || statut === 'payee') {
             await appliquerEntreeStock(a.lignes, a.numero, a.date);
@@ -201,7 +284,7 @@ router.put('/:id', (0, auth_1.authenticate)(), async (req, res) => {
         const body = req.body;
         const existing = (await db.achat.findUnique({
             where: { id },
-            include: { lignes: true },
+            include: achatInclude,
         }));
         if (!existing)
             return res.status(404).json({ error: 'Achat introuvable' });
@@ -250,7 +333,7 @@ router.put('/:id', (0, auth_1.authenticate)(), async (req, res) => {
                         ...(body.paye !== undefined && { paye: body.paye }),
                         lignes: { create: dataLignes },
                     },
-                    include: { lignes: true },
+                    include: achatInclude,
                 }),
             ]);
             if (etaitBrouillon && devientValidee) {
@@ -272,7 +355,7 @@ router.put('/:id', (0, auth_1.authenticate)(), async (req, res) => {
                 ...(body.statut !== undefined && { statut: body.statut }),
                 ...(body.paye !== undefined && { paye: body.paye }),
             },
-            include: { lignes: true },
+            include: achatInclude,
         }));
         if (etaitBrouillon && devientValidee) {
             await appliquerEntreeStock(updated.lignes, updated.numero, updated.date);

@@ -115,6 +115,24 @@ export function useFacturationApi() {
     [getAccessToken]
   )
 
+  const addPaiementFacture = useCallback(
+    async (
+      id: number,
+      body: { date: string; montant: number; mode?: string; note?: string }
+    ): Promise<Facture> => {
+      const token = getAccessToken()
+      if (!token) throw new Error('Non authentifié')
+      const updated = await apiFetch<Facture>(`/factures/${id}/paiements`, {
+        method: 'POST',
+        token,
+        body: JSON.stringify(body),
+      })
+      setFactures(prev => prev.map(f => (f.id === id ? updated : f)))
+      return updated
+    },
+    [getAccessToken]
+  )
+
   return {
     factures,
     loading,
@@ -122,6 +140,7 @@ export function useFacturationApi() {
     addFacture,
     updateFacture,
     removeFacture,
+    addPaiementFacture,
     getNextNumero,
   }
 }

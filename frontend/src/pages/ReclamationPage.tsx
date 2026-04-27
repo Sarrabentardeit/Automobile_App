@@ -71,6 +71,22 @@ export default function ReclamationPage() {
 
   const selected = useMemo(() => (selectedId ? reclamations.find(r => r.id === selectedId) : null), [reclamations, selectedId])
 
+  const stats = useMemo(() => {
+    const ouvertes = reclamations.filter(r => r.statut === 'ouverte').length
+    const enCours = reclamations.filter(r => r.statut === 'en_cours').length
+    const traitees = reclamations.filter(r => r.statut === 'traitee').length
+    const cloturees = reclamations.filter(r => r.statut === 'cloturee').length
+    const urgentes = reclamations.filter(r => r.priorite === 'haute' && r.statut !== 'cloturee').length
+    return {
+      total: reclamations.length,
+      ouvertes,
+      enCours,
+      traitees,
+      cloturees,
+      urgentes,
+    }
+  }, [reclamations])
+
   const openNew = () => {
     setForm({
       date: new Date().toISOString().slice(0, 10),
@@ -166,6 +182,33 @@ export default function ReclamationPage() {
           Nouvelle réclamation
         </Button>
       </header>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+        <Card padding="sm" className="border border-gray-100">
+          <p className="text-[11px] text-gray-500 uppercase">Total</p>
+          <p className="text-lg font-bold text-gray-900 tabular-nums">{stats.total}</p>
+        </Card>
+        <Card padding="sm" className="border border-amber-100 bg-amber-50/40">
+          <p className="text-[11px] text-amber-700 uppercase">Ouvertes</p>
+          <p className="text-lg font-bold text-amber-700 tabular-nums">{stats.ouvertes}</p>
+        </Card>
+        <Card padding="sm" className="border border-blue-100 bg-blue-50/40">
+          <p className="text-[11px] text-blue-700 uppercase">En cours</p>
+          <p className="text-lg font-bold text-blue-700 tabular-nums">{stats.enCours}</p>
+        </Card>
+        <Card padding="sm" className="border border-emerald-100 bg-emerald-50/40">
+          <p className="text-[11px] text-emerald-700 uppercase">Traitées</p>
+          <p className="text-lg font-bold text-emerald-700 tabular-nums">{stats.traitees}</p>
+        </Card>
+        <Card padding="sm" className="border border-gray-200 bg-gray-50/60">
+          <p className="text-[11px] text-gray-600 uppercase">Clôturées</p>
+          <p className="text-lg font-bold text-gray-700 tabular-nums">{stats.cloturees}</p>
+        </Card>
+        <Card padding="sm" className="border border-red-100 bg-red-50/40">
+          <p className="text-[11px] text-red-700 uppercase">Urgentes</p>
+          <p className="text-lg font-bold text-red-700 tabular-nums">{stats.urgentes}</p>
+        </Card>
+      </div>
 
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row gap-3">

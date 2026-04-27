@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useVehiculesContext } from '@/contexts/VehiculesContext'
@@ -225,6 +225,12 @@ export default function AdminEspacePage() {
   const achatsFournisseursMois = transThisMonth.filter(t => t.type === 'achat').reduce((s, t) => s + (t.montant ?? 0), 0)
   const revenusFournisseursMois = transThisMonth.filter(t => t.type === 'revenue').reduce((s, t) => s + (t.montant ?? 0), 0)
   const paiementsFournisseursMois = transThisMonth.filter(t => t.type === 'paiement').reduce((s, t) => s + (t.montant ?? 0), 0)
+  const bilanMois = totalRevenusMois - achatsFournisseursMois
+
+  const trendDataWithBilan = useMemo(
+    () => trendData.map(point => ({ ...point, bilan: (point.encaissements ?? 0) - (point.achats ?? 0) })),
+    [trendData]
+  )
 
   const totalDettesClients = (clientsDettes ?? []).reduce((s: number, c: ClientAvecDette) => s + (c.reste ?? 0), 0)
   const topDettes = [...(clientsDettes ?? [])].sort((a, b) => (b.reste ?? 0) - (a.reste ?? 0)).slice(0, 5)
@@ -319,7 +325,7 @@ export default function AdminEspacePage() {
             <p className="text-sm font-semibold text-gray-800 mb-2">CA facturé vs Encaissements vs Dépenses</p>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={trendData}>
+                <LineChart data={trendDataWithBilan}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="period" tick={{ fontSize: 12 }} />
                   <YAxis tick={{ fontSize: 12 }} />
@@ -327,6 +333,7 @@ export default function AdminEspacePage() {
                   <Legend />
                   <Line type="monotone" dataKey="caFacture" name="CA facturé" stroke="#4f46e5" strokeWidth={2} dot={false} />
                   <Line type="monotone" dataKey="encaissements" name="Encaissements" stroke="#10b981" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="bilan" name="Bilan (Ventes - Achats)" stroke="#0f766e" strokeWidth={2} dot={false} />
                   <Line type="monotone" dataKey="depenses" name="Dépenses" stroke="#ef4444" strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
@@ -421,7 +428,7 @@ export default function AdminEspacePage() {
           {/* Revenus / Dépenses / Solde */}
           <div>
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Trésorerie — {moisLabel}</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4">
                 <div className="flex items-center gap-2 text-emerald-700 mb-1">
                   <ArrowUpRight className="w-4 h-4" />
@@ -437,6 +444,19 @@ export default function AdminEspacePage() {
                 </div>
                 <p className="text-2xl font-bold text-red-800 tabular-nums">{totalDepensesMois.toFixed(2)} DT</p>
                 <p className="text-xs text-red-600 mt-0.5">{outsThisMonth.length} sortie(s) ce mois</p>
+              </div>
+              <div className={cn(
+                'rounded-xl border p-4',
+                bilanMois >= 0 ? 'border-teal-200 bg-teal-50/30' : 'border-orange-200 bg-orange-50/30'
+              )}>
+                <div className="flex items-center gap-2 text-gray-700 mb-1">
+                  <BarChart3 className="w-4 h-4" />
+                  <span className="text-xs font-semibold uppercase">Bilan (Ventes - Achats)</span>
+                </div>
+                <p className={cn('text-2xl font-bold tabular-nums', bilanMois >= 0 ? 'text-teal-800' : 'text-orange-800')}>
+                  {bilanMois.toFixed(2)} DT
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">Base: encaissements du mois - achats fournisseurs</p>
               </div>
               <div className={cn(
                 'rounded-xl border p-4',

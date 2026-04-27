@@ -193,6 +193,8 @@ export function useVehicules() {
           defaut: data.defaut,
           technicien_id: data.technicien_id,
           responsable_id: data.responsable_id,
+          technicien_ids: data.technicien_ids,
+          responsable_ids: data.responsable_ids,
           client_telephone: data.client_telephone,
           notes: data.notes,
           service_type: data.service_type,

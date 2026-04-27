@@ -7,6 +7,7 @@ interface MoneyContextValue {
   ins: MoneyIn[]
   outs: MoneyOut[]
   loading: boolean
+  refetchMoney: () => Promise<void>
   addIn: (m: Omit<MoneyIn, 'id'>) => Promise<MoneyIn>
   updateIn: (id: number, m: Partial<MoneyIn>) => Promise<MoneyIn>
   removeIn: (id: number) => Promise<boolean>
@@ -129,7 +130,9 @@ export function MoneyProvider({ children }: { children: ReactNode }) {
   }, [getAccessToken])
 
   return (
-    <Context.Provider value={{ ins, outs, loading, addIn, updateIn, removeIn, addOut, updateOut, removeOut }}>
+    <Context.Provider
+      value={{ ins, outs, loading, refetchMoney: fetchMoney, addIn, updateIn, removeIn, addOut, updateOut, removeOut }}
+    >
       {children}
     </Context.Provider>
   )

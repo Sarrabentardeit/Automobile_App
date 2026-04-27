@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useVehiculesContext } from '@/contexts/VehiculesContext'
 import { useUsers } from '@/contexts/UsersContext'
@@ -13,12 +13,14 @@ import VehiculeTimeline from '@/components/vehicules/VehiculeTimeline'
 import VehiculeStats from '@/components/vehicules/VehiculeStats'
 import ChangeEtatModal from '@/components/vehicules/ChangeEtatModal'
 import VehiculeForm from '@/components/vehicules/VehiculeForm'
+import VehiculeOrdresReparation from '@/components/vehicules/VehiculeOrdresReparation'
 import { ArrowLeft, ArrowRightLeft, Pencil, Phone, Calendar, User, Clock, Car, Bike, Image as ImageIcon, Trash2 } from 'lucide-react'
 import { daysSince, getUserDisplayName, formatDuree, formatDate } from '@/lib/utils'
 
 export default function VehiculeDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { user, permissions, getAccessToken } = useAuth()
   const { users } = useUsers()
   const {
@@ -62,6 +64,14 @@ export default function VehiculeDetailPage() {
     void fetchVehiculeImages(vehiculeId)
   }, [vehiculeId, fetchVehiculeImages])
 
+  useEffect(() => {
+    if (location.hash !== '#ordre-reparation' || !vehicule) return
+    const t = window.setTimeout(() => {
+      document.getElementById('ordre-reparation')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 150)
+    return () => clearTimeout(t)
+  }, [location.hash, vehicule])
+
   vehicule = getVehicule(vehiculeId)
 
   if (!user || !permissions) return null
@@ -87,7 +97,20 @@ export default function VehiculeDetailPage() {
   const respName = getUserDisplayName(vehicule.responsable_id, users)
 
   const canChangeEtat = permissions.canChangeEtat && vehicule.etat_actuel !== 'vert'
-    && (permissions.vehiculeVisibility === 'all' || vehicule.technicien_id === user.id)
+    && (
+      permissions.vehiculeVisibility === 'all' ||
+      vehicule.technicien_id === user.id ||
+      (vehicule.technicien_ids?.includes(user.id) ?? false)
+    )
+
+  const notifyAssignedUsers = (
+    technicienIds: number[] | undefined,
+    responsableIds: number[] | undefined,
+    message: string
+  ) => {
+    const ids = Array.from(new Set([...(technicienIds ?? []), ...(responsableIds ?? [])]))
+    ids.forEach(id => addNotification(id, message))
+  }
 
   const minutesSinceUpdate = Math.round(
     (Date.now() - new Date(vehicule.derniere_mise_a_jour).getTime()) / 60000
@@ -182,6 +205,8 @@ export default function VehiculeDetailPage() {
           </Card>
         </div>
       </div>
+
+      <VehiculeOrdresReparation vehicule={vehicule} />
 
       <div>
         <h2 className="text-sm sm:text-base font-bold text-gray-900 mb-2 sm:mb-3 flex items-center gap-2">
@@ -288,10 +313,17 @@ setCurrentImageUrl(`/api${img.url_path}`);
                 if (failed > 0) toast.error(`${failed} photo(s) n'ont pas pu être envoyées.`)
                 else toast.success(`${images.length} photo(s) ajoutée(s).`)
               }
-              const techId = data.technicien_id
-              const respId = data.responsable_id
-              if (techId) addNotification(techId, `Vous avez été assigné au véhicule ${data.modele ?? vehicule.modele} ${(data.immatriculation ?? vehicule.immatriculation) ? `(${data.immatriculation ?? vehicule.immatriculation})` : ''} - ${data.defaut ?? vehicule.defaut}`)
-              if (respId && respId !== techId) addNotification(respId, `Vous avez été assigné en tant que responsable au véhicule ${data.modele ?? vehicule.modele} ${(data.immatriculation ?? vehicule.immatriculation) ? `(${data.immatriculation ?? vehicule.immatriculation})` : ''} - ${data.defaut ?? vehicule.defaut}`)
+              const techIds = data.technicien_ids?.length ? data.technicien_ids : (data.technicien_id ? [data.technicien_id] : [])
+              const respIds = data.responsable_ids?.length ? data.responsable_ids : (data.responsable_id ? [data.responsable_id] : [])
+              const modele = data.modele ?? vehicule.modele
+              const immatriculation = data.immatriculation ?? vehicule.immatriculation
+              const defaut = data.defaut ?? vehicule.defaut
+              const vehiculeLabel = `${modele} ${immatriculation ? `(${immatriculation})` : ''}`.trim()
+              notifyAssignedUsers(
+                techIds,
+                respIds,
+                `Vous avez été affecté au véhicule ${vehiculeLabel}${defaut ? ` - ${defaut}` : ''}`
+              )
               toast.success('Véhicule modifié avec succès')
               setShowEdit(false)
             } catch (err) {

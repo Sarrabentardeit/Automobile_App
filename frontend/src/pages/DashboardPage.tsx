@@ -34,9 +34,9 @@ export default function DashboardPage() {
 
   const recentActivity = (dashboardSummary?.recentActivity ?? []).slice(0, 6)
 
-  const etats: EtatVehicule[] = ['orange', 'mauve', 'bleu', 'rouge', 'vert', 'retour']
+  const etats: EtatVehicule[] = ['orange', 'mauve', 'bleu', 'rouge', 'remise_cle', 'vert', 'retour']
 
-  /** Libellé dashboard pour l’état rouge (reste « PROBLÈME » ailleurs dans l’app) */
+  /** Libellé dashboard pour l’état rouge */
   const labelEtatDashboard = (etat: EtatVehicule) =>
     etat === 'rouge' ? 'À RÉSOUDRE' : ETAT_CONFIG[etat].label
 

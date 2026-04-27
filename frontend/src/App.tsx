@@ -44,7 +44,9 @@ import StockGeneralPage from '@/pages/StockGeneralPage'
 import OutilsAhmedPage from '@/pages/OutilsAhmedPage'
 import AdminEspacePage from '@/pages/AdminEspacePage'
 import FacturationPage from '@/pages/FacturationPage'
+import FacturationPaiementsPartielsPage from '@/pages/FacturationPaiementsPartielsPage'
 import AchatsPage from '@/pages/AchatsPage'
+import PaiementPartielAchatPage from '@/pages/PaiementPartielAchatPage'
 import ChecklistsPage from '@/pages/ChecklistsPage'
 import ChecklistsHistoryPage from '@/pages/ChecklistsHistoryPage'
 import ChecklistTemplatesPage from '@/pages/ChecklistTemplatesPage'
@@ -81,10 +83,13 @@ export default function App() {
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/admin" element={<AdminEspacePage />} />
               <Route path="/facturation-vente" element={<FacturationPage />} />
+              <Route path="/facturation-vente/paiements-partiels" element={<FacturationPaiementsPartielsPage />} />
               <Route path="/facturation" element={<Navigate to="/facturation-vente" replace />} />
               <Route path="/facturation-achat" element={<AchatsPage />} />
+              <Route path="/facturation-achat/paiements-partiels" element={<PaiementPartielAchatPage />} />
               <Route path="/achats" element={<Navigate to="/facturation-achat" replace />} />
               <Route path="/vehicules" element={<VehiculesPage />} />
+              <Route path="/vehicules/marque/:brand" element={<VehiculesPage />} />
               <Route path="/vehicules/archives" element={<VehiculesArchivesPage />} />
               <Route path="/vehicules/:id" element={<VehiculeDetailPage />} />
               <Route path="/utilisateurs" element={<UtilisateursPage />} />

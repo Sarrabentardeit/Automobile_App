@@ -13,6 +13,8 @@ const env_1 = require("./config/env");
 const auth_1 = __importDefault(require("./routes/auth"));
 const users_1 = __importDefault(require("./routes/users"));
 const vehicules_1 = __importDefault(require("./routes/vehicules"));
+const ordreReparations_1 = __importDefault(require("./routes/ordreReparations"));
+const ordreReparationExcel_1 = __importDefault(require("./routes/ordreReparationExcel"));
 const stock_1 = __importDefault(require("./routes/stock"));
 const clients_1 = __importDefault(require("./routes/clients"));
 const factures_1 = __importDefault(require("./routes/factures"));
@@ -81,6 +83,7 @@ app.get('/health', (_req, res) => {
 });
 app.use('/auth', auth_1.default);
 app.use('/users', users_1.default);
+app.use('/vehicules', ordreReparations_1.default);
 app.use('/vehicules', vehicules_1.default);
 app.use('/stock', stock_1.default);
 app.use('/clients', clients_1.default);
@@ -102,6 +105,7 @@ app.use('/outils', outils_1.default);
 app.use('/checklists', checklists_1.default);
 app.use('/stats', stats_1.default);
 app.use('/settings', settings_1.default);
+app.use('/vehicules', ordreReparationExcel_1.default);
 app.use((err, _req, res, _next) => {
     console.error(err);
     res.status(500).json({ error: 'Unexpected error' });

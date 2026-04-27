@@ -122,7 +122,13 @@ export default function VehiculesArchivesPage() {
   const myVehicules = permissions.vehiculeVisibility === 'all'
     ? vehicules
     : permissions.vehiculeVisibility === 'own'
-      ? vehicules.filter(v => v.technicien_id === user.id || v.responsable_id === user.id)
+      ? vehicules.filter(
+        v =>
+          v.technicien_id === user.id ||
+          v.responsable_id === user.id ||
+          (v.technicien_ids?.includes(user.id) ?? false) ||
+          (v.responsable_ids?.includes(user.id) ?? false)
+      )
       : []
 
   const totalPages = Math.ceil(total / limit) || 1

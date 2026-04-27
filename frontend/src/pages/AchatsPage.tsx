@@ -29,6 +29,7 @@ import {
   Import,
   Printer,
   FileDown,
+  Banknote,
 } from 'lucide-react'
 import { computeFactureAchatTotals, formatMontantEnLettres, printFactureAchat, exportFactureAchatPdf } from '@/lib/factureUtils'
 import { cn } from '@/lib/utils'
@@ -36,7 +37,7 @@ import { prixUnitaireAchatTTC } from '@/lib/stockUtils'
 
 export default function AchatsPage() {
   const { permissions } = useAuth()
-  const { factures, loading, addFacture, updateFacture, removeFacture, getNextNumero } = useAchats()
+  const { factures, loading, addFacture, updateFacture, removeFacture, addPaiementFactureAchat, getNextNumero } = useAchats()
   const { fournisseurs, fetchTopFournisseurs, fetchFournisseurFiche } = useFournisseurs()
   const { produits, refetch: refetchStock } = useStockGeneral()
   const { addOut } = useMoney()
@@ -52,6 +53,13 @@ export default function AchatsPage() {
   const [panelDetail, setPanelDetail] = useState<FactureFournisseur | null>(null)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [payerFacture, setPayerFacture] = useState<FactureFournisseur | null>(null)
+  const [payerForm, setPayerForm] = useState({
+    date: new Date().toISOString().slice(0, 10),
+    montant: 0,
+    mode: 'especes',
+    note: '',
+  })
   const [form, setForm] = useState<Omit<FactureFournisseur, 'id' | 'createdAt'>>({
     numero: '',
     date: new Date().toISOString().slice(0, 10),
@@ -69,6 +77,10 @@ export default function AchatsPage() {
   const ttcFacture = useCallback((lignes: LigneAchat[], timbre?: number) => {
     return computeFactureAchatTotals(lignes, timbre ?? 1).totalTTC
   }, [])
+  const resteAchat = useCallback((f: FactureFournisseur) => {
+    const total = ttcFacture(f.lignes, f.timbre)
+    return Math.max(0, total - (f.montantPaye ?? 0))
+  }, [ttcFacture])
 
   const formTotals = useMemo(() => computeFactureAchatTotals(form.lignes, form.timbre ?? 1), [form.lignes, form.timbre])
 
@@ -288,6 +300,24 @@ export default function AchatsPage() {
   }
 
   const marquerPayee = async (f: FactureFournisseur) => {
+    if (f.statut === 'validee' || f.statut === 'partiellement_payee') {
+      const reste = resteAchat(f)
+      if (reste > 0.01) {
+        try {
+          await addPaiementFactureAchat(f.id, {
+            date: new Date().toISOString().slice(0, 10),
+            montant: reste,
+            mode: f.modePaiement || 'especes',
+            note: 'Solde (marqué payée)',
+          })
+          toast.success('Facture soldée')
+          return
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : 'Erreur')
+          return
+        }
+      }
+    }
     if (f.statut === 'brouillon') {
       const totalAchat = computeFactureAchatTotals(f.lignes, f.timbre ?? 1).totalTTC
       addOut({
@@ -301,6 +331,39 @@ export default function AchatsPage() {
       await updateFacture(f.id, { statut: 'payee', paye: true })
       if (f.statut === 'brouillon') refetchStock()
       toast.success('Facture marquée payée')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur')
+    }
+  }
+
+  const openPaiementPartiel = (f: FactureFournisseur) => {
+    const reste = resteAchat(f)
+    setPayerForm({
+      date: new Date().toISOString().slice(0, 10),
+      montant: Math.round(reste * 100) / 100,
+      mode: f.modePaiement || 'especes',
+      note: '',
+    })
+    setPayerFacture(f)
+  }
+
+  const submitPaiementPartiel = async () => {
+    if (!payerFacture) return
+    const reste = resteAchat(payerFacture)
+    const montant = Math.round((Number(payerForm.montant) || 0) * 100) / 100
+    if (montant <= 0 || montant > reste + 0.01) {
+      toast.error('Montant invalide')
+      return
+    }
+    try {
+      await addPaiementFactureAchat(payerFacture.id, {
+        date: payerForm.date,
+        montant: Math.min(montant, reste),
+        mode: payerForm.mode || undefined,
+        note: payerForm.note.trim() || undefined,
+      })
+      toast.success('Paiement enregistré')
+      setPayerFacture(null)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur')
     }
@@ -443,7 +506,7 @@ export default function AchatsPage() {
 
       {/* Filtre par statut */}
       <div className="flex flex-wrap gap-1.5 sm:gap-2">
-        {(['tous', 'brouillon', 'validee', 'payee'] as const).map(s => (
+        {(['tous', 'brouillon', 'validee', 'partiellement_payee', 'payee'] as const).map(s => (
           <button
             key={s}
             type="button"
@@ -485,12 +548,18 @@ export default function AchatsPage() {
                   i % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
                 )}
               >
+                {(() => {
+                  const total = ttcFacture(f.lignes, f.timbre)
+                  const payeMontant = f.montantPaye ?? 0
+                  const reste = Math.max(0, total - payeMontant)
+                  return (
+                    <>
                 <div className="flex items-start justify-between gap-2 mb-1.5">
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold text-gray-900 truncate">{f.numero}</p>
                     <p className="text-xs text-gray-500">{formatDate(f.date)}</p>
                   </div>
-                  <span className="tabular-nums font-bold text-gray-900 shrink-0">{ttcFacture(f.lignes, f.timbre).toFixed(2)} DT</span>
+                  <span className="tabular-nums font-bold text-gray-900 shrink-0">{total.toFixed(2)} DT</span>
                 </div>
                 <button
                   type="button"
@@ -503,54 +572,65 @@ export default function AchatsPage() {
                   <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold border', FACTURE_FOURNISSEUR_STATUT_CONFIG[f.statut].badge)}>
                     {FACTURE_FOURNISSEUR_STATUT_CONFIG[f.statut].label}
                   </span>
-                  {f.paye ? (
-                    <span className="text-emerald-600 text-xs font-medium flex items-center gap-0.5"><CheckCircle className="w-3.5 h-3.5" /> Payé</span>
-                  ) : (
-                    <span className="text-amber-600 text-xs font-medium">Non payé</span>
-                  )}
+                  <span className="text-emerald-700 text-xs font-medium tabular-nums">Payé {payeMontant.toFixed(2)} DT</span>
+                  <span className="text-amber-700 text-xs font-medium tabular-nums">Reste {reste.toFixed(2)} DT</span>
                 </div>
                 <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-100 flex-wrap" onClick={e => e.stopPropagation()}>
                   <button type="button" onClick={() => printFactureAchat({ ...f, timbre: f.timbre ?? 1 })} className="p-1.5 rounded-lg text-gray-400 hover:bg-blue-50 hover:text-blue-600" title="Imprimer"><Printer className="w-4 h-4" /></button>
                   <button type="button" onClick={() => void handleExportPdfAchat(f)} className="p-1.5 rounded-lg text-gray-400 hover:bg-violet-50 hover:text-violet-600" title="PDF"><FileDown className="w-4 h-4" /></button>
                   <button type="button" onClick={() => openEdit(f)} className="p-1.5 rounded-lg text-gray-400 hover:bg-orange-50 hover:text-orange-600" title="Modifier"><Pencil className="w-4 h-4" /></button>
                   <button type="button" onClick={() => openDuplicate(f)} className="p-1.5 rounded-lg text-gray-400 hover:bg-blue-50 hover:text-blue-600" title="Dupliquer"><Copy className="w-4 h-4" /></button>
+                  {(f.statut === 'validee' || f.statut === 'partiellement_payee') && (
+                    <button type="button" onClick={() => openPaiementPartiel(f)} className="p-1.5 rounded-lg text-gray-400 hover:bg-amber-50 hover:text-amber-700" title="Enregistrer paiement">
+                      <Banknote className="w-4 h-4" />
+                    </button>
+                  )}
                   {f.statut !== 'payee' && <button type="button" onClick={() => marquerPayee(f)} className="p-1.5 rounded-lg text-gray-400 hover:bg-emerald-50 hover:text-emerald-600" title="Marquer payée"><CheckCircle className="w-4 h-4" /></button>}
                   <button type="button" onClick={() => setDeleteId(f.id)} className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
                 </div>
+                    </>
+                  )
+                })()}
               </div>
             ))}
           </div>
 
           {/* Vue tableau - Desktop */}
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full text-sm min-w-[600px]">
+          <div className="hidden md:block overflow-x-auto -mx-3 sm:mx-0">
+            <table className="w-full text-sm min-w-[840px] sm:min-w-0">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">N°</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Date</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Fournisseur</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">N° fact. fourn.</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Mode paiement</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Total TTC</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Statut</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Payé</th>
-                  <th className="w-28 px-4 py-3" />
+                <tr className="bg-gradient-to-r from-gray-50 to-gray-50/80 border-b border-gray-200">
+                  <th className="text-left px-3 sm:px-4 py-3 sm:py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">N°</th>
+                  <th className="text-left px-3 sm:px-4 py-3 sm:py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">Date</th>
+                  <th className="text-left px-3 sm:px-4 py-3 sm:py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">Fournisseur</th>
+                  <th className="text-left px-3 sm:px-4 py-3 sm:py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">N° fact.</th>
+                  <th className="text-left px-3 sm:px-4 py-3 sm:py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">Mode paiement</th>
+                  <th className="text-right px-3 sm:px-4 py-3 sm:py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">Total TTC</th>
+                  <th className="text-right px-3 sm:px-4 py-3 sm:py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">Payé</th>
+                  <th className="text-right px-3 sm:px-4 py-3 sm:py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">Reste</th>
+                  <th className="text-left px-3 sm:px-4 py-3 sm:py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">Statut</th>
+                  <th className="w-[280px] px-3 sm:px-6 py-3 sm:py-3.5" />
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((f, i) => (
+                  (() => {
+                    const total = ttcFacture(f.lignes, f.timbre)
+                    const payeMontant = f.montantPaye ?? 0
+                    const reste = Math.max(0, total - payeMontant)
+                    return (
                   <tr
                     key={f.id}
                     onClick={() => setPanelDetail(f)}
                     className={cn(
-                      'border-b border-gray-50 cursor-pointer',
+                      'border-b border-gray-50 cursor-pointer transition-colors',
                       i % 2 === 0 ? 'bg-white' : 'bg-gray-50/30',
-                      'hover:bg-orange-50/50'
+                      'hover:bg-emerald-50/50'
                     )}
                   >
-                    <td className="px-4 py-3 font-semibold text-gray-900">{f.numero}</td>
-                    <td className="px-4 py-3 text-gray-600">{formatDate(f.date)}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 sm:px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">{f.numero}</td>
+                    <td className="px-3 sm:px-4 py-3 text-gray-600 whitespace-nowrap">{formatDate(f.date)}</td>
+                    <td className="px-3 sm:px-4 py-3">
                       <button
                         type="button"
                         onClick={e => { e.stopPropagation(); setPanelFournisseur({ nom: f.fournisseurNom, fournisseurId: f.fournisseurId }) }}
@@ -560,32 +640,32 @@ export default function AchatsPage() {
                         <ExternalLink className="w-3.5 h-3.5" />
                       </button>
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{f.numeroFactureFournisseur || '—'}</td>
-                    <td className="px-4 py-3 text-gray-600">{modePaiementLabel(f.modePaiement ?? '')}</td>
-                    <td className="px-4 py-3 text-right font-semibold tabular-nums">{ttcFacture(f.lignes, f.timbre).toFixed(2)} DT</td>
-                    <td className="px-4 py-2">
+                    <td className="px-3 sm:px-4 py-3 text-gray-600 whitespace-nowrap">{f.numeroFactureFournisseur || '—'}</td>
+                    <td className="px-3 sm:px-4 py-3 text-gray-600 whitespace-nowrap">{modePaiementLabel(f.modePaiement ?? '')}</td>
+                    <td className="px-3 sm:px-4 py-3 text-right font-bold text-emerald-700 tabular-nums whitespace-nowrap">{total.toFixed(2)} DT</td>
+                    <td className="px-3 sm:px-4 py-3 text-right tabular-nums text-gray-700 whitespace-nowrap">{payeMontant.toFixed(2)} DT</td>
+                    <td className="px-3 sm:px-4 py-3 text-right tabular-nums text-amber-800 font-medium whitespace-nowrap">{reste.toFixed(2)} DT</td>
+                    <td className="px-3 sm:px-4 py-2">
                       <span className={cn('inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border', FACTURE_FOURNISSEUR_STATUT_CONFIG[f.statut].badge)}>
                         {FACTURE_FOURNISSEUR_STATUT_CONFIG[f.statut].label}
                       </span>
                     </td>
-                    <td className="px-4 py-2">
-                      {f.paye ? (
-                        <span className="text-emerald-600 font-medium flex items-center gap-1"><CheckCircle className="w-4 h-4" /> Oui</span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">Non payé</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2" onClick={e => e.stopPropagation()}>
-                      <div className="flex items-center gap-1 flex-wrap">
+                    <td className="px-3 sm:px-6 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1 flex-nowrap">
                         <button type="button" onClick={() => printFactureAchat({ ...f, timbre: f.timbre ?? 1 })} className="p-2 rounded-lg text-gray-400 hover:bg-blue-50 hover:text-blue-600" title="Imprimer"><Printer className="w-4 h-4" /></button>
                         <button type="button" onClick={() => void handleExportPdfAchat(f)} className="p-2 rounded-lg text-gray-400 hover:bg-violet-50 hover:text-violet-600" title="Exporter PDF"><FileDown className="w-4 h-4" /></button>
                         <button type="button" onClick={() => openEdit(f)} className="p-2 rounded-lg text-gray-400 hover:bg-orange-50 hover:text-orange-600" title="Modifier"><Pencil className="w-4 h-4" /></button>
                         <button type="button" onClick={() => openDuplicate(f)} className="p-2 rounded-lg text-gray-400 hover:bg-blue-50 hover:text-blue-600" title="Dupliquer"><Copy className="w-4 h-4" /></button>
+                        {(f.statut === 'validee' || f.statut === 'partiellement_payee') && (
+                          <button type="button" onClick={() => openPaiementPartiel(f)} className="p-2 rounded-lg text-gray-400 hover:bg-amber-50 hover:text-amber-700" title="Enregistrer paiement"><Banknote className="w-4 h-4" /></button>
+                        )}
                         {f.statut !== 'payee' && <button type="button" onClick={() => marquerPayee(f)} className="p-2 rounded-lg text-gray-400 hover:bg-emerald-50 hover:text-emerald-600" title="Marquer payée"><CheckCircle className="w-4 h-4" /></button>}
                         <button type="button" onClick={() => setDeleteId(f.id)} className="p-2 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </td>
                   </tr>
+                    )
+                  })()
                 ))}
               </tbody>
             </table>
@@ -814,6 +894,48 @@ export default function AchatsPage() {
             <Button onClick={() => saveAchat(false)} className="flex-1 w-full sm:w-auto">Enregistrer (brouillon)</Button>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        open={payerFacture !== null}
+        onClose={() => setPayerFacture(null)}
+        title="Paiement fournisseur"
+        subtitle={payerFacture ? `${payerFacture.numero} — reste ${resteAchat(payerFacture).toFixed(2)} DT` : ''}
+        maxWidth="sm"
+      >
+        {payerFacture && (
+          <div className="space-y-4">
+            <Input label="Date" type="date" value={payerForm.date} onChange={e => setPayerForm(p => ({ ...p, date: e.target.value }))} />
+            <Input
+              label="Montant (DT)"
+              type="number"
+              min={0.01}
+              step={0.01}
+              value={payerForm.montant || ''}
+              onChange={e => setPayerForm(p => ({ ...p, montant: Number(e.target.value) || 0 }))}
+            />
+            <p className="text-xs text-amber-700 font-medium -mt-2">
+              Reste à payer: {resteAchat(payerFacture).toFixed(2)} DT
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Mode de paiement</label>
+              <select
+                value={payerForm.mode}
+                onChange={e => setPayerForm(p => ({ ...p, mode: e.target.value }))}
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm"
+              >
+                {MODE_PAIEMENT_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+            <Input label="Note (optionnel)" value={payerForm.note} onChange={e => setPayerForm(p => ({ ...p, note: e.target.value }))} />
+            <div className="flex gap-3 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => setPayerFacture(null)}>Annuler</Button>
+              <Button className="flex-1" onClick={() => void submitPaiementPartiel()}>Enregistrer</Button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Modal confirmation suppression */}

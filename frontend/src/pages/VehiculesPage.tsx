@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useVehiculesContext } from '@/contexts/VehiculesContext'
 import { useUsers } from '@/contexts/UsersContext'
@@ -11,10 +11,63 @@ import VehiculeCard from '@/components/vehicules/VehiculeCard'
 import VehiculeForm from '@/components/vehicules/VehiculeForm'
 import VehiculeFicheFinanciereModal from '@/components/vehicules/VehiculeFicheFinanciereModal'
 import ChangeEtatModal from '@/components/vehicules/ChangeEtatModal'
-import { Car, Bike, Search, Plus, Filter, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Car, Bike, Search, Plus, Filter, Trash2, ChevronLeft, ChevronRight, Folder, ArrowLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const PAGE_SIZE = 20
+const KNOWN_BRANDS = [
+  'audi',
+  'bmw',
+  'changan',
+  'cherry',
+  'chevrolet',
+  'citroen',
+  'dacia',
+  'fiat',
+  'ford',
+  'haval',
+  'honda',
+  'hyundai',
+  'jeep',
+  'kia',
+  'mazda',
+  'mercedes',
+  'mg',
+  'mini',
+  'mitsubishi',
+  'nissan',
+  'opel',
+  'peugeot',
+  'porsche',
+  'range',
+  'renault',
+  'ssangyong',
+  'seat',
+  'skoda',
+  'suzuki',
+  'toyota',
+  'volkswagen',
+  'volvo',
+  'jetour',
+  'geely',
+  'isuzu',
+  'mahindra',
+  'tata',
+  'lada',
+] as const
+
+function detectVehiculeBrand(modele: string): string {
+  const raw = (modele || '').trim()
+  if (!raw) return 'Autres'
+  const firstWord = raw.split(/\s+/)[0]?.toLowerCase() ?? ''
+  const matched = KNOWN_BRANDS.find(b => b === firstWord)
+  if (!matched) return 'Autres'
+  return matched.charAt(0).toUpperCase() + matched.slice(1)
+}
+
+function brandToSlug(brand: string): string {
+  return brand.trim().toLowerCase().replace(/\s+/g, '-')
+}
 
 function getDateRange(mode: string, dateFilter: string): { date_debut?: string; date_fin?: string } {
   const today = new Date()
@@ -42,6 +95,8 @@ function getDateRange(mode: string, dateFilter: string): { date_debut?: string; 
 }
 
 export default function VehiculesPage() {
+  const navigate = useNavigate()
+  const { brand: brandParam } = useParams<{ brand?: string }>()
   const { user, permissions } = useAuth()
   const { users } = useUsers()
   const {
@@ -141,10 +196,16 @@ export default function VehiculesPage() {
   const myVehicules = permissions.vehiculeVisibility === 'all'
     ? vehicules
     : permissions.vehiculeVisibility === 'own'
-    ? vehicules.filter(v => v.technicien_id === user.id || v.responsable_id === user.id) // ✅
+    ? vehicules.filter(
+      v =>
+        v.technicien_id === user.id ||
+        v.responsable_id === user.id ||
+        (v.technicien_ids?.includes(user.id) ?? false) ||
+        (v.responsable_ids?.includes(user.id) ?? false)
+    )
       : []
 
-  const etats: EtatVehicule[] = ['orange', 'mauve', 'bleu', 'rouge', 'retour']
+  const etats: EtatVehicule[] = ['orange', 'mauve', 'bleu', 'rouge', 'remise_cle', 'retour']
   const countByEtat = (etat: EtatVehicule) => filteredCounts?.byEtat?.[etat] ?? myVehicules.filter(v => v.etat_actuel === etat).length
   const totalAll = filteredCounts?.total ?? myVehicules.length
 
@@ -166,6 +227,27 @@ export default function VehiculesPage() {
   const visibleVehicules = filtreEtat === 'tous'
     ? myVehicules
     : myVehicules.filter(v => v.etat_actuel === filtreEtat)
+  const groupedVehicules = visibleVehicules.reduce<Record<string, Vehicule[]>>((acc, v) => {
+    const brand = detectVehiculeBrand(v.modele)
+    if (!acc[brand]) acc[brand] = []
+    acc[brand].push(v)
+    return acc
+  }, {})
+  const sortedBrandEntries = Object.entries(groupedVehicules)
+    .sort(([a], [b]) => {
+      if (a === 'Autres') return 1
+      if (b === 'Autres') return -1
+      return a.localeCompare(b, 'fr', { sensitivity: 'base' })
+    })
+    .map(([brand, list]) => [
+      brand,
+      list.slice().sort((a, b) => a.modele.localeCompare(b.modele, 'fr', { sensitivity: 'base' })),
+    ] as const)
+  const selectedBrandEntry = brandParam
+    ? sortedBrandEntries.find(([brand]) => brandToSlug(brand) === brandParam)
+    : undefined
+  const isBrandView = Boolean(brandParam)
+  const vehiclesToRender = isBrandView ? (selectedBrandEntry?.[1] ?? []) : []
 
   const handleDelete = async (v: Vehicule) => {
     const ok = await deleteVehicule(v.id)
@@ -175,6 +257,15 @@ export default function VehiculesPage() {
     } else {
       toast.error('Erreur lors de la suppression')
     }
+  }
+
+  const notifyAssignedUsers = (
+    technicienIds: number[] | undefined,
+    responsableIds: number[] | undefined,
+    message: string
+  ) => {
+    const ids = Array.from(new Set([...(technicienIds ?? []), ...(responsableIds ?? [])]))
+    ids.forEach(id => addNotification(id, message))
   }
 
   return (
@@ -311,8 +402,8 @@ export default function VehiculesPage() {
         </div>
       </div>
 
-      {/* Vehicle list */}
-      <div className="space-y-2.5 sm:space-y-3">
+      {/* Vehicle folders / list by brand */}
+      <div className="space-y-3 sm:space-y-4">
         {loading ? (
           <div className="bg-white rounded-2xl p-10 sm:p-16 text-center shadow-sm border border-gray-100">
             <p className="text-gray-500 font-medium text-sm sm:text-base">Chargement...</p>
@@ -323,18 +414,61 @@ export default function VehiculesPage() {
             <p className="text-gray-500 font-medium text-sm sm:text-base">Aucun véhicule trouvé</p>
             <p className="text-xs sm:text-sm text-gray-400 mt-1">Essayez de modifier les filtres</p>
           </div>
+        ) : !isBrandView ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {sortedBrandEntries.map(([brand, brandVehicules]) => (
+              <button
+                key={brand}
+                type="button"
+                onClick={() => navigate(`/vehicules/marque/${brandToSlug(brand)}`)}
+                className="group text-left bg-white rounded-2xl p-4 border border-gray-200 hover:border-orange-400 hover:shadow-md transition-all"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <Folder className="w-5 h-5 text-orange-500 flex-shrink-0" />
+                    <h3 className="font-bold text-gray-900 truncate">{brand}</h3>
+                  </div>
+                  <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                    {brandVehicules.length}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">Cliquer pour voir les véhicules de cette marque</p>
+              </button>
+            ))}
+          </div>
         ) : (
-          visibleVehicules.map(v => (
-            <VehiculeCard
-              key={v.id}
-              vehicule={v}
-              permissions={permissions}
-              onChangeEtat={() => setChangeEtatVehicule(v)}
-              onFicheFinanciere={() => setFicheVehicule(v)}
-              onEdit={() => { setEditingVehicule(v); setShowAddForm(true) }}
-              onDelete={permissions.canEditVehicule ? () => setDeleteConfirm(v) : undefined}
-            />
-          ))
+          <section className="space-y-2.5 sm:space-y-3">
+            <div className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur supports-[backdrop-filter]:bg-gray-50/75 px-3 py-2 rounded-lg border border-gray-200 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => navigate('/vehicules')}
+                className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-gray-700 hover:text-gray-900"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Retour aux dossiers
+              </button>
+              <h3 className="text-xs sm:text-sm font-bold text-gray-700">
+                {selectedBrandEntry?.[0] ?? 'Marque'} ({vehiclesToRender.length})
+              </h3>
+            </div>
+            {vehiclesToRender.length === 0 ? (
+              <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-gray-100">
+                <p className="text-gray-500 font-medium text-sm sm:text-base">Aucun véhicule pour cette marque</p>
+              </div>
+            ) : (
+              vehiclesToRender.map(v => (
+                <VehiculeCard
+                  key={v.id}
+                  vehicule={v}
+                  permissions={permissions}
+                  onChangeEtat={() => setChangeEtatVehicule(v)}
+                  onFicheFinanciere={() => setFicheVehicule(v)}
+                  onEdit={() => { setEditingVehicule(v); setShowAddForm(true) }}
+                  onDelete={permissions.canEditVehicule ? () => setDeleteConfirm(v) : undefined}
+                />
+              ))
+            )}
+          </section>
         )}
       </div>
 
@@ -392,21 +526,29 @@ export default function VehiculesPage() {
   vehicule={editingVehicule}
   onClose={() => { setShowAddForm(false); setEditingVehicule(null) }}
   onSubmit={async (data, images) => {
-    const techId = data.technicien_id
-    const respId = data.responsable_id
+    const techIds = data.technicien_ids?.length ? data.technicien_ids : (data.technicien_id ? [data.technicien_id] : [])
+    const respIds = data.responsable_ids?.length ? data.responsable_ids : (data.responsable_id ? [data.responsable_id] : [])
+    const vehiculeLabel = `${data.modele} ${data.immatriculation ? `(${data.immatriculation})` : ''}`.trim()
+    const detail = data.defaut.trim()
     try {
       let savedVehiculeId: number | null = null
       if (editingVehicule) {
         const updated = await editVehicule(editingVehicule.id, data)
         savedVehiculeId = updated.id
-        if (techId) addNotification(techId, `Vous avez été assigné au véhicule ${data.modele} ${data.immatriculation ? `(${data.immatriculation})` : ''} - ${data.defaut}`)
-        if (respId && respId !== techId) addNotification(respId, `Vous avez été assigné comme responsable : ${data.modele} ${data.immatriculation ? `(${data.immatriculation})` : ''} - ${data.defaut}`)
+        notifyAssignedUsers(
+          techIds,
+          respIds,
+          `Vous avez été affecté au véhicule ${vehiculeLabel}${detail ? ` - ${detail}` : ''}`
+        )
         toast.success('Véhicule modifié avec succès')
       } else {
         const created = await addVehicule(data, user.id, user.nom_complet)
         savedVehiculeId = created.id
-        if (techId) addNotification(techId, `Nouveau véhicule assigné : ${data.modele} ${data.immatriculation ? `(${data.immatriculation})` : ''} - ${data.defaut}`)
-        if (respId && respId !== techId) addNotification(respId, `Vous avez été assigné comme responsable : ${data.modele} ${data.immatriculation ? `(${data.immatriculation})` : ''} - ${data.defaut}`)
+        notifyAssignedUsers(
+          techIds,
+          respIds,
+          `Nouveau véhicule affecté : ${vehiculeLabel}${detail ? ` - ${detail}` : ''}`
+        )
         toast.success('Véhicule ajouté avec succès')
       }
       if (savedVehiculeId && images.length > 0) {

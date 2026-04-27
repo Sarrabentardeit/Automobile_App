@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { ETAT_CONFIG, type Vehicule } from '@/types'
 import { useUsers } from '@/contexts/UsersContext'
 import EtatBadge from './EtatBadge'
-import { Phone, Calendar, ArrowRightLeft, Eye, Pencil, Clock, Trash2, Wallet } from 'lucide-react'
+import { Phone, Calendar, ArrowRightLeft, Eye, Pencil, Clock, Trash2, Wallet, ClipboardList } from 'lucide-react'
 import { daysSince, getUserDisplayName, formatDuree, formatDate } from '@/lib/utils'
 import type { Permissions } from '@/types'
 
@@ -70,6 +70,17 @@ export default function VehiculeCard({
                 className="p-1.5 sm:p-2 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 active:bg-emerald-200 transition-colors"
               >
                 <Wallet className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={e => {
+                  e.stopPropagation()
+                  navigate(`/vehicules/${v.id}#ordre-reparation`)
+                }}
+                title="Ordre de réparation (fiche d'entrée atelier)"
+                className="p-1.5 sm:p-2 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 active:bg-indigo-200 transition-colors"
+              >
+                <ClipboardList className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </button>
               {permissions.canEditVehicule && (
                 <button onClick={onEdit} title="Modifier"

@@ -102,7 +102,7 @@ export interface User {
 }
 
 // ==================== ETATS / WORKFLOW ====================
-export type EtatVehicule = 'orange' | 'mauve' | 'bleu' | 'rouge' | 'vert' | 'retour'
+export type EtatVehicule = 'orange' | 'mauve' | 'bleu' | 'rouge' | 'remise_cle' | 'vert' | 'retour'
 export type VehiculeType = 'voiture' | 'moto'
 
 export interface EtatConfig {
@@ -140,12 +140,20 @@ export const ETAT_CONFIG: Record<EtatVehicule, EtatConfig> = {
     border: 'border-cyan-400',
   },
   rouge: {
-    label: 'PROBLÈME À RÉSOUDRE',
+    label: 'À RÉSOUDRE',
     description: 'Problème technique détecté',
     color: '#ef4444',
     bg: 'bg-red-500',
     bgLight: 'bg-red-50',
     border: 'border-red-400',
+  },
+  remise_cle: {
+    label: 'REMISE CLÉ',
+    description: 'Véhicule prêt à être remis au client',
+    color: '#14b8a6',
+    bg: 'bg-teal-500',
+    bgLight: 'bg-teal-50',
+    border: 'border-teal-400',
   },
   vert: {
     label: 'VALIDÉ',
@@ -166,12 +174,13 @@ export const ETAT_CONFIG: Record<EtatVehicule, EtatConfig> = {
 }
 
 export const TRANSITIONS_AUTORISEES: Record<EtatVehicule, EtatVehicule[]> = {
-  orange: ['bleu', 'mauve', 'rouge', 'vert', 'retour'],
+  orange: ['bleu', 'mauve', 'rouge', 'remise_cle', 'retour'],
   mauve: ['orange'],
-  bleu: ['vert', 'orange'],
+  bleu: ['remise_cle', 'orange'],
   rouge: ['orange', 'mauve'],
+  remise_cle: ['vert', 'orange'],
   vert: ['retour'],
-  retour: [],
+  retour: ['orange', 'mauve', 'bleu', 'rouge', 'remise_cle', 'vert'],
 }
 
 // ==================== VEHICULES ====================
@@ -184,6 +193,8 @@ export interface Vehicule {
   service_type?: 'diagnostic' | 'diagnostic_approfondi' | 'service_rapide' | 'reprogrammation' | 'mecanique' | 'autre'
   technicien_id: number | null
   responsable_id: number | null
+  technicien_ids?: number[]
+  responsable_ids?: number[]
   defaut: string
   client_telephone: string
   date_entree: string
@@ -235,6 +246,67 @@ export interface VehiculeImage {
   created_at: string
 }
 
+/** Statut d’une ligne « travaux demandés » sur l’ordre de réparation */
+export type OrdreReparationLigneStatut = 'en_attente' | 'fait' | 'na'
+
+export interface OrdreReparationLigne {
+  id?: number
+  description: string
+  statut: OrdreReparationLigneStatut
+  ordre: number
+}
+
+/** Bas de fiche (comme l’Excel : travaux prochains, pièces, prix, mention technicien, signature, note) */
+export type OrdreReparationComplement = {
+  travauxProchains?: string
+  pieces?: Array<{ quantite?: string; produit?: string }>
+  prix?: string
+  technicienMention?: string
+  signatureControle?: string
+  note?: string
+}
+
+export interface OrdreReparation {
+  id: number
+  vehiculeId: number
+  numero: string
+  clientNom: string
+  clientTelephone: string
+  voiture: string
+  immatriculation: string
+  kilometrage: number | null
+  dateEntree: string
+  technicien: string
+  vin: string
+  carrosserieJson: Record<string, string> | null
+  voyantsJson: Record<string, VoyantEtat> | null
+  /** Présent si le backend a appliqué la migration `complementJson` */
+  complementJson?: OrdreReparationComplement | null
+  rempliPar: string
+  createdAt: string
+  updatedAt: string
+  lignes: OrdreReparationLigne[]
+}
+
+/** ok = RAS, anomalie = voyant / symptôme, nc = non vérifié */
+export type VoyantEtat = 'ok' | 'anomalie' | 'nc'
+
+export type OrdreReparationInput = {
+  clientNom?: string
+  clientTelephone?: string
+  voiture?: string
+  immatriculation?: string
+  kilometrage?: number | null
+  dateEntree?: string
+  technicien?: string
+  vin?: string
+  carrosserieJson?: Record<string, string>
+  voyantsJson?: Record<string, VoyantEtat>
+  complementJson?: OrdreReparationComplement | null
+  rempliPar?: string
+  lignes?: Array<{ description: string; statut?: OrdreReparationLigneStatut; ordre?: number }>
+}
+
 export interface VehiculeFormData {
   immatriculation: string
   modele: string
@@ -244,6 +316,8 @@ export interface VehiculeFormData {
   defaut: string
   technicien_id: number | null
   responsable_id: number | null
+  technicien_ids: number[]
+  responsable_ids: number[]
   client_telephone: string
   notes: string
   service_type?: 'diagnostic' | 'diagnostic_approfondi' | 'service_rapide' | 'reprogrammation' | 'mecanique' | 'autre'
@@ -705,7 +779,16 @@ export interface TransactionFournisseur {
 }
 
 // ==================== FACTURATION ====================
-export type FactureStatut = 'brouillon' | 'envoyee' | 'payee' | 'annulee'
+export type FactureStatut = 'brouillon' | 'envoyee' | 'partiellement_payee' | 'payee' | 'annulee'
+
+export interface FacturePaiement {
+  id: number
+  date: string
+  montant: number
+  mode?: string
+  note?: string
+  createdAt: string
+}
 
 export type LigneFacture =
   | { type: 'main_oeuvre'; designation: string; qte: number; mtHT: number }
@@ -725,6 +808,8 @@ export interface Facture {
   clientTelephone: string
   clientAdresse?: string
   clientMatriculeFiscale?: string
+  montantPaye?: number // TTC encaissé
+  paiements?: FacturePaiement[]
   lignes: LigneFacture[]
   timbre: number // ex. 1 DT
   createdAt: string
@@ -732,7 +817,8 @@ export interface Facture {
 
 export const FACTURE_STATUT_LABELS: Record<FactureStatut, string> = {
   brouillon: 'Brouillon',
-  envoyee: 'Validée',
+  envoyee: 'Non payée',
+  partiellement_payee: 'Partiellement payée',
   payee: 'Payée',
   annulee: 'Annulée',
 }
@@ -749,16 +835,22 @@ export const FACTURE_STATUT_CONFIG: Record<
     order: 1,
   },
   envoyee: {
-    label: 'Validée',
+    label: 'Non payée',
     badge: 'bg-blue-100 text-blue-800 border border-blue-200',
     dot: 'bg-blue-500',
     order: 2,
+  },
+  partiellement_payee: {
+    label: 'Partiellement payée',
+    badge: 'bg-amber-100 text-amber-900 border border-amber-200',
+    dot: 'bg-amber-500',
+    order: 3,
   },
   payee: {
     label: 'Payée',
     badge: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
     dot: 'bg-emerald-500',
-    order: 3,
+    order: 4,
   },
   annulee: {
     label: 'Annulée',
@@ -769,7 +861,7 @@ export const FACTURE_STATUT_CONFIG: Record<
 }
 
 // ==================== ACHATS (FACTURES FOURNISSEUR) ====================
-export type FactureFournisseurStatut = 'brouillon' | 'validee' | 'payee'
+export type FactureFournisseurStatut = 'brouillon' | 'validee' | 'partiellement_payee' | 'payee'
 
 export interface LigneAchat {
   productId?: number | null
@@ -801,6 +893,15 @@ export interface FactureFournisseur {
   /** Droit de timbre (TTC), aligné facture vente */
   timbre?: number
   statut: FactureFournisseurStatut
+  montantPaye?: number
+  paiements?: {
+    id: number
+    date: string
+    montant: number
+    mode?: string
+    note?: string
+    createdAt: string
+  }[]
   lignes: LigneAchat[]
   paye: boolean // suivi payé / non payé
   createdAt: string
@@ -812,6 +913,7 @@ export const FACTURE_FOURNISSEUR_STATUT_CONFIG: Record<
 > = {
   brouillon: { label: 'Brouillon', badge: 'bg-slate-100 text-slate-700 border border-slate-200' },
   validee: { label: 'Validée', badge: 'bg-blue-100 text-blue-800 border border-blue-200' },
+  partiellement_payee: { label: 'Partiellement payée', badge: 'bg-amber-100 text-amber-900 border border-amber-200' },
   payee: { label: 'Payée', badge: 'bg-emerald-100 text-emerald-800 border border-emerald-200' },
 }
 

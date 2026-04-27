@@ -5,9 +5,9 @@ import { useClients } from '@/contexts/ClientsContext'
 import { useStockGeneral } from '@/contexts/StockGeneralContext'
 import { useMoney } from '@/contexts/MoneyContext'
 import { useToast } from '@/contexts/ToastContext'
-import type { Facture, LigneFacture, FactureStatut } from '@/types'
+import type { Facture, LigneFacture, FactureStatut, ModePaiement } from '@/types'
 import type { ProduitStock } from '@/types'
-import { FACTURE_STATUT_CONFIG } from '@/types'
+import { FACTURE_STATUT_CONFIG, MODE_PAIEMENT_OPTIONS } from '@/types'
 import { computeFactureTotals, formatMontantEnLettres, printFacture, exportFacturePdf } from '@/lib/factureUtils'
 import { formatDate } from '@/lib/utils'
 import Card from '@/components/ui/Card'
@@ -66,10 +66,10 @@ function ligneFromProduit(p: ProduitStock): FormLigne {
 
 export default function FacturationPage() {
   const { user, permissions } = useAuth()
-  const { factures, fetchFactures, addFacture, updateFacture, removeFacture, getNextNumero } = useFacturation()
+  const { factures, fetchFactures, addFacture, updateFacture, removeFacture, addPaiementFacture, getNextNumero } = useFacturation()
   const { clients } = useClients()
   const { produits, decrementerStock, incrementerStock } = useStockGeneral()
-  const { addIn } = useMoney()
+  const { refetchMoney } = useMoney()
   const toast = useToast()
 
   const [search, setSearch] = useState('')
@@ -84,6 +84,13 @@ export default function FacturationPage() {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
   const [openActionsId, setOpenActionsId] = useState<number | null>(null)
   const [pendingValidation, setPendingValidation] = useState<{ facture: Facture; newStatut: FactureStatut } | null>(null)
+  const [payerFacture, setPayerFacture] = useState<Facture | null>(null)
+  const [payerForm, setPayerForm] = useState({
+    date: new Date().toISOString().slice(0, 10),
+    montant: 0,
+    mode: '' as ModePaiement | '',
+    note: '',
+  })
   const actionsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -94,7 +101,7 @@ export default function FacturationPage() {
   useEffect(() => {
     void fetchFactures({
       q: debouncedSearch || undefined,
-      statut: filterStatut === 'a_encaisser' ? 'envoyee' : (filterStatut || undefined),
+      statut: filterStatut && filterStatut !== 'a_encaisser' ? filterStatut : undefined,
       month: filterMonth === '' ? undefined : filterMonth,
       year: filterYear || undefined,
     })
@@ -123,9 +130,21 @@ export default function FacturationPage() {
 
   const totals = useMemo(() => computeFactureTotals(form.lignes, form.timbre), [form.lignes, form.timbre])
 
+  const round2 = (n: number) => Math.round(n * 100) / 100
+  const factureResteTTC = (f: Facture) => {
+    const t = computeFactureTotals(f.lignes, f.timbre)
+    const paye = f.montantPaye ?? 0
+    return Math.max(0, round2(t.totalTTC - paye))
+  }
+
   const filteredFactures = useMemo(() => {
     let list = factures
-    if (filterStatut === 'a_encaisser') list = list.filter(f => f.statut === 'envoyee')
+    if (filterStatut === 'a_encaisser') {
+      list = list.filter(f => {
+        if (f.statut !== 'envoyee' && f.statut !== 'partiellement_payee') return false
+        return factureResteTTC(f) > 0.01
+      })
+    }
     return list.sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
   }, [factures, filterStatut])
 
@@ -133,9 +152,10 @@ export default function FacturationPage() {
     const list = filteredFactures
     const totalCA = list.filter(f => f.statut !== 'annulee').reduce((s, f) => s + computeFactureTotals(f.lignes, f.timbre).totalTTC, 0)
     const payees = list.filter(f => f.statut === 'payee').length
+    const partielles = list.filter(f => f.statut === 'partiellement_payee').length
     const brouillons = list.filter(f => f.statut === 'brouillon').length
     const annulees = list.filter(f => f.statut === 'annulee').length
-    return { count: list.length, totalCA, payees, brouillons, annulees }
+    return { count: list.length, totalCA, payees, partielles, brouillons, annulees }
   }, [filteredFactures])
 
   const openNew = () => {
@@ -282,7 +302,9 @@ export default function FacturationPage() {
 
     const prevFacture = editingId ? factures.find(f => f.id === editingId) : null
     const devientValidee = payload.statut === 'envoyee' || payload.statut === 'payee'
-    const etaitValidee = prevFacture && (prevFacture.statut === 'envoyee' || prevFacture.statut === 'payee')
+    const etaitValidee =
+      prevFacture &&
+      (prevFacture.statut === 'envoyee' || prevFacture.statut === 'partiellement_payee' || prevFacture.statut === 'payee')
     const devientAnnulee = payload.statut === 'annulee'
 
     if (devientValidee && (!prevFacture || prevFacture.statut === 'brouillon')) {
@@ -295,13 +317,6 @@ export default function FacturationPage() {
           return
         }
       }
-      const { totalTTC } = computeFactureTotals(payload.lignes, payload.timbre)
-      await addIn({
-        date: payload.date,
-        amount: totalTTC,
-        type: 'MECA',
-        description: `Facture ${payload.numero}`,
-      })
     }
     if (editingId && devientAnnulee && etaitValidee) {
       const lignesProduit = prevFacture!.lignes.filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
@@ -347,7 +362,7 @@ export default function FacturationPage() {
   const confirmAnnuler = async () => {
     if (annulerId === null) return
     const f = factures.find(x => x.id === annulerId)
-    if (f && (f.statut === 'envoyee' || f.statut === 'payee')) {
+    if (f && (f.statut === 'envoyee' || f.statut === 'partiellement_payee' || f.statut === 'payee')) {
       const lignesProduit = f.lignes.filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
       for (const l of lignesProduit) await incrementerStock(l.productId, l.qte)
     }
@@ -357,6 +372,41 @@ export default function FacturationPage() {
       setAnnulerId(null)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur lors de l’annulation')
+    }
+  }
+
+  const openPaiementPartiel = (f: Facture) => {
+    setOpenActionsId(null)
+    const reste = factureResteTTC(f)
+    setPayerForm({
+      date: new Date().toISOString().slice(0, 10),
+      montant: round2(reste),
+      mode: 'especes',
+      note: '',
+    })
+    setPayerFacture(f)
+  }
+
+  const submitPaiementPartiel = async () => {
+    if (!payerFacture) return
+    const max = factureResteTTC(payerFacture)
+    const mont = round2(payerForm.montant)
+    if (mont < 0.01 || mont > max + 0.01) {
+      toast.error('Montant invalide')
+      return
+    }
+    try {
+      await addPaiementFacture(payerFacture.id, {
+        date: payerForm.date,
+        montant: Math.min(mont, max),
+        mode: payerForm.mode || undefined,
+        note: payerForm.note.trim() || undefined,
+      })
+      await refetchMoney()
+      toast.success('Paiement enregistré')
+      setPayerFacture(null)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur enregistrement du paiement')
     }
   }
 
@@ -374,7 +424,7 @@ export default function FacturationPage() {
         return
       }
     }
-    executeWorkflowAction(f, newStatut)
+    void executeWorkflowAction(f, newStatut)
   }
 
   const executeWorkflowAction = async (f: Facture, newStatut: FactureStatut) => {
@@ -394,21 +444,18 @@ export default function FacturationPage() {
           return
         }
       }
-      const { totalTTC } = computeFactureTotals(f.lignes, f.timbre)
-      await addIn({
-        date: f.date,
-        amount: totalTTC,
-        type: 'MECA',
-        description: `Facture ${f.numero}`,
-      })
     }
-    // Réouverture (remise en brouillon) depuis Validée/Payée → réintégrer le stock
-    if (newStatut === 'brouillon' && (f.statut === 'envoyee' || f.statut === 'payee')) {
+    // Réouverture (remise en brouillon) depuis facture validée → réintégrer le stock
+    if (
+      newStatut === 'brouillon' &&
+      (f.statut === 'envoyee' || f.statut === 'partiellement_payee' || f.statut === 'payee')
+    ) {
       const lignesProduit = f.lignes.filter((l): l is LigneFacture & { type: 'produit' } => l.type === 'produit')
       for (const l of lignesProduit) await incrementerStock(l.productId, l.qte)
     }
     try {
       await updateFacture(f.id, { statut: newStatut })
+      await refetchMoney()
       toast.success(`Facture ${FACTURE_STATUT_CONFIG[newStatut].label.toLowerCase()}`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur lors du changement de statut')
@@ -462,6 +509,11 @@ export default function FacturationPage() {
             <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
             <span className="font-bold text-gray-900 tabular-nums">{statsFiltered.payees}</span>
             <span className="text-xs text-gray-500">payées</span>
+          </div>
+          <div className="flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 shrink-0">
+            <Banknote className="w-4 h-4 text-amber-600 shrink-0" />
+            <span className="font-bold text-gray-900 tabular-nums">{statsFiltered.partielles}</span>
+            <span className="text-xs text-gray-500">partielles</span>
           </div>
           <div className="flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-xl bg-amber-50 border border-amber-100 shrink-0">
             <Clock className="w-4 h-4 text-amber-600 shrink-0" />
@@ -570,6 +622,8 @@ export default function FacturationPage() {
           <div className="p-3 sm:p-4 grid grid-cols-1 min-[480px]:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
             {filteredFactures.map((f, i) => {
               const t = computeFactureTotals(f.lignes, f.timbre)
+              const paye = f.montantPaye ?? 0
+              const reste = factureResteTTC(f)
               const isAnnulee = f.statut === 'annulee'
               return (
                 <div
@@ -615,10 +669,13 @@ export default function FacturationPage() {
                                 </button>
                               </>
                             )}
-                            {f.statut === 'envoyee' && (
+                            {(f.statut === 'envoyee' || f.statut === 'partiellement_payee') && (
                               <>
-                                <button type="button" onClick={() => runWorkflowAction(f, 'payee')} className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-700">
-                                  <Banknote className="w-4 h-4" /> Enregistrer paiement
+                                <button type="button" onClick={() => openPaiementPartiel(f)} className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-700">
+                                  <Banknote className="w-4 h-4" /> Encaisser
+                                </button>
+                                <button type="button" onClick={() => runWorkflowAction(f, 'payee')} className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-800">
+                                  <CheckCircle className="w-4 h-4" /> Marquer payée (solde)
                                 </button>
                                 <button type="button" onClick={() => runWorkflowAction(f, 'annulee')} className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-red-50 hover:text-red-700">
                                   <XCircle className="w-4 h-4" /> Annuler
@@ -636,7 +693,11 @@ export default function FacturationPage() {
                     </div>
                   </div>
                   <p className="font-medium text-gray-800 truncate">{f.clientNom}</p>
-                  <p className="text-xs text-gray-500 mb-3">{f.clientTelephone}</p>
+                  <p className="text-xs text-gray-500 mb-2">{f.clientTelephone}</p>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-600 tabular-nums mb-2">
+                    <span>Payé {paye.toFixed(2)}</span>
+                    <span className="text-amber-800 font-medium">Reste {reste.toFixed(2)}</span>
+                  </div>
                   <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                     <span className="text-lg font-bold text-emerald-700 tabular-nums">{t.totalTTC.toFixed(2)} DT</span>
                     <div className="flex gap-1">
@@ -653,13 +714,15 @@ export default function FacturationPage() {
           </div>
         ) : (
           <div className="overflow-x-auto -mx-3 sm:mx-0">
-            <table className="w-full text-sm min-w-[640px] sm:min-w-0">
+            <table className="w-full text-sm min-w-[780px] sm:min-w-0">
               <thead>
                 <tr className="bg-gradient-to-r from-gray-50 to-gray-50/80 border-b border-gray-200">
                   <th className="text-left px-3 sm:px-4 py-3 sm:py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">N° Facture</th>
                   <th className="text-left px-3 sm:px-4 py-3 sm:py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">Date</th>
                   <th className="text-left px-3 sm:px-4 py-3 sm:py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">Client</th>
                   <th className="text-right px-3 sm:px-4 py-3 sm:py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">Total TTC</th>
+                  <th className="text-right px-3 sm:px-4 py-3 sm:py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider hidden sm:table-cell">Payé</th>
+                  <th className="text-right px-3 sm:px-4 py-3 sm:py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider hidden sm:table-cell">Reste</th>
                   <th className="text-left px-3 sm:px-4 py-3 sm:py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">Statut</th>
                   <th className="w-28 sm:w-32 px-3 sm:px-4 py-3 sm:py-3.5" />
                 </tr>
@@ -667,6 +730,8 @@ export default function FacturationPage() {
               <tbody>
                 {filteredFactures.map((f, i) => {
                   const t = computeFactureTotals(f.lignes, f.timbre)
+                  const paye = f.montantPaye ?? 0
+                  const reste = factureResteTTC(f)
                   const isAnnulee = f.statut === 'annulee'
                   return (
                     <tr
@@ -686,6 +751,12 @@ export default function FacturationPage() {
                       </td>
                       <td className="px-3 sm:px-4 py-3 text-right font-bold text-emerald-700 tabular-nums whitespace-nowrap">
                         {t.totalTTC.toFixed(2)} DT
+                      </td>
+                      <td className="px-3 sm:px-4 py-3 text-right tabular-nums text-gray-700 whitespace-nowrap hidden sm:table-cell">
+                        {paye.toFixed(2)} DT
+                      </td>
+                      <td className="px-3 sm:px-4 py-3 text-right tabular-nums text-amber-800 font-medium whitespace-nowrap hidden sm:table-cell">
+                        {reste.toFixed(2)} DT
                       </td>
                       <td className="px-3 sm:px-4 py-2">
                         <div className="flex items-center gap-1.5 flex-wrap">
@@ -720,10 +791,13 @@ export default function FacturationPage() {
                                     </button>
                                   </>
                                 )}
-                                {f.statut === 'envoyee' && (
+                                {(f.statut === 'envoyee' || f.statut === 'partiellement_payee') && (
                                   <>
-                                    <button type="button" onClick={() => runWorkflowAction(f, 'payee')} className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-700">
-                                      <Banknote className="w-4 h-4 text-emerald-500" /> Enregistrer le paiement
+                                    <button type="button" onClick={() => openPaiementPartiel(f)} className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-700">
+                                      <Banknote className="w-4 h-4 text-emerald-500" /> Encaisser
+                                    </button>
+                                    <button type="button" onClick={() => runWorkflowAction(f, 'payee')} className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-800">
+                                      <CheckCircle className="w-4 h-4 text-emerald-600" /> Marquer payée (solde)
                                     </button>
                                     <button type="button" onClick={() => runWorkflowAction(f, 'annulee')} className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-red-50 hover:text-red-700">
                                       <XCircle className="w-4 h-4 text-red-500" /> Annuler
@@ -804,7 +878,12 @@ export default function FacturationPage() {
                 onChange={e => setForm(prev => ({ ...prev, statut: e.target.value as FactureStatut }))}
                 className="w-full px-3 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 bg-white"
               >
-                {(Object.keys(FACTURE_STATUT_CONFIG) as FactureStatut[]).filter(s => s !== 'annulee').map(s => (
+                {form.statut === 'partiellement_payee' && (
+                  <option value="partiellement_payee" disabled>
+                    {FACTURE_STATUT_CONFIG.partiellement_payee.label} (géré par encaissements)
+                  </option>
+                )}
+                {(Object.keys(FACTURE_STATUT_CONFIG) as FactureStatut[]).filter(s => s !== 'annulee' && s !== 'partiellement_payee').map(s => (
                   <option key={s} value={s}>{FACTURE_STATUT_CONFIG[s].label}</option>
                 ))}
               </select>
@@ -989,6 +1068,60 @@ export default function FacturationPage() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        open={payerFacture !== null}
+        onClose={() => setPayerFacture(null)}
+        title="Encaissement"
+        subtitle={payerFacture ? `${payerFacture.numero} — reste ${factureResteTTC(payerFacture).toFixed(2)} DT` : ''}
+        maxWidth="sm"
+      >
+        {payerFacture && (
+          <div className="space-y-4">
+            <Input
+              label="Date"
+              type="date"
+              value={payerForm.date}
+              onChange={e => setPayerForm(p => ({ ...p, date: e.target.value }))}
+            />
+            <Input
+              label="Montant (DT)"
+              type="number"
+              min={0.01}
+              step={0.01}
+              value={payerForm.montant || ''}
+              onChange={e => setPayerForm(p => ({ ...p, montant: Number(e.target.value) || 0 }))}
+            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Mode de paiement</label>
+              <select
+                value={payerForm.mode}
+                onChange={e => setPayerForm(p => ({ ...p, mode: e.target.value as ModePaiement }))}
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm"
+              >
+                {MODE_PAIEMENT_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Input
+              label="Note (optionnel)"
+              value={payerForm.note}
+              onChange={e => setPayerForm(p => ({ ...p, note: e.target.value }))}
+            />
+            <div className="flex gap-3 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => setPayerFacture(null)}>
+                Fermer
+              </Button>
+              <Button className="flex-1" onClick={() => void submitPaiementPartiel()}>
+                Enregistrer
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Modal confirmation suppression */}

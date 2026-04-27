@@ -7,19 +7,20 @@ import path from 'path'
 const router = Router()
 const db = prisma as any
 
-const ETATS = ['orange', 'mauve', 'bleu', 'rouge', 'vert', 'retour'] as const
+const ETATS = ['orange', 'mauve', 'bleu', 'rouge', 'remise_cle', 'vert', 'retour'] as const
 const TYPES = ['voiture', 'moto'] as const
 const IMAGE_CATEGORIES = ['etat_exterieur', 'etat_interieur', 'compteur', 'plaque', 'dommage', 'intervention'] as const
 const ALLOWED_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'] as const
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024
 const UPLOADS_ROOT = path.resolve(process.cwd(), 'uploads', 'vehicules')
 const TRANSITIONS: Record<string, string[]> = {
-  orange: ['bleu', 'mauve', 'rouge', 'vert', 'retour'],
+  orange: ['bleu', 'mauve', 'rouge', 'remise_cle', 'retour'],
   mauve: ['orange'],
-  bleu: ['vert', 'orange'],
+  bleu: ['remise_cle', 'orange'],
   rouge: ['orange', 'mauve'],
+  remise_cle: ['vert', 'orange'],
   vert: ['retour'],
-  retour: [],
+  retour: ['orange', 'mauve', 'bleu', 'rouge', 'remise_cle', 'vert'],
 }
 
 const ETAT_LABELS: Record<string, string> = {
@@ -27,6 +28,7 @@ const ETAT_LABELS: Record<string, string> = {
   mauve: 'Mauve',
   bleu: 'Bleu',
   rouge: 'Problème',
+  remise_cle: 'Remise clé',
   vert: 'Validé',
   retour: 'Retour',
 }
@@ -125,6 +127,39 @@ function parseDataUrl(dataUrl?: string): { mimeType: string; buffer: Buffer } | 
   }
 }
 
+const ASSIGNEES_TAG = '[[ASSIGNEES:'
+
+function normalizeIds(input: unknown): number[] {
+  if (!Array.isArray(input)) return []
+  return Array.from(new Set(input.map(v => Number(v)).filter(v => Number.isInteger(v) && v > 0)))
+}
+
+function splitNotesAndAssignees(rawNotes: string | null | undefined) {
+  const notes = String(rawNotes ?? '')
+  const start = notes.lastIndexOf(ASSIGNEES_TAG)
+  if (start < 0) return { notes: notes.trim(), technicien_ids: [] as number[], responsable_ids: [] as number[] }
+  const end = notes.indexOf(']]', start)
+  if (end < 0) return { notes: notes.trim(), technicien_ids: [] as number[], responsable_ids: [] as number[] }
+  const jsonPart = notes.slice(start + ASSIGNEES_TAG.length, end)
+  let technicien_ids: number[] = []
+  let responsable_ids: number[] = []
+  try {
+    const parsed = JSON.parse(jsonPart) as { technicien_ids?: unknown; responsable_ids?: unknown }
+    technicien_ids = normalizeIds(parsed.technicien_ids)
+    responsable_ids = normalizeIds(parsed.responsable_ids)
+  } catch {
+    // ignore malformed metadata
+  }
+  const cleaned = (notes.slice(0, start) + notes.slice(end + 2)).trim()
+  return { notes: cleaned, technicien_ids, responsable_ids }
+}
+
+function mergeNotesWithAssignees(notesRaw: string | null | undefined, technicien_ids: number[], responsable_ids: number[]) {
+  const base = splitNotesAndAssignees(notesRaw).notes
+  const meta = `${ASSIGNEES_TAG}${JSON.stringify({ technicien_ids, responsable_ids })}]]`
+  return base ? `${base}\n\n${meta}` : meta
+}
+
 function toVehicule(v: {
   id: number
   immatriculation: string
@@ -142,6 +177,9 @@ function toVehicule(v: {
   derniere_mise_a_jour: string
   avance_client?: number | null
 }) {
+  const parsed = splitNotesAndAssignees(v.notes)
+  const technicien_ids = parsed.technicien_ids.length ? parsed.technicien_ids : (v.technicien_id != null ? [v.technicien_id] : [])
+  const responsable_ids = parsed.responsable_ids.length ? parsed.responsable_ids : (v.responsable_id != null ? [v.responsable_id] : [])
   return {
     id: v.id,
     immatriculation: v.immatriculation,
@@ -151,11 +189,13 @@ function toVehicule(v: {
     service_type: v.service_type ?? undefined,
     technicien_id: v.technicien_id,
     responsable_id: v.responsable_id,
+    technicien_ids,
+    responsable_ids,
     defaut: v.defaut,
     client_telephone: v.client_telephone,
     date_entree: v.date_entree,
     date_sortie: v.date_sortie,
-    notes: v.notes,
+    notes: parsed.notes,
     derniere_mise_a_jour: v.derniere_mise_a_jour,
     avance_client: v.avance_client ?? 0,
   }
@@ -254,7 +294,7 @@ router.get('/stats', authenticate(), async (req, res) => {
 
     const [total, enCours, byEtat, terminesCeMois] = await Promise.all([
       db.vehicule.count(),
-      db.vehicule.count({ where: { etat_actuel: { notIn: ['vert', 'retour'] } } }),
+      db.vehicule.count({ where: { etat_actuel: { notIn: ['vert'] } } }),
       db.vehicule.groupBy({
         by: ['etat_actuel'],
         _count: { id: true },
@@ -831,6 +871,8 @@ router.post('/', authenticate(), async (req: AuthRequest, res) => {
       service_type?: string
       technicien_id?: number | null
       responsable_id?: number | null
+      technicien_ids?: number[]
+      responsable_ids?: number[]
       client_telephone?: string
       notes?: string
     }
@@ -841,6 +883,12 @@ router.post('/', authenticate(), async (req: AuthRequest, res) => {
     const etat = body.etat_initial && ETATS.includes(body.etat_initial as (typeof ETATS)[number]) ? body.etat_initial : 'orange'
     const type = body.type && TYPES.includes(body.type as (typeof TYPES)[number]) ? body.type : 'voiture'
 
+    const technicienIds = normalizeIds(body.technicien_ids)
+    const responsableIds = normalizeIds(body.responsable_ids)
+    const finalTechnicienId = technicienIds[0] ?? body.technicien_id ?? null
+    const finalResponsableId = responsableIds[0] ?? body.responsable_id ?? null
+    const mergedNotes = mergeNotesWithAssignees(body.notes, technicienIds, responsableIds)
+
     const v = await db.vehicule.create({
       data: {
         immatriculation: (body.immatriculation ?? '').trim(),
@@ -848,13 +896,13 @@ router.post('/', authenticate(), async (req: AuthRequest, res) => {
         type,
         etat_actuel: etat,
         service_type: (body.service_type ?? 'autre').trim() || 'autre',
-        technicien_id: body.technicien_id ?? null,
-        responsable_id: body.responsable_id ?? null,
+        technicien_id: finalTechnicienId,
+        responsable_id: finalResponsableId,
         defaut: (body.defaut ?? '').trim(),
         client_telephone: (body.client_telephone ?? '').trim(),
         date_entree: body.date_entree,
         date_sortie: null,
-        notes: (body.notes ?? '').trim(),
+        notes: mergedNotes,
         derniere_mise_a_jour: now,
       },
     })
@@ -895,6 +943,8 @@ router.put('/:id', authenticate(), async (req: AuthRequest, res) => {
       service_type: string
       technicien_id: number | null
       responsable_id: number | null
+      technicien_ids: number[]
+      responsable_ids: number[]
       client_telephone: string
       notes: string
       date_entree: string
@@ -903,16 +953,41 @@ router.put('/:id', authenticate(), async (req: AuthRequest, res) => {
     const existing = await db.vehicule.findUnique({ where: { id } })
     if (!existing) return res.status(404).json({ error: 'Véhicule introuvable' })
 
+    const existingMeta = splitNotesAndAssignees(existing.notes)
+    const technicienIds = normalizeIds(body.technicien_ids)
+    const responsableIds = normalizeIds(body.responsable_ids)
+    const resolvedTechnicienIds = technicienIds.length
+      ? technicienIds
+      : body.technicien_id !== undefined
+        ? (body.technicien_id != null ? [body.technicien_id] : [])
+        : existingMeta.technicien_ids
+    const resolvedResponsableIds = responsableIds.length
+      ? responsableIds
+      : body.responsable_id !== undefined
+        ? (body.responsable_id != null ? [body.responsable_id] : [])
+        : existingMeta.responsable_ids
     const data: Record<string, unknown> = { derniere_mise_a_jour: new Date().toISOString() }
     if (body.immatriculation != null) data.immatriculation = body.immatriculation
     if (body.modele != null) data.modele = body.modele
     if (body.type != null && TYPES.includes(body.type as (typeof TYPES)[number])) data.type = body.type
     if (body.defaut != null) data.defaut = body.defaut
     if (body.service_type != null) data.service_type = body.service_type
-    if (body.technicien_id !== undefined) data.technicien_id = body.technicien_id
-    if (body.responsable_id !== undefined) data.responsable_id = body.responsable_id
+    if (body.technicien_id !== undefined || body.technicien_ids !== undefined) data.technicien_id = resolvedTechnicienIds[0] ?? null
+    if (body.responsable_id !== undefined || body.responsable_ids !== undefined) data.responsable_id = resolvedResponsableIds[0] ?? null
     if (body.client_telephone != null) data.client_telephone = body.client_telephone
-    if (body.notes != null) data.notes = body.notes
+    if (
+      body.notes != null ||
+      body.technicien_id !== undefined ||
+      body.responsable_id !== undefined ||
+      body.technicien_ids !== undefined ||
+      body.responsable_ids !== undefined
+    ) {
+      data.notes = mergeNotesWithAssignees(
+        body.notes != null ? body.notes : existing.notes,
+        resolvedTechnicienIds,
+        resolvedResponsableIds
+      )
+    }
     if (body.date_entree != null) data.date_entree = body.date_entree
 
     const v = await db.vehicule.update({ where: { id }, data })

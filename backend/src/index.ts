@@ -8,6 +8,8 @@ import { env } from './config/env'
 import authRouter from './routes/auth'
 import usersRouter from './routes/users'
 import vehiculesRouter from './routes/vehicules'
+import ordreReparationsRouter from './routes/ordreReparations'
+import ordreReparationExcelRouter from './routes/ordreReparationExcel'
 import stockRouter from './routes/stock'
 import clientsRouter from './routes/clients'
 import facturesRouter from './routes/factures'
@@ -81,6 +83,7 @@ app.get('/health', (_req, res) => {
 
 app.use('/auth', authRouter)
 app.use('/users', usersRouter)
+app.use('/vehicules', ordreReparationsRouter)
 app.use('/vehicules', vehiculesRouter)
 app.use('/stock', stockRouter)
 app.use('/clients', clientsRouter)
@@ -102,6 +105,7 @@ app.use('/outils', outilsRouter)
 app.use('/checklists', checklistsRouter)
 app.use('/stats', statsRouter)
 app.use('/settings', settingsRouter)
+app.use('/vehicules', ordreReparationExcelRouter)
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err)

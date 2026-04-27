@@ -109,67 +109,151 @@ export default function DemandeDevisPage() {
   }
 
   const buildDevisHtml = (d: DemandeDevis) => {
-    const montant = d.montantEstime != null ? formatMontant(d.montantEstime) : 'À définir'
+    const montantHT = d.montantEstime ?? 0
+    const tva19 = montantHT * 0.19
+    const timbre = 1
+    const montantTTC = montantHT + tva19 + timbre
+    const montant = d.montantEstime != null ? formatMontant(d.montantEstime) : 'A definir'
+    const montantTva = d.montantEstime != null ? formatMontant(tva19) : 'A definir'
+    const montantTimbre = d.montantEstime != null ? formatMontant(timbre) : 'A definir'
+    const montantTotal = d.montantEstime != null ? formatMontant(montantTTC) : 'A definir'
     const phone = d.clientTelephone?.trim() ? d.clientTelephone : '—'
     const vehicle = d.vehicleRef?.trim() ? d.vehicleRef : '—'
     const notes = d.notes?.trim() ? d.notes : '—'
     const validite = d.dateLimite ? formatDate(d.dateLimite) : '—'
+    const statut = DEMANDE_DEVIS_STATUT_LABELS[d.statut]
+    const statutColor =
+      d.statut === 'accepte'
+        ? '#047857'
+        : d.statut === 'envoye'
+          ? '#1d4ed8'
+          : d.statut === 'refuse'
+            ? '#4b5563'
+            : '#b45309'
+    const escapeHtml = (s: string) =>
+      s
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+
     return `
       <html>
         <head>
           <meta charset="utf-8" />
-          <title>Devis - ${d.clientName}</title>
+          <title>Devis - ${escapeHtml(d.clientName)}</title>
           <style>
-            body { font-family: Arial, sans-serif; color: #111827; margin: 0; padding: 24px; }
-            .wrap { max-width: 800px; margin: 0 auto; }
-            .head { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; }
-            .title { font-size: 26px; font-weight: 700; margin: 0; }
-            .muted { color:#6b7280; font-size:12px; }
-            .box { border:1px solid #e5e7eb; border-radius:10px; padding:14px; margin-bottom:12px; }
+            * { box-sizing: border-box; }
+            body { font-family: Arial, sans-serif; font-size: 12px; color: #111827; background: #e5e7eb; margin: 0; padding: 24px; }
+            .wrap { max-width: 900px; margin: 0 auto; }
+            .doc { background: #fff; border-radius: 12px; padding: 24px 28px 28px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12); }
+            .head { display:flex; justify-content:space-between; align-items:flex-start; gap: 24px; border-bottom: 2px solid #059669; padding-bottom: 16px; margin-bottom: 20px; }
+            .company { font-size: 18px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #059669; }
+            .line { font-size: 11px; color: #6b7280; margin-top: 4px; }
+            .title { font-size: 20px; font-weight: 700; text-align: right; letter-spacing: 0.08em; text-transform: uppercase; margin: 0; }
+            .meta { margin-top: 6px; font-size: 11px; color: #4b5563; text-align: right; }
+            .meta .label { color:#6b7280; display: inline-block; min-width: 90px; }
+            .box { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; background: #f9fafb; }
+            .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; color:#6b7280; margin: 0 0 8px 0; }
             .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
-            .k { font-size:12px; color:#6b7280; margin-bottom:3px; }
-            .v { font-size:14px; font-weight:600; }
-            .section-title { font-size:13px; font-weight:700; margin:0 0 8px 0; color:#374151; }
-            .big { font-size:22px; font-weight:700; }
-            .footer { margin-top:24px; font-size:12px; color:#6b7280; }
+            .k { font-size:11px; color:#6b7280; margin-bottom:2px; }
+            .v { font-size:13px; font-weight:600; color:#111827; }
+            table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+            thead th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; background: #f3f4f6; color: #6b7280; padding: 8px 10px; border-bottom: 1px solid #e5e7eb; text-align: left; }
+            tbody td { font-size: 12px; padding: 8px 10px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+            .text-right { text-align: right; }
+            .totaux-wrap { margin-top: 14px; display: flex; justify-content: flex-end; }
+            .totaux { width: 320px; border-collapse: collapse; font-size: 11px; }
+            .totaux td { padding: 5px 0; }
+            .totaux .label { color:#4b5563; }
+            .totaux .value { text-align: right; font-variant-numeric: tabular-nums; }
+            .totaux .big td { font-size: 14px; font-weight: 700; color: #059669; padding-top: 9px; }
+            .notes { white-space: pre-wrap; font-size: 12px; line-height: 1.5; }
+            .footer { margin-top: 18px; border-top: 1px solid #e5e7eb; padding-top: 14px; display:flex; justify-content:space-between; gap: 20px; font-size:11px; color:#6b7280; }
+            @media print {
+              body { background: #fff; padding: 0; }
+              .doc { box-shadow: none; border-radius: 0; padding: 16px 22px 22px; }
+            }
           </style>
         </head>
         <body>
           <div class="wrap">
-            <div class="head">
-              <div>
-                <h1 class="title">DEVIS</h1>
-                <div class="muted">Réf. demande #${d.id} · ${formatDate(d.date)}</div>
+            <div class="doc">
+              <div class="head">
+                <div>
+                  <div class="company">EL MECANO GARAGE</div>
+                  <div class="line">Devis atelier mecanique</div>
+                </div>
+                <div style="text-align:right">
+                  <h1 class="title">Devis</h1>
+                  <div class="meta">
+                    <div><span class="label">Ref. demande :</span> #${d.id}</div>
+                    <div><span class="label">Date :</span> ${formatDate(d.date)}</div>
+                    <div><span class="label">Validite :</span> ${validite}</div>
+                    <div><span class="label">Statut :</span> <span style="color:${statutColor};font-weight:700">${statut}</span></div>
+                  </div>
+                </div>
               </div>
-              <div style="text-align:right">
-                <div style="font-weight:700">EL MECANO GARAGE</div>
-                <div class="muted">Document généré depuis l'application</div>
+
+              <div class="box">
+                <div class="section-title">Informations client</div>
+                <div class="grid">
+                  <div><div class="k">Client</div><div class="v">${escapeHtml(d.clientName)}</div></div>
+                  <div><div class="k">Telephone</div><div class="v">${escapeHtml(phone)}</div></div>
+                  <div><div class="k">Vehicule</div><div class="v">${escapeHtml(vehicle)}</div></div>
+                  <div><div class="k">Reference</div><div class="v">Demande #${d.id}</div></div>
+                </div>
               </div>
-            </div>
-            <div class="box">
-              <div class="section-title">Informations client</div>
-              <div class="grid">
-                <div><div class="k">Client</div><div class="v">${d.clientName}</div></div>
-                <div><div class="k">Téléphone</div><div class="v">${phone}</div></div>
-                <div><div class="k">Véhicule</div><div class="v">${vehicle}</div></div>
-                <div><div class="k">Validité</div><div class="v">${validite}</div></div>
+
+              <div class="box">
+                <div class="section-title">Detail de la demande</div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th style="width:70%">Description des travaux demandes</th>
+                      <th style="width:15%" class="text-right">Qté</th>
+                      <th style="width:15%" class="text-right">Montant</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>${escapeHtml(d.description || '—')}</td>
+                      <td class="text-right">1</td>
+                      <td class="text-right">${montant}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div class="totaux-wrap">
+                  <table class="totaux">
+                    <tr>
+                      <td class="label">Montant HT</td>
+                      <td class="value">${montant}</td>
+                    </tr>
+                    <tr>
+                      <td class="label">TVA 19%</td>
+                      <td class="value">${montantTva}</td>
+                    </tr>
+                    <tr>
+                      <td class="label">Timbre fiscal</td>
+                      <td class="value">${montantTimbre}</td>
+                    </tr>
+                    <tr class="big">
+                      <td>Total TTC</td>
+                      <td class="value">${montantTotal}</td>
+                    </tr>
+                  </table>
+                </div>
               </div>
-            </div>
-            <div class="box">
-              <div class="section-title">Travaux demandés</div>
-              <div style="white-space:pre-wrap; font-size:14px; line-height:1.5">${d.description}</div>
-            </div>
-            <div class="box">
-              <div class="section-title">Montant estimé</div>
-              <div class="big">${montant}</div>
-              <div class="muted">Statut: ${DEMANDE_DEVIS_STATUT_LABELS[d.statut]}</div>
-            </div>
-            <div class="box">
-              <div class="section-title">Notes</div>
-              <div style="white-space:pre-wrap; font-size:14px; line-height:1.5">${notes}</div>
-            </div>
-            <div class="footer">
-              Bon pour accord client: ______________________ &nbsp;&nbsp; Date: ____ / ____ / ______
+
+              <div class="box">
+                <div class="section-title">Notes</div>
+                <div class="notes">${escapeHtml(notes)}</div>
+              </div>
+
+              <div class="footer">
+                <div>Bon pour accord client: ______________________</div>
+                <div>Date: ____ / ____ / ______</div>
+              </div>
             </div>
           </div>
         </body>
@@ -187,65 +271,57 @@ export default function DemandeDevisPage() {
   }
 
   const exportDevisPdf = async (d: DemandeDevis) => {
-    const { jsPDF } = await import('jspdf')
-    const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
-    const pageW = pdf.internal.pageSize.getWidth()
-    let y = 14
+    const [html2canvas, jspdfModule] = await Promise.all([import('html2canvas'), import('jspdf')])
+    const jsPDF = jspdfModule.default
 
-    pdf.setFont('helvetica', 'bold')
-    pdf.setFontSize(18)
-    pdf.text('DEVIS', 14, y)
-    pdf.setFontSize(10)
-    pdf.setFont('helvetica', 'normal')
-    pdf.text(`Ref. demande #${d.id} - ${formatDate(d.date)}`, 14, y + 5)
-    pdf.text('EL MECANO GARAGE', pageW - 14, y, { align: 'right' })
-    y += 14
+    const iframe = document.createElement('iframe')
+    iframe.style.position = 'fixed'
+    iframe.style.left = '0'
+    iframe.style.top = '0'
+    iframe.style.width = '800px'
+    iframe.style.height = '1123px'
+    iframe.style.opacity = '0'
+    iframe.style.pointerEvents = 'none'
+    iframe.style.zIndex = '-1'
+    document.body.appendChild(iframe)
 
-    const line = (label: string, value: string) => {
-      pdf.setFont('helvetica', 'bold')
-      pdf.text(label, 14, y)
-      pdf.setFont('helvetica', 'normal')
-      pdf.text(value || '—', 56, y)
-      y += 6
+    const doc = iframe.contentDocument
+    if (!doc) {
+      document.body.removeChild(iframe)
+      throw new Error('Impossible de creer le document PDF')
     }
 
-    pdf.setFont('helvetica', 'bold')
-    pdf.text('Informations client', 14, y)
-    y += 7
-    line('Client', d.clientName)
-    line('Telephone', d.clientTelephone ?? '—')
-    line('Vehicule', d.vehicleRef || '—')
-    line('Validite', d.dateLimite ? formatDate(d.dateLimite) : '—')
+    doc.open()
+    doc.write(buildDevisHtml(d))
+    doc.close()
 
-    y += 3
-    pdf.setFont('helvetica', 'bold')
-    pdf.text('Travaux demandes', 14, y)
-    y += 6
-    pdf.setFont('helvetica', 'normal')
-    const description = pdf.splitTextToSize(d.description || '—', pageW - 28)
-    pdf.text(description, 14, y)
-    y += description.length * 5 + 4
+    const body = doc.body
+    await new Promise<void>(resolve => setTimeout(() => resolve(), 200))
 
-    pdf.setFont('helvetica', 'bold')
-    pdf.text('Montant estime', 14, y)
-    y += 6
-    pdf.setFont('helvetica', 'normal')
-    pdf.text(d.montantEstime != null ? formatMontant(d.montantEstime) : 'A definir', 14, y)
-    y += 6
-    pdf.text(`Statut: ${DEMANDE_DEVIS_STATUT_LABELS[d.statut]}`, 14, y)
-    y += 8
-
-    pdf.setFont('helvetica', 'bold')
-    pdf.text('Notes', 14, y)
-    y += 6
-    pdf.setFont('helvetica', 'normal')
-    const notes = pdf.splitTextToSize(d.notes?.trim() || '—', pageW - 28)
-    pdf.text(notes, 14, y)
-    y += notes.length * 5 + 12
-
-    pdf.setFontSize(10)
-    pdf.text('Bon pour accord client: ______________________    Date: ____ / ____ / ______', 14, y)
-    pdf.save(`devis-${d.id}-${d.clientName.replace(/\s+/g, '_')}.pdf`)
+    try {
+      const canvas = await html2canvas.default(body, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        windowWidth: 800,
+      })
+      const imgData = canvas.toDataURL('image/jpeg', 0.98)
+      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
+      const pdfW = pdf.internal.pageSize.getWidth()
+      const pdfH = pdf.internal.pageSize.getHeight()
+      const imgW = canvas.width
+      const imgH = canvas.height
+      const ratio = Math.min((pdfW - 20) / imgW, (pdfH - 20) / imgH) * 0.95
+      const w = imgW * ratio
+      const h = imgH * ratio
+      const x = (pdfW - w) / 2
+      const y = 10
+      pdf.addImage(imgData, 'JPEG', x, y, w, h)
+      pdf.save(`devis-${d.id}-${d.clientName.replace(/\s+/g, '_')}.pdf`)
+    } finally {
+      document.body.removeChild(iframe)
+    }
   }
 
   if (!user) return null

@@ -36,13 +36,13 @@ export default function ChangeEtatModal({ vehicule, onClose, onConfirm }: Props)
 
   if (transitions.length === 0) {
     return (
-      <Modal open onClose={onClose} title="Véhicule validé" subtitle={`${vehicule.modele} - ${vehicule.immatriculation}`}>
+      <Modal open onClose={onClose} title="Aucune transition disponible" subtitle={`${vehicule.modele} - ${vehicule.immatriculation}`}>
         <div className="text-center py-6">
           <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4">
             <Check className="w-8 h-8 text-green-500" />
           </div>
-          <p className="text-gray-700 font-medium">Ce véhicule est validé (VERT).</p>
-          <p className="text-sm text-gray-500 mt-1">Il est prêt pour la remise des clés au client.</p>
+          <p className="text-gray-700 font-medium">Aucun changement d'état possible depuis {ETAT_CONFIG[vehicule.etat_actuel].label}.</p>
+          <p className="text-sm text-gray-500 mt-1">Vérifiez la configuration des transitions si nécessaire.</p>
           <Button variant="secondary" onClick={onClose} className="mt-6">Fermer</Button>
         </div>
       </Modal>

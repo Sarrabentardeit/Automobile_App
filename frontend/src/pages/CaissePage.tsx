@@ -202,9 +202,10 @@ export default function CaissePage() {
   const moneyKpis = useMemo(() => {
     const ca = monthIns.reduce((s, i) => s + i.amount, 0)
     const depenses = monthOuts.reduce((s, o) => s + o.amount, 0)
-    const cashFlow = ca - depenses - totalCharges
+    // Les charges mensuelles sont informatives ici (note), sans impact cash.
+    const cashFlow = ca - depenses
     return { ca, depenses, cashFlow }
-  }, [monthIns, monthOuts, totalCharges])
+  }, [monthIns, monthOuts])
 
   const sortedMemberNames = useMemo(() => {
     const withData = memberNames.filter(n => memberTotals[n].inHand !== 0 || memberTotals[n].taken !== 0)
@@ -453,9 +454,9 @@ export default function CaissePage() {
             <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Dépenses</span>
           </div>
           <p className="text-xl sm:text-2xl font-bold text-red-700 tabular-nums">
-            {(moneyKpis.depenses + totalCharges).toLocaleString('fr-FR')} DT
+            {moneyKpis.depenses.toLocaleString('fr-FR')} DT
           </p>
-          <p className="text-xs text-gray-500 mt-0.5">Sorties + charges</p>
+          <p className="text-xs text-gray-500 mt-0.5">Sorties Money</p>
         </Card>
         <Card padding="sm" className="border-l-4 border-l-blue-500">
           <div className="flex items-center gap-2 mb-1">

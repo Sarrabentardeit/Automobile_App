@@ -7,7 +7,7 @@ interface ModalProps {
   title: string
   subtitle?: string
   children: ReactNode
-  maxWidth?: 'sm' | 'md' | 'lg' | 'xl'
+  maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl'
 }
 
 export default function Modal({ open, onClose, title, subtitle, children, maxWidth = 'md' }: ModalProps) {
@@ -19,7 +19,7 @@ export default function Modal({ open, onClose, title, subtitle, children, maxWid
 
   if (!open) return null
 
-  const widths = { sm: 'sm:max-w-sm', md: 'sm:max-w-lg', lg: 'sm:max-w-2xl', xl: 'sm:max-w-4xl' }
+  const widths = { sm: 'sm:max-w-sm', md: 'sm:max-w-lg', lg: 'sm:max-w-2xl', xl: 'sm:max-w-4xl', '2xl': 'sm:max-w-6xl' }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">

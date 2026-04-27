@@ -117,6 +117,24 @@ export function useAchatsApi() {
     [getAccessToken]
   )
 
+  const addPaiementFactureAchat = useCallback(
+    async (
+      id: number,
+      body: { date: string; montant: number; mode?: string; note?: string }
+    ): Promise<FactureFournisseur> => {
+      const token = getAccessToken()
+      if (!token) throw new Error('Non authentifié')
+      const updated = await apiFetch<FactureFournisseur>(`/achats/${id}/paiements`, {
+        method: 'POST',
+        token,
+        body: JSON.stringify(body),
+      })
+      setFactures(prev => prev.map(x => (x.id === id ? updated : x)))
+      return updated
+    },
+    [getAccessToken]
+  )
+
   return {
     factures,
     loading,
@@ -124,6 +142,7 @@ export function useAchatsApi() {
     addFacture,
     updateFacture,
     removeFacture,
+    addPaiementFactureAchat,
     getNextNumero,
   }
 }

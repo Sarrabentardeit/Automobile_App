@@ -38,6 +38,8 @@ const TAB_CONFIG: Record<Exclude<TabType, 'synthese'>, { label: string; icon: ty
 
 const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 
+const todayISO = () => new Date().toISOString().slice(0, 10)
+
 export default function TransactionsFournisseursPage() {
   const { user, permissions } = useAuth()
   const { fournisseurs } = useFournisseurs()
@@ -54,7 +56,7 @@ export default function TransactionsFournisseursPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [form, setForm] = useState<Omit<TransactionFournisseur, 'id'>>({
     type: 'achat',
-    date: '',
+    date: todayISO(),
     montant: 0,
     fournisseur: '',
     vehicule: '',
@@ -143,7 +145,7 @@ export default function TransactionsFournisseursPage() {
   const openNew = () => {
     setForm({
       type: tab === 'synthese' ? 'achat' : tab,
-      date: `${period.year}-${period.month.toString().padStart(2, '0')}-01`,
+      date: todayISO(),
       montant: 0,
       fournisseur: '',
       vehicule: '',

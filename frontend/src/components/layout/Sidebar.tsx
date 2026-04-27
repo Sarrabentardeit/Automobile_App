@@ -53,7 +53,9 @@ const NAV_STRUCTURE: NavCategory[] = [
     label: 'FINANCES',
     items: [
       { name: 'Facturation vente', href: '/facturation-vente', icon: FileText, requiredPermission: 'canViewFinance' },
+      { name: 'Paiement partiel vente', href: '/facturation-vente/paiements-partiels', icon: Wallet, requiredPermission: 'canViewFinance' },
       { name: 'Facturation achat', href: '/facturation-achat', icon: Import, requiredPermission: 'canViewFinance' },
+      { name: 'Paiement partiel achat', href: '/facturation-achat/paiements-partiels', icon: Wallet, requiredPermission: 'canViewFinance' },
       { name: 'Suivi Argent Équipe', href: '/caisse', icon: Wallet, requiredPermission: 'canViewFinance' },
       { name: 'Transactions Fournisseurs', href: '/fournisseurs/transactions', icon: Receipt, requiredPermission: 'canViewFinance' },
       { name: 'Fournisseurs', href: '/fournisseurs', icon: Truck, requiredPermission: 'canViewFinance' },

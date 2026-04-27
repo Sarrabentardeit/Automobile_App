@@ -40,6 +40,11 @@ function roundMoney(n: number): number {
   return Math.round(n * 100) / 100
 }
 
+function monthIndexFromDate(dateStr: string): number {
+  const [y, m] = dateStr.split('-').map(Number)
+  return y * 12 + ((m || 1) - 1)
+}
+
 type Tab = 'all' | 'in' | 'out'
 type MovementView = 'liste' | 'jour'
 type MovementDisplayValue = 'liste-all' | 'liste-in' | 'liste-out' | 'jour'
@@ -273,7 +278,25 @@ export default function MoneyPage() {
   const totalIn = useMemo(() => roundMoney(filteredIns.reduce((s, r) => s + r.amount, 0)), [filteredIns])
   const totalOutVariable = useMemo(() => roundMoney(filteredOuts.reduce((s, r) => s + r.amount, 0)), [filteredOuts])
   const totalOut = roundMoney(totalOutVariable + totalCharges)
-  const balance = roundMoney(totalIn - totalOut)
+  const selectedMonthIndex = period.year * 12 + (period.month - 1)
+  const openingBalance = useMemo(() => {
+    const allIndexes = [
+      selectedMonthIndex,
+      ...ins.map(i => monthIndexFromDate(i.date)),
+      ...outs.map(o => monthIndexFromDate(o.date)),
+    ]
+    const earliest = Math.min(...allIndexes)
+    const monthsBefore = Math.max(0, selectedMonthIndex - earliest)
+    const prevIn = ins
+      .filter(i => monthIndexFromDate(i.date) < selectedMonthIndex)
+      .reduce((s, i) => s + i.amount, 0)
+    const prevOut = outs
+      .filter(o => monthIndexFromDate(o.date) < selectedMonthIndex)
+      .reduce((s, o) => s + o.amount, 0)
+    const prevCharges = monthsBefore * totalCharges
+    return roundMoney(prevIn - prevOut - prevCharges)
+  }, [ins, outs, selectedMonthIndex, totalCharges])
+  const balance = roundMoney(openingBalance + totalIn - totalOut)
   const countIn = filteredIns.length
   const countOut = filteredOuts.length
   const countTotal = countIn + countOut
@@ -543,6 +566,7 @@ export default function MoneyPage() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-6 text-sm">
+                <div><span className="text-white/50">Ouverture</span><span className="ml-1.5 font-semibold text-white">{formatAmount(openingBalance)}</span></div>
                 <div><span className="text-white/50">Entrées</span><span className="ml-1.5 font-semibold text-white">{formatAmount(totalIn)}</span><span className="text-white/50 ml-0.5">({countIn})</span></div>
                 <div><span className="text-white/50">Sorties</span><span className="ml-1.5 font-semibold text-white">{formatAmount(totalOut)}</span><span className="text-white/50 ml-0.5">({countOut})</span></div>
                 <div><span className="text-white/50">Moy. entrée</span><span className="ml-1.5 font-semibold text-white">{formatAmount(moyenneIn)}</span></div>
