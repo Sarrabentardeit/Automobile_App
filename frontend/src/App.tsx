@@ -91,6 +91,7 @@ export default function App() {
               <Route path="/vehicules" element={<VehiculesPage />} />
               <Route path="/vehicules/marque/:brand" element={<VehiculesPage />} />
               <Route path="/vehicules/archives" element={<VehiculesArchivesPage />} />
+              <Route path="/vehicules/archives/marque/:brand" element={<VehiculesArchivesPage />} />
               <Route path="/vehicules/:id" element={<VehiculeDetailPage />} />
               <Route path="/utilisateurs" element={<UtilisateursPage />} />
               <Route path="/caisse" element={<CaissePage />} />

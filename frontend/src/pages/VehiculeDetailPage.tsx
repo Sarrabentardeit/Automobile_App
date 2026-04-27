@@ -14,6 +14,7 @@ import VehiculeStats from '@/components/vehicules/VehiculeStats'
 import ChangeEtatModal from '@/components/vehicules/ChangeEtatModal'
 import VehiculeForm from '@/components/vehicules/VehiculeForm'
 import VehiculeOrdresReparation from '@/components/vehicules/VehiculeOrdresReparation'
+import VehiculeSuivis from '@/components/vehicules/VehiculeSuivis'
 import { ArrowLeft, ArrowRightLeft, Pencil, Phone, Calendar, User, Clock, Car, Bike, Image as ImageIcon, Trash2 } from 'lucide-react'
 import { daysSince, getUserDisplayName, formatDuree, formatDate } from '@/lib/utils'
 
@@ -207,6 +208,17 @@ export default function VehiculeDetailPage() {
       </div>
 
       <VehiculeOrdresReparation vehicule={vehicule} />
+
+      <div className="mt-4">
+        <h2 className="text-sm sm:text-base font-bold text-gray-900 mb-2 sm:mb-3">Fiches Suivi</h2>
+        <Card padding="sm">
+          <VehiculeSuivis
+            vehiculeId={vehicule.id}
+            vehiculeModele={vehicule.modele}
+            vehiculeImmat={vehicule.immatriculation}
+          />
+        </Card>
+      </div>
 
       <div>
         <h2 className="text-sm sm:text-base font-bold text-gray-900 mb-2 sm:mb-3 flex items-center gap-2">

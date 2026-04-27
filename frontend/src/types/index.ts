@@ -307,6 +307,36 @@ export type OrdreReparationInput = {
   lignes?: Array<{ description: string; statut?: OrdreReparationLigneStatut; ordre?: number }>
 }
 
+// ==================== FICHE SUIVI ====================
+export interface VehiculeSuivi {
+  id: number
+  vehiculeId: number
+  numero: string
+  date: string
+  voiture: string
+  matricule: string
+  kilometrage: string
+  travauxEffectues: string
+  travauxProchains: string
+  produitsUtilises: string
+  technicien: string
+  rempliPar: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type VehiculeSuiviInput = {
+  date?: string
+  voiture?: string
+  matricule?: string
+  kilometrage?: string
+  travauxEffectues?: string
+  travauxProchains?: string
+  produitsUtilises?: string
+  technicien?: string
+  rempliPar?: string
+}
+
 export interface VehiculeFormData {
   immatriculation: string
   modele: string

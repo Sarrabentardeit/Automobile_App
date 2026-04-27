@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useVehiculesContext } from '@/contexts/VehiculesContext'
 import { useUsers } from '@/contexts/UsersContext'
@@ -11,10 +12,29 @@ import VehiculeCard from '@/components/vehicules/VehiculeCard'
 import VehiculeForm from '@/components/vehicules/VehiculeForm'
 import VehiculeFicheFinanciereModal from '@/components/vehicules/VehiculeFicheFinanciereModal'
 import ChangeEtatModal from '@/components/vehicules/ChangeEtatModal'
-import { Car, Bike, Search, Filter, ChevronLeft, ChevronRight, Archive, Trash2, Download } from 'lucide-react'
+import { Car, Bike, Search, Filter, ChevronLeft, ChevronRight, Archive, Trash2, Download, Folder, ArrowLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const PAGE_SIZE = 20
+const KNOWN_BRANDS = [
+  'audi', 'bmw', 'changan', 'cherry', 'chevrolet', 'citroen', 'dacia', 'fiat', 'ford', 'haval',
+  'honda', 'hyundai', 'jeep', 'kia', 'mazda', 'mercedes', 'mg', 'mini', 'mitsubishi', 'nissan',
+  'opel', 'peugeot', 'porsche', 'range', 'renault', 'ssangyong', 'seat', 'skoda', 'suzuki',
+  'toyota', 'volkswagen', 'volvo', 'jetour', 'geely', 'isuzu', 'mahindra', 'tata', 'lada',
+] as const
+
+function detectVehiculeBrand(modele: string): string {
+  const raw = (modele || '').trim()
+  if (!raw) return 'Autres'
+  const firstWord = raw.split(/\s+/)[0]?.toLowerCase() ?? ''
+  const matched = KNOWN_BRANDS.find(b => b === firstWord)
+  if (!matched) return 'Autres'
+  return matched.charAt(0).toUpperCase() + matched.slice(1)
+}
+
+function brandToSlug(brand: string): string {
+  return brand.trim().toLowerCase().replace(/\s+/g, '-')
+}
 
 function getDateRange(mode: string, dateFilter: string): { date_debut?: string; date_fin?: string } {
   const today = new Date()
@@ -42,6 +62,8 @@ function getDateRange(mode: string, dateFilter: string): { date_debut?: string; 
 }
 
 export default function VehiculesArchivesPage() {
+  const navigate = useNavigate()
+  const { brand: brandParam } = useParams<{ brand?: string }>()
   const { user, permissions, getAccessToken } = useAuth()
   const { users } = useUsers()
   const {
@@ -133,6 +155,27 @@ export default function VehiculesArchivesPage() {
 
   const totalPages = Math.ceil(total / limit) || 1
   const canEditFicheFinanciere = permissions.canEditVehicule || permissions.canViewFinance
+  const groupedVehicules = myVehicules.reduce<Record<string, Vehicule[]>>((acc, v) => {
+    const brand = detectVehiculeBrand(v.modele)
+    if (!acc[brand]) acc[brand] = []
+    acc[brand].push(v)
+    return acc
+  }, {})
+  const sortedBrandEntries = Object.entries(groupedVehicules)
+    .sort(([a], [b]) => {
+      if (a === 'Autres') return 1
+      if (b === 'Autres') return -1
+      return a.localeCompare(b, 'fr', { sensitivity: 'base' })
+    })
+    .map(([brand, list]) => [
+      brand,
+      list.slice().sort((a, b) => a.modele.localeCompare(b.modele, 'fr', { sensitivity: 'base' })),
+    ] as const)
+  const selectedBrandEntry = brandParam
+    ? sortedBrandEntries.find(([brand]) => brandToSlug(brand) === brandParam)
+    : undefined
+  const isBrandView = Boolean(brandParam)
+  const vehiclesToRender = isBrandView ? (selectedBrandEntry?.[1] ?? []) : []
 
   const handleDelete = async (v: Vehicule) => {
     const ok = await deleteVehicule(v.id)
@@ -301,7 +344,7 @@ export default function VehiculesArchivesPage() {
         </div>
       </div>
 
-      <div className="space-y-2.5 sm:space-y-3">
+      <div className="space-y-3 sm:space-y-4">
         {loading ? (
           <div className="bg-white rounded-2xl p-10 sm:p-16 text-center shadow-sm border border-gray-100">
             <p className="text-gray-500 font-medium text-sm sm:text-base">Chargement...</p>
@@ -312,19 +355,62 @@ export default function VehiculesArchivesPage() {
             <p className="text-gray-500 font-medium text-sm sm:text-base">Aucun véhicule validé trouvé</p>
             <p className="text-xs sm:text-sm text-gray-400 mt-1">Essayez de modifier les filtres</p>
           </div>
+        ) : !isBrandView ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {sortedBrandEntries.map(([brand, brandVehicules]) => (
+              <button
+                key={brand}
+                type="button"
+                onClick={() => navigate(`/vehicules/archives/marque/${brandToSlug(brand)}`)}
+                className="group text-left bg-white rounded-2xl p-4 border border-gray-200 hover:border-orange-400 hover:shadow-md transition-all"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <Folder className="w-5 h-5 text-orange-500 flex-shrink-0" />
+                    <h3 className="font-bold text-gray-900 truncate">{brand}</h3>
+                  </div>
+                  <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                    {brandVehicules.length}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">Cliquer pour voir les archives de cette marque</p>
+              </button>
+            ))}
+          </div>
         ) : (
-          myVehicules.map(v => (
-            <VehiculeCard
-              key={v.id}
-              vehicule={v}
-              permissions={permissions}
-              onChangeEtat={() => setChangeEtatVehicule(v)}
-              allowChangeEtatWhenValidated
-              onFicheFinanciere={() => setFicheVehicule(v)}
-              onEdit={() => { setEditingVehicule(v); setShowEditForm(true) }}
-              onDelete={permissions.canEditVehicule ? () => setDeleteConfirm(v) : undefined}
-            />
-          ))
+          <section className="space-y-2.5 sm:space-y-3">
+            <div className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur supports-[backdrop-filter]:bg-gray-50/75 px-3 py-2 rounded-lg border border-gray-200 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => navigate('/vehicules/archives')}
+                className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-gray-700 hover:text-gray-900"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Retour aux dossiers
+              </button>
+              <h3 className="text-xs sm:text-sm font-bold text-gray-700">
+                {selectedBrandEntry?.[0] ?? 'Marque'} ({vehiclesToRender.length})
+              </h3>
+            </div>
+            {vehiclesToRender.length === 0 ? (
+              <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-gray-100">
+                <p className="text-gray-500 font-medium text-sm sm:text-base">Aucun véhicule archivé pour cette marque</p>
+              </div>
+            ) : (
+              vehiclesToRender.map(v => (
+                <VehiculeCard
+                  key={v.id}
+                  vehicule={v}
+                  permissions={permissions}
+                  onChangeEtat={() => setChangeEtatVehicule(v)}
+                  allowChangeEtatWhenValidated
+                  onFicheFinanciere={() => setFicheVehicule(v)}
+                  onEdit={() => { setEditingVehicule(v); setShowEditForm(true) }}
+                  onDelete={permissions.canEditVehicule ? () => setDeleteConfirm(v) : undefined}
+                />
+              ))
+            )}
+          </section>
         )}
       </div>
 
