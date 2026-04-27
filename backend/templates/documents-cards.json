@@ -1,0 +1,32 @@
+[
+  {
+    "id": "doc-1777305801116-my1mkb",
+    "title": "test",
+    "usage": "tes",
+    "fileName": "or-2026-00001.xlsx"
+  },
+  {
+    "id": "ordre-reparation",
+    "title": "Ordre de reparation",
+    "fileName": "ordre-reparation-template.xlsx",
+    "usage": "Fiche atelier du vehicule (apercu, impression, export Excel)."
+  },
+  {
+    "id": "suivi",
+    "title": "Fiche suivi atelier",
+    "fileName": "suivi-template.xlsx",
+    "usage": "Suivi travaux effectues / prochains et produits utilises."
+  },
+  {
+    "id": "suivi-diag",
+    "title": "Suivi DIAG",
+    "fileName": "suivi-diag-template.xlsx",
+    "usage": "Modele DIAG a centraliser dans l application."
+  },
+  {
+    "id": "suivi-diag-achat",
+    "title": "Suivi DIAG achat",
+    "fileName": "suivi-diag-achat-template.xlsx",
+    "usage": "Modele DIAG achat a centraliser dans l application."
+  }
+]

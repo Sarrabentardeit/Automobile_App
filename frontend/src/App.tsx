@@ -50,6 +50,7 @@ import PaiementPartielAchatPage from '@/pages/PaiementPartielAchatPage'
 import ChecklistsPage from '@/pages/ChecklistsPage'
 import ChecklistsHistoryPage from '@/pages/ChecklistsHistoryPage'
 import ChecklistTemplatesPage from '@/pages/ChecklistTemplatesPage'
+import DocumentsPage from '@/pages/DocumentsPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 
 export default function App() {
@@ -113,6 +114,7 @@ export default function App() {
               <Route path="/checklists" element={<ChecklistsPage />} />
               <Route path="/checklists/history" element={<ChecklistsHistoryPage />} />
               <Route path="/checklists/modeles" element={<ChecklistTemplatesPage />} />
+              <Route path="/documents" element={<DocumentsPage />} />
             </Route>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<NotFoundPage />} />

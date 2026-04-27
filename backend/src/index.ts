@@ -12,6 +12,7 @@ import ordreReparationsRouter from './routes/ordreReparations'
 import ordreReparationExcelRouter from './routes/ordreReparationExcel'
 import suivisRouter from './routes/suivis'
 import suivisExcelRouter from './routes/suivisExcel'
+import documentsRouter from './routes/documents'
 import stockRouter from './routes/stock'
 import clientsRouter from './routes/clients'
 import facturesRouter from './routes/factures'
@@ -110,6 +111,7 @@ app.use('/settings', settingsRouter)
 app.use('/vehicules', ordreReparationExcelRouter)
 app.use('/vehicules', suivisRouter)
 app.use('/vehicules', suivisExcelRouter)
+app.use('/', documentsRouter)
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err)

@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import type { Permissions, Role, TogglePermissionKey } from '@/types'
 import { ROLE_CONFIG } from '@/types'
 import { useState, useRef, useEffect } from 'react'
-import { LayoutDashboard, Car, Users, Wallet, X, LogOut, Package, DollarSign, Wrench, UsersRound, CalendarDays, AlertCircle, UserCircle, CreditCard, ClipboardList, Layers, Phone, BarChart2, Truck, Receipt, Bell, Shield, FileText, Import, Archive, SlidersHorizontal } from 'lucide-react'
+import { LayoutDashboard, Car, Users, Wallet, X, LogOut, Package, DollarSign, Wrench, UsersRound, CalendarDays, AlertCircle, UserCircle, CreditCard, ClipboardList, Layers, Phone, Truck, Receipt, Bell, Shield, FileText, Import, Archive, SlidersHorizontal, FolderOpen } from 'lucide-react'
 import { useNotifications } from '@/contexts/NotificationsContext'
 import { cn } from '@/lib/utils'
 
@@ -78,8 +78,8 @@ const NAV_STRUCTURE: NavCategory[] = [
     items: [
       { name: 'Checklists', href: '/checklists', icon: ClipboardList },
       { name: 'Modèles checklists', href: '/checklists/modeles', icon: SlidersHorizontal, requireAdmin: true },
+      { name: 'Documents', href: '/documents', icon: FolderOpen },
       { name: 'Contacts Importants', href: '/contacts-importants', icon: Phone },
-      { name: 'Rapports', href: '#', icon: BarChart2, disabled: true },
     ],
   },
 ]
