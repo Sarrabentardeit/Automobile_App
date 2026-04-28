@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useTeamMembers } from '@/contexts/TeamMembersContext'
@@ -18,6 +18,21 @@ export default function EquipeMembresPage() {
   const [editingName, setEditingName] = useState('')
   const [editingPhone, setEditingPhone] = useState('')
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+
+  const ITEMS_PER_PAGE = 30
+  const totalPages = Math.max(1, Math.ceil(members.length / ITEMS_PER_PAGE))
+  const paginatedMembers = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE
+    return members.slice(start, start + ITEMS_PER_PAGE).map((member, idx) => ({
+      member,
+      index: start + idx,
+    }))
+  }, [members, currentPage])
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages)
+  }, [currentPage, totalPages])
 
   if (!permissions?.canManageUsers) {
     return (
@@ -114,7 +129,7 @@ export default function EquipeMembresPage() {
               Aucun membre. Ajoutez un nom et optionnellement un numéro ci-dessus.
             </div>
           ) : (
-            members.map((member, index) => (
+            paginatedMembers.map(({ member, index }) => (
               <div
                 key={`${index}-${member.name}`}
                 className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50/50 transition-colors"
@@ -152,6 +167,31 @@ export default function EquipeMembresPage() {
           )}
         </div>
       </Card>
+      {members.length > ITEMS_PER_PAGE && (
+        <div className="flex items-center justify-between gap-2 px-1">
+          <p className="text-xs text-gray-500">
+            Page {currentPage} / {totalPages} · {members.length} membre(s)
+          </p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+            >
+              Précédent
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+            >
+              Suivant
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Modal Modifier */}
       <Modal

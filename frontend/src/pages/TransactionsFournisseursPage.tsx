@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFournisseurs } from '@/contexts/FournisseursContext'
 import { useTransactionsFournisseurs } from '@/contexts/TransactionsFournisseursContext'
@@ -47,6 +47,7 @@ export default function TransactionsFournisseursPage() {
   const toast = useToast()
   const [tab, setTab] = useState<TabType>('achat')
   const [search, setSearch] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
   const [period, setPeriod] = useState(() => {
     const d = new Date()
     return { year: d.getFullYear(), month: d.getMonth() + 1 }
@@ -88,6 +89,21 @@ export default function TransactionsFournisseursPage() {
       )
       .sort((a, b) => b.date.localeCompare(a.date))
   }, [transactions, tab, search, period, inPeriod])
+
+  const ITEMS_PER_PAGE = 30
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE))
+  const paginatedFiltered = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE
+    return filtered.slice(start, start + ITEMS_PER_PAGE)
+  }, [filtered, currentPage])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [tab, search, period.year, period.month])
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages)
+  }, [currentPage, totalPages])
 
   const totals = useMemo(() => {
     const inPeriodList = transactions.filter(t => inPeriod(t.date))
@@ -423,7 +439,7 @@ export default function TransactionsFournisseursPage() {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map(t => (
+                  paginatedFiltered.map(t => (
                     <tr key={t.id} onClick={() => openEdit(t)} className="border-b border-gray-50 hover:bg-amber-50/30 cursor-pointer transition-colors">
                       <td className="px-4 py-3 text-gray-700">{formatDate(t.date)}</td>
                       <td className="px-4 py-3 text-gray-900">{t.pieces || '—'}</td>
@@ -467,7 +483,7 @@ export default function TransactionsFournisseursPage() {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map(t => (
+                  paginatedFiltered.map(t => (
                     <tr key={t.id} onClick={() => openEdit(t)} className="border-b border-gray-50 hover:bg-emerald-50/30 cursor-pointer transition-colors">
                       <td className="px-4 py-3 text-gray-700">{formatDate(t.date)}</td>
                       <td className="px-4 py-3 text-right font-semibold text-emerald-600 tabular-nums">{formatMontant(t.montant)}</td>
@@ -508,7 +524,7 @@ export default function TransactionsFournisseursPage() {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map(t => (
+                  paginatedFiltered.map(t => (
                     <tr key={t.id} onClick={() => openEdit(t)} className="border-b border-gray-50 hover:bg-rose-50/30 cursor-pointer transition-colors">
                       <td className="px-4 py-3 text-gray-700">{formatDate(t.date)}</td>
                       <td className="px-4 py-3 text-right font-semibold text-rose-600 tabular-nums">{formatMontant(t.montant)}</td>
@@ -530,6 +546,31 @@ export default function TransactionsFournisseursPage() {
           </div>
         )}
       </Card>
+      {tab !== 'synthese' && filtered.length > ITEMS_PER_PAGE && (
+        <div className="flex items-center justify-between gap-2 mt-3 px-1">
+          <p className="text-xs text-gray-500">
+            Page {currentPage} / {totalPages} · {filtered.length} transaction(s)
+          </p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+            >
+              Précédent
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+            >
+              Suivant
+            </Button>
+          </div>
+        </div>
+      )}
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editingId ? 'Modifier la transaction' : 'Nouvelle transaction'} subtitle={tab !== 'synthese' ? TAB_CONFIG[form.type as TransactionFournisseurType]?.label : undefined} maxWidth="sm">
         <div className="space-y-4">

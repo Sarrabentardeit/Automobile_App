@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { FileDown, FileText, Pencil, Printer, Wallet, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
@@ -30,6 +30,7 @@ export default function FacturationPaiementsPartielsPage() {
   const { user, permissions } = useAuth()
   const { factures } = useFacturation()
   const [panelDetail, setPanelDetail] = useState<Facture | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
 
   const facturesPartiellementPayees = useMemo(() => {
     const rows: FacturePartielleRow[] = []
@@ -53,6 +54,21 @@ export default function FacturationPaiementsPartielsPage() {
     }
     return rows.sort((a, b) => b.factureDate.localeCompare(a.factureDate) || b.factureId - a.factureId)
   }, [factures])
+
+  const ITEMS_PER_PAGE = 30
+  const totalPages = Math.max(1, Math.ceil(facturesPartiellementPayees.length / ITEMS_PER_PAGE))
+  const paginatedFacturesPartielles = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE
+    return facturesPartiellementPayees.slice(start, start + ITEMS_PER_PAGE)
+  }, [facturesPartiellementPayees, currentPage])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [facturesPartiellementPayees.length])
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages)
+  }, [currentPage, totalPages])
 
   const totalReste = useMemo(() => facturesPartiellementPayees.reduce((s, f) => s + f.reste, 0), [facturesPartiellementPayees])
 
@@ -134,7 +150,7 @@ export default function FacturationPaiementsPartielsPage() {
                 </tr>
               </thead>
               <tbody>
-                {facturesPartiellementPayees.map((f, i) => (
+                {paginatedFacturesPartielles.map((f, i) => (
                   <tr
                     key={f.factureId}
                     className={i % 2 === 0 ? 'bg-white border-b border-gray-50' : 'bg-gray-50/40 border-b border-gray-50'}
@@ -158,6 +174,31 @@ export default function FacturationPaiementsPartielsPage() {
           </div>
         )}
       </Card>
+      {facturesPartiellementPayees.length > ITEMS_PER_PAGE && (
+        <div className="flex items-center justify-between gap-2 px-1">
+          <p className="text-xs text-gray-500">
+            Page {currentPage} / {totalPages} · {facturesPartiellementPayees.length} facture(s)
+          </p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+            >
+              Précédent
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+            >
+              Suivant
+            </Button>
+          </div>
+        </div>
+      )}
 
       {panelDetail && (
         <div className="fixed inset-0 z-50 flex justify-end">

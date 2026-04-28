@@ -77,6 +77,7 @@ export default function FacturationPage() {
   const [filterStatut, setFilterStatut] = useState<FactureStatut | 'a_encaisser' | ''>('')
   const [filterMonth, setFilterMonth] = useState<number | ''>('')
   const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear())
+  const [currentPage, setCurrentPage] = useState(1)
   const [showModal, setShowModal] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
@@ -147,6 +148,21 @@ export default function FacturationPage() {
     }
     return list.sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
   }, [factures, filterStatut])
+
+  const FACTURES_PER_PAGE = 30
+  const totalPages = Math.max(1, Math.ceil(filteredFactures.length / FACTURES_PER_PAGE))
+  const paginatedFactures = useMemo(() => {
+    const start = (currentPage - 1) * FACTURES_PER_PAGE
+    return filteredFactures.slice(start, start + FACTURES_PER_PAGE)
+  }, [filteredFactures, currentPage])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [debouncedSearch, filterStatut, filterMonth, filterYear, viewMode])
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages)
+  }, [currentPage, totalPages])
 
   const statsFiltered = useMemo(() => {
     const list = filteredFactures
@@ -620,7 +636,7 @@ export default function FacturationPage() {
           </div>
         ) : viewMode === 'grid' ? (
           <div className="p-3 sm:p-4 grid grid-cols-1 min-[480px]:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
-            {filteredFactures.map((f, i) => {
+            {paginatedFactures.map((f, i) => {
               const t = computeFactureTotals(f.lignes, f.timbre)
               const paye = f.montantPaye ?? 0
               const reste = factureResteTTC(f)
@@ -728,7 +744,7 @@ export default function FacturationPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredFactures.map((f, i) => {
+                {paginatedFactures.map((f, i) => {
                   const t = computeFactureTotals(f.lignes, f.timbre)
                   const paye = f.montantPaye ?? 0
                   const reste = factureResteTTC(f)
@@ -831,6 +847,31 @@ export default function FacturationPage() {
           </div>
         )}
       </Card>
+      {filteredFactures.length > FACTURES_PER_PAGE && (
+        <div className="flex items-center justify-between gap-2 px-1">
+          <p className="text-xs text-gray-500">
+            Page {currentPage} / {totalPages} · {filteredFactures.length} facture(s)
+          </p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+            >
+              Précédent
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+            >
+              Suivant
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Modal Créer / Modifier facture */}
       <Modal

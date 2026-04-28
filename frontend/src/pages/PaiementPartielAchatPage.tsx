@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { FileDown, FileText, Pencil, Printer, Wallet, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
@@ -30,6 +30,7 @@ export default function PaiementPartielAchatPage() {
   const { user, permissions } = useAuth()
   const { factures } = useAchats()
   const [panelDetail, setPanelDetail] = useState<FactureFournisseur | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
 
   const achatsPartiels = useMemo(() => {
     const rows: AchatPartielRow[] = []
@@ -52,6 +53,21 @@ export default function PaiementPartielAchatPage() {
     }
     return rows.sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
   }, [factures])
+
+  const ITEMS_PER_PAGE = 30
+  const totalPages = Math.max(1, Math.ceil(achatsPartiels.length / ITEMS_PER_PAGE))
+  const paginatedAchatsPartiels = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE
+    return achatsPartiels.slice(start, start + ITEMS_PER_PAGE)
+  }, [achatsPartiels, currentPage])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [achatsPartiels.length])
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages)
+  }, [currentPage, totalPages])
 
   const totalReste = useMemo(() => achatsPartiels.reduce((s, a) => s + a.reste, 0), [achatsPartiels])
 
@@ -104,7 +120,7 @@ export default function PaiementPartielAchatPage() {
                 </tr>
               </thead>
               <tbody>
-                {achatsPartiels.map((a, i) => (
+                {paginatedAchatsPartiels.map((a, i) => (
                   <tr
                     key={a.id}
                     className={i % 2 === 0 ? 'bg-white border-b border-gray-50' : 'bg-gray-50/40 border-b border-gray-50'}
@@ -124,6 +140,31 @@ export default function PaiementPartielAchatPage() {
           </div>
         )}
       </Card>
+      {achatsPartiels.length > ITEMS_PER_PAGE && (
+        <div className="flex items-center justify-between gap-2 px-1">
+          <p className="text-xs text-gray-500">
+            Page {currentPage} / {totalPages} · {achatsPartiels.length} facture(s)
+          </p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+            >
+              Précédent
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+            >
+              Suivant
+            </Button>
+          </div>
+        </div>
+      )}
 
       {panelDetail && (
         <div className="fixed inset-0 z-50 flex justify-end">

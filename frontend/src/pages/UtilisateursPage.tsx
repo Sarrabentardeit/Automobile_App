@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useUsers } from '@/contexts/UsersContext'
 import { useToast } from '@/contexts/ToastContext'
 import { ALL_TOGGLE_KEYS, TOGGLE_PERMISSION_LABELS, VISIBILITY_OPTIONS, ROLE_PRESETS, ROLE_CONFIG, ALL_ROLES,
@@ -34,6 +34,7 @@ export default function UtilisateursPage() {
   const [recherche, setRecherche] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [showPermsView, setShowPermsView] = useState<User | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null)
@@ -54,6 +55,21 @@ export default function UtilisateursPage() {
         return u.nom_complet.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
       })
   , [users, filtreRole, recherche])
+
+  const ITEMS_PER_PAGE = 30
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE))
+  const paginatedFiltered = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE
+    return filtered.slice(start, start + ITEMS_PER_PAGE)
+  }, [filtered, currentPage])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filtreRole, recherche])
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages)
+  }, [currentPage, totalPages])
 
   const openCreate = () => {
     setEditingUser(null)
@@ -224,7 +240,7 @@ export default function UtilisateursPage() {
         {filtered.length === 0 ? (
           <div className="p-12 text-center text-gray-400">Aucun utilisateur trouvé</div>
         ) : (
-          filtered.map(u => {
+          paginatedFiltered.map(u => {
             const rc = ROLE_CONFIG[u.role]
             const permCount = countPerms(u.permissions)
             const custom = isCustomized(u.role, u.permissions)
@@ -288,7 +304,7 @@ export default function UtilisateursPage() {
             <p className="text-sm text-gray-400">Aucun utilisateur trouvé</p>
           </div>
         ) : (
-          filtered.map(u => {
+          paginatedFiltered.map(u => {
             const rc = ROLE_CONFIG[u.role]
             const permCount = countPerms(u.permissions)
             const custom = isCustomized(u.role, u.permissions)
@@ -353,6 +369,31 @@ export default function UtilisateursPage() {
           })
         )}
       </div>
+      {filtered.length > ITEMS_PER_PAGE && (
+        <div className="flex items-center justify-between gap-2 px-1">
+          <p className="text-xs text-gray-500">
+            Page {currentPage} / {totalPages} · {filtered.length} utilisateur(s)
+          </p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+            >
+              Précédent
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+            >
+              Suivant
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Delete confirmation modal */}
       <Modal

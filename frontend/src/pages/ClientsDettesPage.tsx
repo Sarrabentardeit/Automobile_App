@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useClientsDettes } from '@/contexts/ClientsDettesContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -18,6 +18,7 @@ export default function ClientsDettesPage() {
   const { clients, loading, addClient, updateClient } = useClientsDettes()
   const toast = useToast()
   const [search, setSearch] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState<Omit<ClientAvecDette, 'id'>>({
@@ -42,6 +43,20 @@ export default function ClientsDettesPage() {
   }, [clients, search])
 
   const totalDettes = useMemo(() => filtered.reduce((s, c) => s + c.reste, 0), [filtered])
+  const ITEMS_PER_PAGE = 30
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE))
+  const paginatedFiltered = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE
+    return filtered.slice(start, start + ITEMS_PER_PAGE)
+  }, [filtered, currentPage])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [search])
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages)
+  }, [currentPage, totalPages])
 
   const openEdit = (c: ClientAvecDette) => {
     setForm({
@@ -183,7 +198,7 @@ export default function ClientsDettesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map(c => (
+                  {paginatedFiltered.map(c => (
                     <tr
                       key={c.id}
                       onClick={() => openEdit(c)}
@@ -203,6 +218,31 @@ export default function ClientsDettesPage() {
               </table>
             </div>
           </Card>
+        )}
+        {filtered.length > ITEMS_PER_PAGE && (
+          <div className="flex items-center justify-between gap-2 px-1">
+            <p className="text-xs text-gray-500">
+              Page {currentPage} / {totalPages} · {filtered.length} client(s)
+            </p>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+              >
+                Précédent
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+              >
+                Suivant
+              </Button>
+            </div>
+          </div>
         )}
       </div>
 

@@ -855,7 +855,7 @@ export default function MoneyPage() {
                   ))}
                 </ul>
                 {totalMovementPages > 1 && (
-                  <div className="flex items-center justify-between gap-2 pt-2">
+                  <div className="flex items-center justify-between gap-2 mt-3 px-1">
                     <p className="text-xs text-gray-500">
                       Page {movementPage} / {totalMovementPages} · {searchedActivity.length} mouvement(s)
                     </p>

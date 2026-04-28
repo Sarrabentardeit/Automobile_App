@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFournisseurs } from '@/contexts/FournisseursContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -18,6 +18,7 @@ export default function FournisseursPage() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
   const [form, setForm] = useState<Omit<Fournisseur, 'id'>>({
     nom: '',
     telephone: '',
@@ -40,6 +41,21 @@ export default function FournisseursPage() {
       )
       .sort((a, b) => a.nom.localeCompare(b.nom))
   }, [fournisseurs, search])
+
+  const ITEMS_PER_PAGE = 30
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE))
+  const paginatedFiltered = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE
+    return filtered.slice(start, start + ITEMS_PER_PAGE)
+  }, [filtered, currentPage])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [search])
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages)
+  }, [currentPage, totalPages])
 
   const openEdit = (f: Fournisseur) => {
     setForm({
@@ -150,7 +166,7 @@ export default function FournisseursPage() {
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map(f => (
+          {paginatedFiltered.map(f => (
             <Card
               key={f.id}
               padding="lg"
@@ -208,6 +224,31 @@ export default function FournisseursPage() {
               )}
             </Card>
           ))}
+        </div>
+      )}
+      {filtered.length > ITEMS_PER_PAGE && (
+        <div className="flex items-center justify-between gap-2 mt-3 px-1">
+          <p className="text-xs text-gray-500">
+            Page {currentPage} / {totalPages} · {filtered.length} fournisseur(s)
+          </p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+            >
+              Précédent
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+            >
+              Suivant
+            </Button>
+          </div>
         </div>
       )}
 

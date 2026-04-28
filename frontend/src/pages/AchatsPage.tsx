@@ -47,6 +47,7 @@ export default function AchatsPage() {
   const [period, setPeriod] = useState<'semaine' | 'mois' | 'annee'>('mois')
   const [filtreStatut, setFiltreStatut] = useState<FactureFournisseurStatut | 'tous'>('tous')
   const [showModal, setShowModal] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
   const [panelFournisseur, setPanelFournisseur] = useState<{ nom: string; fournisseurId: number | null } | null>(null)
   const [panelFiche, setPanelFiche] = useState<FournisseurFiche | null>(null)
   const [panelFicheLoading, setPanelFicheLoading] = useState(false)
@@ -114,6 +115,21 @@ export default function AchatsPage() {
     }
     return list
   }, [factures, search, filtreStatut, inPeriod])
+
+  const FACTURES_PER_PAGE = 30
+  const totalPages = Math.max(1, Math.ceil(filtered.length / FACTURES_PER_PAGE))
+  const paginatedFiltered = useMemo(() => {
+    const start = (currentPage - 1) * FACTURES_PER_PAGE
+    return filtered.slice(start, start + FACTURES_PER_PAGE)
+  }, [filtered, currentPage])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [search, filtreStatut, period])
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages)
+  }, [currentPage, totalPages])
 
   const stats = useMemo(() => {
     const totalDuMois = factures
@@ -539,7 +555,7 @@ export default function AchatsPage() {
           <>
           {/* Vue cartes - Mobile & Tablette */}
           <div className="md:hidden divide-y divide-gray-100">
-            {filtered.map((f, i) => (
+            {paginatedFiltered.map((f, i) => (
               <div
                 key={f.id}
                 onClick={() => setPanelDetail(f)}
@@ -613,7 +629,7 @@ export default function AchatsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((f, i) => (
+                {paginatedFiltered.map((f, i) => (
                   (() => {
                     const total = ttcFacture(f.lignes, f.timbre)
                     const payeMontant = f.montantPaye ?? 0
@@ -673,6 +689,31 @@ export default function AchatsPage() {
           </>
         )}
       </Card>
+      {filtered.length > FACTURES_PER_PAGE && (
+        <div className="flex items-center justify-between gap-2 px-1">
+          <p className="text-xs text-gray-500">
+            Page {currentPage} / {totalPages} · {filtered.length} facture(s)
+          </p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+            >
+              Précédent
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+            >
+              Suivant
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Modal créer / modifier facture fournisseur */}
       <Modal

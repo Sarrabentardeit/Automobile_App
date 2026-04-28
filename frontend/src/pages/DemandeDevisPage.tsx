@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useDemandesDevis } from '@/contexts/DemandesDevisContext'
@@ -31,6 +31,7 @@ export default function DemandeDevisPage() {
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
   const [form, setForm] = useState<Omit<DemandeDevis, 'id'>>({
     date: '',
     clientName: '',
@@ -57,6 +58,21 @@ export default function DemandeDevisPage() {
     }
     return list.sort((a, b) => b.date.localeCompare(a.date))
   }, [demandes, filterStatut, search])
+
+  const ITEMS_PER_PAGE = 30
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE))
+  const paginatedFiltered = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE
+    return filtered.slice(start, start + ITEMS_PER_PAGE)
+  }, [filtered, currentPage])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filterStatut, search])
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages)
+  }, [currentPage, totalPages])
 
   const stats = useMemo(() => ({
     enAttente: filtered.filter(d => d.statut === 'en_attente').length,
@@ -436,7 +452,7 @@ export default function DemandeDevisPage() {
           </Card>
         ) : (
           <ul className="space-y-3">
-            {filtered.map(d => (
+            {paginatedFiltered.map(d => (
               <li key={d.id}>
                 <Card
                   padding="none"
@@ -502,6 +518,31 @@ export default function DemandeDevisPage() {
               </li>
             ))}
           </ul>
+        )}
+        {filtered.length > ITEMS_PER_PAGE && (
+          <div className="flex items-center justify-between gap-2 px-1">
+            <p className="text-xs text-gray-500">
+              Page {currentPage} / {totalPages} · {filtered.length} demande(s)
+            </p>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+              >
+                Précédent
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+              >
+                Suivant
+              </Button>
+            </div>
+          </div>
         )}
       </div>
 
