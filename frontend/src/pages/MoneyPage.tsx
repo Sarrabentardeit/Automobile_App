@@ -23,6 +23,7 @@ import {
   Pencil,
   Trash2,
   X,
+  Search,
 } from 'lucide-react'
 
 import { apiFetch } from '@/lib/api'
@@ -65,6 +66,8 @@ export default function MoneyPage() {
   })
   const [tab, setTab] = useState<Tab>('all')
   const [movementView, setMovementView] = useState<MovementView>('liste')
+  const [movementSearch, setMovementSearch] = useState('')
+  const [movementPage, setMovementPage] = useState(1)
   /** Panneau latéral : détail des sources pour un jour (synthèse par jour) */
   const [dayPanelDate, setDayPanelDate] = useState<string | null>(null)
   const { ins, outs, loading, addIn, updateIn, removeIn, addOut, updateOut, removeOut } = useMoney()
@@ -451,6 +454,31 @@ export default function MoneyPage() {
     return activity
   }, [activity, tab])
 
+  const searchedActivity = useMemo(() => {
+    const q = movementSearch.trim().toLowerCase()
+    if (!q) return filteredActivity
+    return filteredActivity.filter(item =>
+      item.label.toLowerCase().includes(q) ||
+      item.sublabel.toLowerCase().includes(q) ||
+      formatDate(item.date).toLowerCase().includes(q),
+    )
+  }, [filteredActivity, movementSearch])
+
+  const MOVEMENTS_PER_PAGE = 30
+  const totalMovementPages = Math.max(1, Math.ceil(searchedActivity.length / MOVEMENTS_PER_PAGE))
+  const paginatedActivity = useMemo(() => {
+    const start = (movementPage - 1) * MOVEMENTS_PER_PAGE
+    return searchedActivity.slice(start, start + MOVEMENTS_PER_PAGE)
+  }, [searchedActivity, movementPage])
+
+  useEffect(() => {
+    setMovementPage(1)
+  }, [movementSearch, movementView, tab, period.year, period.month])
+
+  useEffect(() => {
+    if (movementPage > totalMovementPages) setMovementPage(totalMovementPages)
+  }, [movementPage, totalMovementPages])
+
   const dailySummary = useMemo(() => {
     const byDay = new Map<string, { in: number; out: number }>()
     const bump = (date: string, field: 'in' | 'out', amount: number) => {
@@ -748,65 +776,110 @@ export default function MoneyPage() {
                   )}
                 </div>
               )
-            ) : filteredActivity.length === 0 ? (
+            ) : searchedActivity.length === 0 ? (
               <div className="text-center py-12">
                 <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-3">
                   <Sparkles className="w-6 h-6 text-gray-400" />
                 </div>
-                <p className="text-gray-500 font-medium">Aucun mouvement ce mois</p>
-                <p className="text-sm text-gray-400 mt-1">Ajoutez une entrée ou une sortie</p>
-                <div className="flex justify-center gap-2 mt-4">
-                  <Button size="sm" variant="outline" onClick={openAddOut}>Sortie</Button>
-                  <Button size="sm" onClick={openAddIn} icon={<Plus className="w-4 h-4" />}>Entrée</Button>
-                </div>
+                {movementSearch.trim() ? (
+                  <>
+                    <p className="text-gray-500 font-medium">Aucun résultat</p>
+                    <p className="text-sm text-gray-400 mt-1">Essayez un autre mot-clé</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-gray-500 font-medium">Aucun mouvement ce mois</p>
+                    <p className="text-sm text-gray-400 mt-1">Ajoutez une entrée ou une sortie</p>
+                    <div className="flex justify-center gap-2 mt-4">
+                      <Button size="sm" variant="outline" onClick={openAddOut}>Sortie</Button>
+                      <Button size="sm" onClick={openAddIn} icon={<Plus className="w-4 h-4" />}>Entrée</Button>
+                    </div>
+                  </>
+                )}
               </div>
             ) : (
-              <ul className="space-y-0 divide-y divide-gray-50">
-                {filteredActivity.map(item => (
-                  <li
-                    key={item.id}
-                    className="flex items-center gap-4 py-3.5 first:pt-0 hover:bg-gray-50/80 -mx-2 px-2 rounded-lg transition-colors"
-                  >
-                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                      item.type === 'in' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-gray-100 text-gray-500'
-                    }`}>
-                      {item.type === 'in' ? <ArrowDownRight className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 truncate text-sm">{item.label || 'Sans libellé'}</p>
-                      <p className="text-xs text-gray-500 truncate">{item.sublabel}</p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0 text-xs">
-                      <span className="text-gray-400">{formatDate(item.date)}</span>
-                      <span className={`font-semibold tabular-nums w-20 text-right ${
-                        item.type === 'in' ? 'text-emerald-600' : 'text-gray-700'
+              <div className="space-y-3">
+                <div className="relative">
+                  <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    value={movementSearch}
+                    onChange={(e) => setMovementSearch(e.target.value)}
+                    placeholder="Rechercher dans les mouvements..."
+                    className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-200"
+                  />
+                </div>
+                <ul className="space-y-0 divide-y divide-gray-50">
+                  {paginatedActivity.map(item => (
+                    <li
+                      key={item.id}
+                      className="flex items-center gap-4 py-3.5 first:pt-0 hover:bg-gray-50/80 -mx-2 px-2 rounded-lg transition-colors"
+                    >
+                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                        item.type === 'in' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-gray-100 text-gray-500'
                       }`}>
-                        {item.type === 'in' ? '+' : '−'}{formatAmount(item.amount)}
-                      </span>
-                      {!item.isCharge && (
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => openEditActivity(item)}
-                            className="p-1.5 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100"
-                            title="Modifier"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void deleteActivity(item)}
-                            className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50"
-                            title="Supprimer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
+                        {item.type === 'in' ? <ArrowDownRight className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 truncate text-sm">{item.label || 'Sans libellé'}</p>
+                        <p className="text-xs text-gray-500 truncate">{item.sublabel}</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0 text-xs">
+                        <span className="text-gray-400">{formatDate(item.date)}</span>
+                        <span className={`font-semibold tabular-nums w-20 text-right ${
+                          item.type === 'in' ? 'text-emerald-600' : 'text-gray-700'
+                        }`}>
+                          {item.type === 'in' ? '+' : '−'}{formatAmount(item.amount)}
+                        </span>
+                        {!item.isCharge && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => openEditActivity(item)}
+                              className="p-1.5 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                              title="Modifier"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void deleteActivity(item)}
+                              className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50"
+                              title="Supprimer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                {totalMovementPages > 1 && (
+                  <div className="flex items-center justify-between gap-2 pt-2">
+                    <p className="text-xs text-gray-500">
+                      Page {movementPage} / {totalMovementPages} · {searchedActivity.length} mouvement(s)
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setMovementPage(p => Math.max(1, p - 1))}
+                        disabled={movementPage <= 1}
+                      >
+                        Précédent
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setMovementPage(p => Math.min(totalMovementPages, p + 1))}
+                        disabled={movementPage >= totalMovementPages}
+                      >
+                        Suivant
+                      </Button>
                     </div>
-                  </li>
-                ))}
-              </ul>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </Card>
