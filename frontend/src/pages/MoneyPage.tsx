@@ -24,6 +24,7 @@ import {
   Trash2,
   X,
   Search,
+  FileSpreadsheet,
 } from 'lucide-react'
 
 import { apiFetch } from '@/lib/api'
@@ -72,7 +73,7 @@ export default function MoneyPage() {
   const [dayPanelDate, setDayPanelDate] = useState<string | null>(null)
   const { ins, outs, loading, addIn, updateIn, removeIn, addOut, updateOut, removeOut } = useMoney()
   const toast = useToast()
-  const { charges, totalCharges } = useCharges()
+  const { charges, totalCharges, addCharge, updateCharge, removeCharge, loading: chargesLoading } = useCharges()
   const [addingIn, setAddingIn] = useState(false)
   const [addingOut, setAddingOut] = useState(false)
   const [newIn, setNewIn] = useState<Omit<MoneyIn, 'id'>>({
@@ -115,6 +116,11 @@ export default function MoneyPage() {
     beneficiary: '',
   })
   const [savingEdit, setSavingEdit] = useState(false)
+  const [showChargesModal, setShowChargesModal] = useState(false)
+  const [editingCharge, setEditingCharge] = useState<{ id: number; name: string; amount: number } | null>(null)
+  const [newChargeName, setNewChargeName] = useState('')
+  const [newChargeAmount, setNewChargeAmount] = useState('')
+  const [savingCharge, setSavingCharge] = useState(false)
 
   useEffect(() => {
     const token = getAccessToken()
@@ -247,8 +253,7 @@ export default function MoneyPage() {
     [outs, period]
   )
 
-  const monthStr = `${period.year}-${period.month.toString().padStart(2, '0')}`
-  type ActivityItem = { id: string; date: string; type: 'in' | 'out'; label: string; sublabel: string; amount: number; isCharge?: boolean }
+  type ActivityItem = { id: string; date: string; type: 'in' | 'out'; label: string; sublabel: string; amount: number }
   const activity = useMemo<ActivityItem[]>(() => {
     const inItems: ActivityItem[] = filteredIns.map(r => ({
       id: `in-${r.id}`,
@@ -266,39 +271,23 @@ export default function MoneyPage() {
       sublabel: `${r.category}${r.beneficiary ? ` · ${r.beneficiary}` : ''}`,
       amount: r.amount,
     }))
-    const chargeItems: ActivityItem[] = charges.map(c => ({
-      id: `charge-${c.id}`,
-      date: `${monthStr}-01`,
-      type: 'out' as const,
-      label: c.name,
-      sublabel: 'Charge fixe mensuelle',
-      amount: c.amount,
-      isCharge: true,
-    }))
-    return [...inItems, ...outItems, ...chargeItems].sort((a, b) => b.date.localeCompare(a.date))
-  }, [filteredIns, filteredOuts, charges, monthStr])
+    return [...inItems, ...outItems].sort((a, b) => b.date.localeCompare(a.date))
+  }, [filteredIns, filteredOuts])
 
   const totalIn = useMemo(() => roundMoney(filteredIns.reduce((s, r) => s + r.amount, 0)), [filteredIns])
   const totalOutVariable = useMemo(() => roundMoney(filteredOuts.reduce((s, r) => s + r.amount, 0)), [filteredOuts])
-  const totalOut = roundMoney(totalOutVariable + totalCharges)
+  /** Sorties affichées : uniquement les MoneyOut réels (les charges mensuelles ne sont pas des débits). */
+  const totalOut = totalOutVariable
   const selectedMonthIndex = period.year * 12 + (period.month - 1)
   const openingBalance = useMemo(() => {
-    const allIndexes = [
-      selectedMonthIndex,
-      ...ins.map(i => monthIndexFromDate(i.date)),
-      ...outs.map(o => monthIndexFromDate(o.date)),
-    ]
-    const earliest = Math.min(...allIndexes)
-    const monthsBefore = Math.max(0, selectedMonthIndex - earliest)
     const prevIn = ins
       .filter(i => monthIndexFromDate(i.date) < selectedMonthIndex)
       .reduce((s, i) => s + i.amount, 0)
     const prevOut = outs
       .filter(o => monthIndexFromDate(o.date) < selectedMonthIndex)
       .reduce((s, o) => s + o.amount, 0)
-    const prevCharges = monthsBefore * totalCharges
-    return roundMoney(prevIn - prevOut - prevCharges)
-  }, [ins, outs, selectedMonthIndex, totalCharges])
+    return roundMoney(prevIn - prevOut)
+  }, [ins, outs, selectedMonthIndex])
   const balance = roundMoney(openingBalance + totalIn - totalOut)
   const countIn = filteredIns.length
   const countOut = filteredOuts.length
@@ -327,13 +316,10 @@ export default function MoneyPage() {
       cur.count += 1
       map.set(r.category, cur)
     })
-    if (totalCharges > 0) {
-      map.set('Charges fixes', { total: totalCharges, count: charges.length })
-    }
     return Array.from(map.entries())
       .map(([label, v]) => ({ label, total: roundMoney(v.total), count: v.count }))
       .sort((a, b) => b.total - a.total)
-  }, [filteredOuts, totalCharges, charges])
+  }, [filteredOuts])
 
 
   const openAddIn = () => {
@@ -377,7 +363,6 @@ export default function MoneyPage() {
   }
 
   const openEditActivity = (item: ActivityItem) => {
-    if (item.isCharge) return
     const id = Number(item.id.split('-')[1] ?? '')
     if (Number.isNaN(id)) return
     if (item.type === 'in') {
@@ -438,7 +423,6 @@ export default function MoneyPage() {
   }
 
   const deleteActivity = async (item: ActivityItem) => {
-    if (item.isCharge) return
     const id = Number(item.id.split('-')[1] ?? '')
     if (Number.isNaN(id)) return
     const ok = window.confirm('Supprimer ce mouvement ?')
@@ -446,6 +430,37 @@ export default function MoneyPage() {
     const deleted = item.type === 'in' ? await removeIn(id) : await removeOut(id)
     if (deleted) toast.success('Mouvement supprimé')
     else toast.error('Erreur lors de la suppression')
+  }
+
+  const openChargesModal = () => {
+    setEditingCharge(null)
+    setNewChargeName('')
+    setNewChargeAmount('')
+    setShowChargesModal(true)
+  }
+
+  const handleSaveCharge = async () => {
+    const name = newChargeName.trim()
+    const amount = parseFloat(newChargeAmount)
+    if (!name || Number.isNaN(amount) || amount < 0) return
+    setSavingCharge(true)
+    try {
+      if (editingCharge) {
+        await updateCharge(editingCharge.id, { name, amount })
+        setEditingCharge(null)
+        setShowChargesModal(false)
+        toast.success('Enregistré')
+      } else {
+        await addCharge({ name, amount })
+        setNewChargeName('')
+        setNewChargeAmount('')
+        toast.success('Ajouté')
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement')
+    } finally {
+      setSavingCharge(false)
+    }
   }
 
   const filteredActivity = useMemo(() => {
@@ -488,9 +503,6 @@ export default function MoneyPage() {
     }
     filteredIns.forEach(r => bump(r.date, 'in', r.amount))
     filteredOuts.forEach(r => bump(r.date, 'out', r.amount))
-    if (totalCharges > 0) {
-      bump(`${monthStr}-01`, 'out', totalCharges)
-    }
     return Array.from(byDay.entries())
       .map(([date, v]) => ({
         date,
@@ -499,11 +511,10 @@ export default function MoneyPage() {
         net: roundMoney(v.in - v.out),
       }))
       .sort((a, b) => b.date.localeCompare(a.date))
-  }, [filteredIns, filteredOuts, totalCharges, monthStr])
+  }, [filteredIns, filteredOuts])
 
-  type DayMoneyLine = { key: string; title: string; detail: string; amount: number; isCharge?: boolean }
+  type DayMoneyLine = { key: string; title: string; detail: string; amount: number }
   const dailyDetailedSummary = useMemo(() => {
-    const firstOfMonth = `${monthStr}-01`
     return dailySummary.map(row => {
       const d = row.date
       const ins = filteredIns.filter(r => r.date === d)
@@ -520,20 +531,9 @@ export default function MoneyPage() {
         detail: [r.category, r.beneficiary?.trim()].filter(Boolean).join(' · '),
         amount: r.amount,
       }))
-      if (totalCharges > 0 && d === firstOfMonth) {
-        for (const c of charges) {
-          linesOut.push({
-            key: `charge-${c.id}`,
-            title: c.name,
-            detail: 'Charge fixe mensuelle',
-            amount: c.amount,
-            isCharge: true,
-          })
-        }
-      }
       return { ...row, linesIn, linesOut }
     })
-  }, [dailySummary, filteredIns, filteredOuts, charges, monthStr, totalCharges])
+  }, [dailySummary, filteredIns, filteredOuts])
 
   const dayPanelDetail = useMemo(() => {
     if (!dayPanelDate) return null
@@ -545,7 +545,7 @@ export default function MoneyPage() {
   )
 
   return (
-    <div className="max-w-3xl mx-auto pb-20">
+    <div className="max-w-6xl mx-auto pb-20 px-3 sm:px-4">
       {/* ─── Header ───────────────────────────────────────── */}
       <header className="flex items-center justify-between gap-4 mb-8">
         <div>
@@ -580,8 +580,10 @@ export default function MoneyPage() {
         </div>
       </header>
 
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_280px] lg:items-start">
+        <div className="min-w-0 space-y-10">
       {/* ─── 1. Résumé du mois ─────────────────────────────── */}
-      <section className="mb-10">
+      <section>
         <SectionTitle>Résumé du mois</SectionTitle>
         <div className="space-y-4">
           <Card padding="lg" className="relative overflow-hidden bg-gray-900 text-white border-0 shadow-lg">
@@ -627,7 +629,7 @@ export default function MoneyPage() {
 
       {/* ─── 2. Répartition ────────────────────────────────── */}
       {(statsByType.length > 0 || statsByCategory.length > 0) && (
-        <section className="mb-10">
+        <section>
           <SectionTitle>Répartition</SectionTitle>
           <Card padding="none" className="overflow-hidden">
             <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-100">
@@ -677,7 +679,7 @@ export default function MoneyPage() {
       )}
 
       {/* ─── 3. Mouvements ─────────────────────────────────── */}
-      <section>
+      <section className="pb-2">
         <SectionTitle>Mouvements</SectionTitle>
         <Card padding="none">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border-b border-gray-100">
@@ -771,9 +773,6 @@ export default function MoneyPage() {
                       </tbody>
                     </table>
                   </div>
-                  {totalCharges > 0 && (
-                    <p className="text-xs text-gray-400">Charges fixes : total le 1er du mois.</p>
-                  )}
                 </div>
               )
             ) : searchedActivity.length === 0 ? (
@@ -830,8 +829,7 @@ export default function MoneyPage() {
                         }`}>
                           {item.type === 'in' ? '+' : '−'}{formatAmount(item.amount)}
                         </span>
-                        {!item.isCharge && (
-                          <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1">
                             <button
                               type="button"
                               onClick={() => openEditActivity(item)}
@@ -849,7 +847,6 @@ export default function MoneyPage() {
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
-                        )}
                       </div>
                     </li>
                   ))}
@@ -884,6 +881,51 @@ export default function MoneyPage() {
           </div>
         </Card>
       </section>
+        </div>
+
+        <aside className="lg:sticky lg:top-4 lg:self-start w-full max-w-md mx-auto lg:mx-0 lg:max-w-none">
+          <Card padding="sm">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileSpreadsheet className="w-5 h-5 text-amber-600 shrink-0" />
+                <h3 className="font-semibold text-gray-900 truncate">Charges mensuelles</h3>
+              </div>
+              <button
+                type="button"
+                onClick={openChargesModal}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-gray-500 hover:bg-gray-100 hover:text-emerald-600 transition-colors shrink-0"
+                title="Gérer les charges"
+              >
+                <Settings2 className="w-4 h-4" />
+                <span>Gérer</span>
+              </button>
+            </div>
+            {chargesLoading ? (
+              <p className="text-sm text-gray-400 py-2">Chargement…</p>
+            ) : (
+              <div className="space-y-1 max-h-[220px] overflow-y-auto">
+                {charges.map(c => (
+                  <div
+                    key={c.id}
+                    className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0"
+                  >
+                    <span className="text-sm text-gray-700 truncate pr-2">{c.name}</span>
+                    <span className="text-sm font-semibold text-red-600 shrink-0 tabular-nums">
+                      {c.amount.toLocaleString('fr-FR')} DT
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-between items-center pt-3 mt-2 border-t-2 border-gray-200">
+              <span className="text-xs font-semibold text-gray-500 uppercase">Total</span>
+              <span className="font-bold text-red-700 tabular-nums">
+                {totalCharges.toLocaleString('fr-FR')} DT
+              </span>
+            </div>
+          </Card>
+        </aside>
+      </div>
 
       {/* Panneau latéral : détail jour (synthèse par jour) */}
       {dayPanelDetail && (
@@ -1262,6 +1304,118 @@ export default function MoneyPage() {
 
           <div className="flex justify-end pt-2">
             <Button variant="outline" onClick={() => setShowParamsModal(false)}>Fermer</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={showChargesModal}
+        onClose={() => {
+          setShowChargesModal(false)
+          setEditingCharge(null)
+        }}
+        title="Gérer les charges mensuelles"
+        maxWidth="md"
+      >
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <Input
+                label="Nom de la charge"
+                placeholder="Ex: Loyer Garage"
+                value={newChargeName}
+                onChange={e => setNewChargeName(e.target.value)}
+              />
+            </div>
+            <div className="w-28">
+              <Input
+                label="Montant (DT)"
+                type="number"
+                min={0}
+                step={0.01}
+                placeholder="0"
+                value={newChargeAmount}
+                onChange={e => setNewChargeAmount(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              size="sm"
+              onClick={() => void handleSaveCharge()}
+              disabled={savingCharge || !newChargeName.trim() || Number.isNaN(parseFloat(newChargeAmount))}
+              icon={!editingCharge ? <Plus className="w-4 h-4" /> : undefined}
+            >
+              {savingCharge ? '…' : editingCharge ? 'Enregistrer' : 'Ajouter'}
+            </Button>
+            {editingCharge && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setEditingCharge(null)
+                  setNewChargeName('')
+                  setNewChargeAmount('')
+                }}
+              >
+                Annuler
+              </Button>
+            )}
+          </div>
+
+          <div className="border-t border-gray-200 pt-4 mt-4">
+            <p className="text-xs font-medium text-gray-500 uppercase mb-2">Charges actuelles</p>
+            <div className="space-y-1 max-h-[200px] overflow-y-auto">
+              {charges.map(c => (
+                <div
+                  key={c.id}
+                  className="flex justify-between items-center gap-2 py-2 px-3 rounded-lg bg-gray-50 hover:bg-gray-100"
+                >
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <span className="text-sm font-medium text-gray-800 truncate">{c.name}</span>
+                    <span className="text-sm font-semibold text-red-600 shrink-0 tabular-nums">
+                      {c.amount.toLocaleString('fr-FR')} DT
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingCharge(c)
+                        setNewChargeName(c.name)
+                        setNewChargeAmount(String(c.amount))
+                      }}
+                      className="p-1.5 rounded text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                      title="Modifier"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!window.confirm(`Supprimer « ${c.name} » ?`)) return
+                        void (async () => {
+                          try {
+                            await removeCharge(c.id)
+                            toast.success('Supprimé')
+                          } catch (err) {
+                            toast.error(err instanceof Error ? err.message : 'Erreur à la suppression')
+                          }
+                        })()
+                      }}
+                      className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                      title="Supprimer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-between items-center pt-3 mt-2 border-t border-gray-200">
+              <span className="text-sm font-semibold text-gray-600">Total</span>
+              <span className="font-bold text-red-700 tabular-nums">{totalCharges.toLocaleString('fr-FR')} DT</span>
+            </div>
           </div>
         </div>
       </Modal>

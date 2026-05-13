@@ -3,7 +3,6 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useUsers } from '@/contexts/UsersContext'
 import { useCaisse } from '@/contexts/CaisseContext'
 import { useMoney } from '@/contexts/MoneyContext'
-import { useCharges } from '@/contexts/ChargesContext'
 import { useToast } from '@/contexts/ToastContext'
 import {
   ALL_PRESENCE_STATUTS,
@@ -74,7 +73,6 @@ export default function CaissePage() {
   const { users } = useUsers()
   const { days, setDays } = useCaisse()
   const { ins, outs, addOut, updateOut, removeOut } = useMoney()
-  const { charges, totalCharges, addCharge, updateCharge, removeCharge } = useCharges()
   const toast = useToast()
   const [period, setPeriod] = useState(() => {
     const now = new Date()
@@ -88,10 +86,6 @@ export default function CaissePage() {
   const [selectedMember, setSelectedMember] = useState<string | null>(null)
   const [memberSort, setMemberSort] = useState<MemberSort>('solde')
   const [searchQuery, setSearchQuery] = useState('')
-  const [showChargesModal, setShowChargesModal] = useState(false)
-  const [editingCharge, setEditingCharge] = useState<{ id: number; name: string; amount: number } | null>(null)
-  const [newChargeName, setNewChargeName] = useState('')
-  const [newChargeAmount, setNewChargeAmount] = useState('')
 
   const memberNames = useMemo(
     () =>
@@ -202,7 +196,6 @@ export default function CaissePage() {
   const moneyKpis = useMemo(() => {
     const ca = monthIns.reduce((s, i) => s + i.amount, 0)
     const depenses = monthOuts.reduce((s, o) => s + o.amount, 0)
-    // Les charges mensuelles sont informatives ici (note), sans impact cash.
     const cashFlow = ca - depenses
     return { ca, depenses, cashFlow }
   }, [monthIns, monthOuts])
@@ -330,28 +323,6 @@ export default function CaissePage() {
       ...editingDay,
       members: { ...editingDay.members, [memberName]: next },
     })
-  }
-
-  const openChargesModal = () => {
-    setEditingCharge(null)
-    setNewChargeName('')
-    setNewChargeAmount('')
-    setShowChargesModal(true)
-  }
-
-  const handleSaveCharge = () => {
-    const name = newChargeName.trim()
-    const amount = parseFloat(newChargeAmount)
-    if (!name || isNaN(amount) || amount < 0) return
-    if (editingCharge) {
-      updateCharge(editingCharge.id, { name, amount })
-      setEditingCharge(null)
-      setShowChargesModal(false)
-    } else {
-      addCharge({ name, amount })
-      setNewChargeName('')
-      setNewChargeAmount('')
-    }
   }
 
   const handleExport = () => {
@@ -660,44 +631,8 @@ export default function CaissePage() {
                 )}
               </Card>
 
-              {/* Colonne latérale: Charges + Code présence, comme dans Historique / Résumé */}
+              {/* Colonne latérale: Code présence */}
               <div className="space-y-4">
-                <Card padding="sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <FileSpreadsheet className="w-5 h-5 text-amber-600" />
-                      <h3 className="font-semibold text-gray-900">Charges mensuelles</h3>
-                    </div>
-                    <button
-                      onClick={openChargesModal}
-                      className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-gray-500 hover:bg-gray-100 hover:text-emerald-600 transition-colors"
-                      title="Ajouter, modifier ou supprimer des charges"
-                    >
-                      <Settings2 className="w-4 h-4" />
-                      <span>Gérer</span>
-                    </button>
-                  </div>
-                  <div className="space-y-1 max-h-[200px] overflow-y-auto">
-                    {charges.map(c => (
-                      <div
-                        key={c.id}
-                        className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0"
-                      >
-                        <span className="text-sm text-gray-700">{c.name}</span>
-                        <span className="text-sm font-semibold text-red-600">
-                          {c.amount.toLocaleString('fr-FR')} DT
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex justify-between items-center pt-3 mt-2 border-t-2 border-gray-200">
-                    <span className="text-xs font-semibold text-gray-500 uppercase">Total</span>
-                    <span className="font-bold text-red-700">
-                      {totalCharges.toLocaleString('fr-FR')} DT
-                    </span>
-                  </div>
-                </Card>
-
                 <Card padding="sm">
                   <div className="flex items-center gap-2 mb-3">
                     <Palette className="w-5 h-5 text-purple-600" />
@@ -835,35 +770,6 @@ export default function CaissePage() {
 
           <div className="space-y-4">
             <Card padding="sm">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <FileSpreadsheet className="w-5 h-5 text-amber-600" />
-                  <h3 className="font-semibold text-gray-900">Charges mensuelles</h3>
-                </div>
-                <button
-                  onClick={openChargesModal}
-                  className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-gray-500 hover:bg-gray-100 hover:text-emerald-600 transition-colors"
-                  title="Ajouter, modifier ou supprimer des charges"
-                >
-                  <Settings2 className="w-4 h-4" />
-                  <span>Gérer</span>
-                </button>
-              </div>
-              <div className="space-y-1 max-h-[200px] overflow-y-auto">
-                {charges.map(c => (
-                  <div key={c.id} className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0">
-                    <span className="text-sm text-gray-700">{c.name}</span>
-                    <span className="text-sm font-semibold text-red-600">{c.amount.toLocaleString('fr-FR')} DT</span>
-                  </div>
-                ))}
-              </div>
-              <div className="flex justify-between items-center pt-3 mt-2 border-t-2 border-gray-200">
-                <span className="text-xs font-semibold text-gray-500 uppercase">Total</span>
-                <span className="font-bold text-red-700">{totalCharges.toLocaleString('fr-FR')} DT</span>
-              </div>
-            </Card>
-
-            <Card padding="sm">
               <div className="flex items-center gap-2 mb-3">
                 <Palette className="w-5 h-5 text-purple-600" />
                 <h3 className="font-semibold text-gray-900">Code Présence</h3>
@@ -946,35 +852,6 @@ export default function CaissePage() {
           </div>
 
           <div className="space-y-4">
-            <Card padding="sm">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <FileSpreadsheet className="w-5 h-5 text-amber-600" />
-                  <h3 className="font-semibold text-gray-900">Charges mensuelles</h3>
-                </div>
-                <button
-                  onClick={openChargesModal}
-                  className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-gray-500 hover:bg-gray-100 hover:text-emerald-600 transition-colors"
-                  title="Ajouter, modifier ou supprimer des charges"
-                >
-                  <Settings2 className="w-4 h-4" />
-                  <span>Gérer</span>
-                </button>
-              </div>
-              <div className="space-y-1 max-h-[180px] overflow-y-auto">
-                {charges.map(c => (
-                  <div key={c.id} className="flex justify-between py-1.5 border-b border-gray-50 last:border-0">
-                    <span className="text-sm text-gray-700">{c.name}</span>
-                    <span className="text-sm font-semibold text-red-600">{c.amount.toLocaleString('fr-FR')} DT</span>
-                  </div>
-                ))}
-              </div>
-              <div className="flex justify-between pt-3 mt-2 border-t-2 border-gray-200">
-                <span className="text-xs font-semibold text-gray-500 uppercase">Total</span>
-                <span className="font-bold text-red-700">{totalCharges.toLocaleString('fr-FR')} DT</span>
-              </div>
-            </Card>
-
             <Card padding="sm">
               <div className="flex items-center gap-2 mb-3">
                 <Palette className="w-5 h-5 text-purple-600" />
@@ -1213,110 +1090,6 @@ export default function CaissePage() {
             </div>
           </div>
         )}
-      </Modal>
-
-      {/* Modal Gestion des charges */}
-      <Modal
-        open={showChargesModal}
-        onClose={() => {
-          setShowChargesModal(false)
-          setEditingCharge(null)
-        }}
-        title="Gérer les charges mensuelles"
-        subtitle="Ajoutez, modifiez ou supprimez les charges fixes du mois"
-        maxWidth="md"
-      >
-        <div className="space-y-4">
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <Input
-                label="Nom de la charge"
-                placeholder="Ex: Loyer Garage"
-                value={newChargeName}
-                onChange={e => setNewChargeName(e.target.value)}
-              />
-            </div>
-            <div className="w-28">
-              <Input
-                label="Montant (DT)"
-                type="number"
-                min={0}
-                step={0.01}
-                placeholder="0"
-                value={newChargeAmount}
-                onChange={e => setNewChargeAmount(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              onClick={handleSaveCharge}
-              disabled={!newChargeName.trim() || isNaN(parseFloat(newChargeAmount))}
-              icon={!editingCharge ? <Plus className="w-4 h-4" /> : undefined}
-            >
-              {editingCharge ? 'Modifier' : 'Ajouter'}
-            </Button>
-            {editingCharge && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setEditingCharge(null)
-                  setNewChargeName('')
-                  setNewChargeAmount('')
-                }}
-              >
-                Annuler
-              </Button>
-            )}
-          </div>
-
-          <div className="border-t border-gray-200 pt-4 mt-4">
-            <p className="text-xs font-medium text-gray-500 uppercase mb-2">Charges actuelles</p>
-            <div className="space-y-1 max-h-[200px] overflow-y-auto">
-              {charges.map(c => (
-                <div
-                  key={c.id}
-                  className="flex justify-between items-center py-2 px-3 rounded-lg bg-gray-50 hover:bg-gray-100 group"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-sm font-medium text-gray-800 truncate">{c.name}</span>
-                    <span className="text-sm font-semibold text-red-600 shrink-0">{c.amount.toLocaleString('fr-FR')} DT</span>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingCharge(c)
-                        setNewChargeName(c.name)
-                        setNewChargeAmount(String(c.amount))
-                      }}
-                      className="p-1.5 rounded text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
-                      title="Modifier"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (confirm(`Supprimer « ${c.name} » ?`)) removeCharge(c.id)
-                      }}
-                      className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                      title="Supprimer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="flex justify-between items-center pt-3 mt-2 border-t border-gray-200">
-              <span className="text-sm font-semibold text-gray-600">Total</span>
-              <span className="font-bold text-red-700">{totalCharges.toLocaleString('fr-FR')} DT</span>
-            </div>
-          </div>
-        </div>
       </Modal>
     </div>
   )
