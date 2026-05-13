@@ -40,6 +40,15 @@ const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet'
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
+/** Dernier jour du mois (month = 1..12) au format YYYY-MM-DD pour comparaison lexicographique avec les dates ISO. */
+function endOfMonthIso(year: number, month: number): string {
+  const last = new Date(year, month, 0)
+  const y = last.getFullYear()
+  const m = String(last.getMonth() + 1).padStart(2, '0')
+  const d = String(last.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 export default function TransactionsFournisseursPage() {
   const { user, permissions } = useAuth()
   const { fournisseurs } = useFournisseurs()
@@ -71,6 +80,15 @@ export default function TransactionsFournisseursPage() {
       return y === period.year && m === period.month
     },
     [period]
+  )
+
+  /** Toutes les transactions dont la date est <= fin du mois affiché (synthèse cumulative). */
+  const onOrBeforeEndOfSelectedMonth = useCallback(
+    (dateStr: string) => {
+      const day = dateStr.slice(0, 10)
+      return day <= endOfMonthIso(period.year, period.month)
+    },
+    [period.year, period.month]
   )
 
   const periodLabel = `${MONTHS[period.month - 1]} ${period.year}`
@@ -121,10 +139,10 @@ export default function TransactionsFournisseursPage() {
   }, [transactions, period, inPeriod])
 
   const synthese = useMemo(() => {
-    const inPeriodList = transactions.filter(t => inPeriod(t.date))
+    const cumulativeList = transactions.filter(t => onOrBeforeEndOfSelectedMonth(t.date))
     const byFournisseur: Record<string, { facture: number; paye: number }> = {}
 
-    for (const t of inPeriodList) {
+    for (const t of cumulativeList) {
       const nom = (t.fournisseur || '').trim() || '(Sans fournisseur)'
       if (!byFournisseur[nom]) byFournisseur[nom] = { facture: 0, paye: 0 }
       if (t.type === 'achat') byFournisseur[nom].facture += t.montant
@@ -144,7 +162,7 @@ export default function TransactionsFournisseursPage() {
       })
       .filter(r => r.totalFacture > 0 || r.totalPaye > 0)
       .sort((a, b) => b.totalFacture - a.totalFacture)
-  }, [transactions, inPeriod])
+  }, [transactions, onOrBeforeEndOfSelectedMonth])
 
   const syntheseChartData = useMemo(
     () =>
@@ -354,11 +372,13 @@ export default function TransactionsFournisseursPage() {
         ) : tab === 'synthese' && (
           <div className="space-y-4 p-4">
             {synthese.length === 0 ? (
-              <div className="px-4 py-12 text-center text-gray-500">Aucune donnée pour {periodLabel}</div>
+              <div className="px-4 py-12 text-center text-gray-500">Aucune donnée cumulée jusqu&apos;à fin {periodLabel}</div>
             ) : (
               <>
                 <div className="rounded-xl border border-gray-100 bg-white p-3">
-                  <p className="text-xs text-gray-500 mb-1">Top 15 fournisseurs (mise à jour automatique selon la période)</p>
+                  <p className="text-xs text-gray-500 mb-1">
+                    Top 15 fournisseurs — totaux cumulés jusqu&apos;à fin {periodLabel} (tous les mois précédents inclus)
+                  </p>
                   <p className="text-[11px] text-gray-400 mb-2">Facturé = transactions type Achat, Payé = transactions type Paiement, Reste = Facturé - Payé</p>
                   <div className="h-[420px]">
                     <ResponsiveContainer width="100%" height="100%">
