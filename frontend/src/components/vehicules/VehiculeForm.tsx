@@ -24,7 +24,7 @@ interface Props {
 
 const today = () => new Date().toISOString().split('T')[0]
 
-const ETATS_ENTREE: EtatVehicule[] = ['orange', 'mauve', 'bleu', 'rouge', 'remise_cle', 'vert', 'retour']
+const ETATS_ENTREE: EtatVehicule[] = ['orange', 'mauve', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'vert', 'retour']
 const MAX_IMAGES = 12
 const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024
 const BRAND_OPTIONS = [

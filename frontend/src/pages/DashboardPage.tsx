@@ -34,7 +34,7 @@ export default function DashboardPage() {
 
   const recentActivity = (dashboardSummary?.recentActivity ?? []).slice(0, 6)
 
-  const etats: EtatVehicule[] = ['orange', 'mauve', 'bleu', 'rouge', 'remise_cle', 'vert', 'retour']
+  const etats: EtatVehicule[] = ['orange', 'mauve', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'vert', 'retour']
 
   /** Libellé dashboard pour l’état rouge */
   const labelEtatDashboard = (etat: EtatVehicule) =>

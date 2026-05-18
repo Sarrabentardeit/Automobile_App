@@ -1,0 +1,100 @@
+% =============================================================================
+% Captures d'écran — dossier mecano_cap (Overleaf : uploadez le dossier à la racine
+% du projet, ou copiez les PNG dans un sous-dossier "figures" et adaptez le chemin).
+% =============================================================================
+% Dans le préambule (global_config.tex ou main.tex), assurez-vous d'avoir :
+%   \usepackage{graphicx}
+%   \usepackage{caption}      % optionnel : sous-titres plus propres
+%   \usepackage{subcaption}     % optionnel : côte à côte
+%
+% Chemin des images : choisissez UNE des deux lignes suivantes (décommentez).
+% =============================================================================
+
+% Si vous changez le dossier, modifiez la ligne suivante (ex. {figures/}).
+\graphicspath{{mecano_cap/}}
+
+% Largeur par défaut des captures (ajustez 0.85 si trop grand).
+\newcommand{\CapWidth}{0.92\textwidth}
+
+% Usage : \Screenshot{label}{fichier_sans_chemin}{légende courte}
+\newcommand{\Screenshot}[3]{%
+  \begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\CapWidth]{#2}%
+    \caption{#3}%
+    \label{fig:#1}%
+  \end{figure}%
+}
+
+% Fichiers avec ESPACES dans le nom : passer le nom exact entre accolades.
+\newcommand{\fichierListeClient}{{liste client.png}}
+\newcommand{\fichierListeStock}{{liste stock.png}}
+
+% -----------------------------------------------------------------------------
+% CHAPITRE — Introduction / général (connexion, tableau de bord)
+% -----------------------------------------------------------------------------
+% \input{mecano_cap_figures} puis décommentez les blocs voulus dans chaque chapitre.
+
+\newcommand{\FiguresIntroGenerale}{%
+  \Screenshot{login}{login}{Écran de connexion à l'application}%
+  \Screenshot{dashboard}{dashboard}{Tableau de bord principal}%
+}
+
+% -----------------------------------------------------------------------------
+% CHAPITRE 1 — Contexte, cadre, solution (vue d'ensemble métier)
+% -----------------------------------------------------------------------------
+\newcommand{\FiguresChapitreUn}{%
+  \Screenshot{dashboard_ctx}{dashboard}{Vue synthétique de l'activité (illustration du contexte numérique)}%
+}
+
+% -----------------------------------------------------------------------------
+% CHAPITRE 2 — Acteurs, exigences (administration / utilisateurs)
+% -----------------------------------------------------------------------------
+\newcommand{\FiguresChapitreDeux}{%
+  \Screenshot{users_liste}{user}{Gestion des utilisateurs et profils}%
+  \Screenshot{ajout_user}{ajout_user}{Formulaire d'ajout d'utilisateur}%
+}
+
+% -----------------------------------------------------------------------------
+% CHAPITRE 3 — Release 1 : véhicules, archives, ordre de réparation (atelier)
+% -----------------------------------------------------------------------------
+\newcommand{\FiguresChapitreTrois}{%
+  \Screenshot{liste_vehicules}{liste_vehicule}{Liste des véhicules}%
+  \Screenshot{ajout_vehicule}{ajout_vehicule}{Ajout d'un véhicule}%
+  \Screenshot{changement_etat}{changement_etat}{Changement d'état / suivi du véhicule}%
+  \Screenshot{suivre_vehicule}{suivre_vehicule}{Fiche ou suivi associé au véhicule}%
+  \Screenshot{affectation}{affectation}{Affectation (planning / équipe)}%
+}
+
+% -----------------------------------------------------------------------------
+% CHAPITRE 4 — Release 2 : clients, devis, stock, facturation, réclamations, calendrier
+% -----------------------------------------------------------------------------
+\newcommand{\FiguresChapitreQuatre}{%
+  \Screenshot{nv_client}{nv_client}{Création / fiche client}%
+  \Screenshot{liste_client}{\fichierListeClient}{Liste des clients}%
+  \Screenshot{client_dettes}{client_dettes}{Clients et dettes}%
+  \Screenshot{demande_devis}{demande_devis}{Demandes de devis}%
+  \Screenshot{ajout_demande_devis}{ajout_demande_devis}{Ajout d'une demande de devis}%
+  \Screenshot{liste_stock}{\fichierListeStock}{Liste du stock général}%
+  \Screenshot{ajout_produit}{ajout_produit}{Ajout de produit}%
+  \Screenshot{modif_produit}{modif_produit}{Modification de produit}%
+  \Screenshot{supprimer_produit}{supprimer_produit}{Suppression de produit}%
+  \Screenshot{facturation_vente}{facturation_vente}{Facturation vente}%
+  \Screenshot{nouvelle_facture}{nouvelle_facture}{Création d'une nouvelle facture}%
+  \Screenshot{facture_achat}{facture_achat}{Facturation / suivi achat}%
+  \Screenshot{fournisseurs}{fourniseurs}{Gestion des fournisseurs (nom de fichier : fourniseurs.png)}%
+  \Screenshot{reclamations}{reclamations}{Liste des réclamations}%
+  \Screenshot{ajout_reclamation}{ajout_reclamation}{Ajout d'une réclamation}%
+  \Screenshot{calendrier}{calendrier}{Calendrier / planning}%
+}
+
+% -----------------------------------------------------------------------------
+% CHAPITRE 5 — Tests & validation (illustrations des écrans validés)
+% Reprendre une sélection représentative (éviter 20 figures d'un coup).
+% -----------------------------------------------------------------------------
+\newcommand{\FiguresChapitreCinqTests}{%
+  \Screenshot{login_test}{login}{Vérification du parcours d'authentification}%
+  \Screenshot{dashboard_test}{dashboard}{Contrôle du tableau de bord après connexion}%
+  \Screenshot{liste_vehicules_test}{liste_vehicule}{Scénario : navigation liste véhicules}%
+  \Screenshot{facturation_test}{facturation_vente}{Scénario : module facturation}%
+}

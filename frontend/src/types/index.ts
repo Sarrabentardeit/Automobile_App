@@ -102,7 +102,7 @@ export interface User {
 }
 
 // ==================== ETATS / WORKFLOW ====================
-export type EtatVehicule = 'orange' | 'mauve' | 'bleu' | 'rouge' | 'remise_cle' | 'vert' | 'retour'
+export type EtatVehicule = 'orange' | 'mauve' | 'attente_client' | 'bleu' | 'rouge' | 'remise_cle' | 'vert' | 'retour'
 export type VehiculeType = 'voiture' | 'moto'
 
 export interface EtatConfig {
@@ -130,6 +130,14 @@ export const ETAT_CONFIG: Record<EtatVehicule, EtatConfig> = {
     bg: 'bg-purple-500',
     bgLight: 'bg-purple-50',
     border: 'border-purple-400',
+  },
+  attente_client: {
+    label: 'ATT CLIENT',
+    description: 'En attente du client (validation, rappel, etc.)',
+    color: '#ca8a04',
+    bg: 'bg-yellow-600',
+    bgLight: 'bg-yellow-50',
+    border: 'border-yellow-500',
   },
   bleu: {
     label: 'TEST',
@@ -174,13 +182,14 @@ export const ETAT_CONFIG: Record<EtatVehicule, EtatConfig> = {
 }
 
 export const TRANSITIONS_AUTORISEES: Record<EtatVehicule, EtatVehicule[]> = {
-  orange: ['bleu', 'mauve', 'rouge', 'remise_cle', 'retour'],
-  mauve: ['orange'],
-  bleu: ['remise_cle', 'orange'],
-  rouge: ['orange', 'mauve'],
-  remise_cle: ['vert', 'orange'],
+  orange: ['bleu', 'mauve', 'attente_client', 'rouge', 'remise_cle', 'retour'],
+  mauve: ['orange', 'attente_client'],
+  attente_client: ['orange', 'mauve', 'bleu', 'rouge', 'remise_cle', 'vert'],
+  bleu: ['remise_cle', 'orange', 'attente_client'],
+  rouge: ['orange', 'mauve', 'attente_client'],
+  remise_cle: ['vert', 'orange', 'attente_client'],
   vert: ['retour'],
-  retour: ['orange', 'mauve', 'bleu', 'rouge', 'remise_cle', 'vert'],
+  retour: ['orange', 'mauve', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'vert'],
 }
 
 // ==================== VEHICULES ====================

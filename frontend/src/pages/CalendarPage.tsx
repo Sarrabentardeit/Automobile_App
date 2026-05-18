@@ -138,16 +138,10 @@ export default function CalendarPage() {
     setViewDate({ year: t.getFullYear(), month: t.getMonth() + 1 })
   }
 
+  /** Sélectionne le jour et affiche toutes les affectations dans le panneau (sans limite). */
   const openDay = (date: string) => {
     setSelectedDate(date)
     setNewAssign(prev => ({ ...prev, date }))
-    if (!canManageCalendar) return
-    const dayAssignments = assignmentsByDate.get(date) ?? []
-    if (dayAssignments.length > 0) {
-      openEditAssignment(dayAssignments[0])
-      return
-    }
-    openAddForDate(date)
   }
 
   const openAddForDate = (date: string) => {
@@ -355,7 +349,25 @@ export default function CalendarPage() {
                         </button>
                       ))}
                       {dayAssignments.length > 3 && (
-                        <div className="text-[10px] text-gray-500 px-1">+{dayAssignments.length - 3}</div>
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={e => {
+                            e.stopPropagation()
+                            openDay(cell.date)
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              openDay(cell.date)
+                            }
+                          }}
+                          className="block w-full text-left text-[10px] font-medium text-indigo-600 px-1 py-0.5 rounded hover:bg-indigo-50"
+                          title="Voir et modifier toutes les affectations"
+                        >
+                          +{dayAssignments.length - 3} — voir tout
+                        </span>
                       )}
                     </div>
                   </button>
@@ -371,7 +383,14 @@ export default function CalendarPage() {
             {selectedDate ? (
               <>
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-gray-900">{formatDate(selectedDate)}</h3>
+                  <div>
+                    <h3 className="font-bold text-gray-900">{formatDate(selectedDate)}</h3>
+                    {selectedDayAssignments.length > 0 && (
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {selectedDayAssignments.length} affectation(s) — cliquez une ligne pour modifier
+                      </p>
+                    )}
+                  </div>
                   {canManageCalendar && (
                     <Button size="sm" onClick={() => openAddForDate(selectedDate)} icon={<Plus className="w-4 h-4" />}>
                       Affecter
@@ -385,7 +404,23 @@ export default function CalendarPage() {
                     {selectedDayAssignments.map(a => (
                       <li
                         key={a.id}
-                        className="flex gap-2 p-3 rounded-xl bg-gray-50 border border-gray-100 group"
+                        role={canManageCalendar ? 'button' : undefined}
+                        tabIndex={canManageCalendar ? 0 : undefined}
+                        onClick={() => {
+                          if (canManageCalendar) openEditAssignment(a)
+                        }}
+                        onKeyDown={e => {
+                          if (!canManageCalendar) return
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            openEditAssignment(a)
+                          }
+                        }}
+                        className={cn(
+                          'flex gap-2 p-3 rounded-xl bg-gray-50 border border-gray-100 group text-left w-full',
+                          canManageCalendar &&
+                            'cursor-pointer hover:bg-indigo-50/90 hover:border-indigo-200 transition-colors'
+                        )}
                       >
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-gray-900 text-sm flex items-center gap-1.5">
@@ -406,7 +441,8 @@ export default function CalendarPage() {
                         {canManageCalendar && (
                           <button
                             type="button"
-                            onClick={async () => {
+                            onClick={async e => {
+                              e.stopPropagation()
                               const ok = await removeAssignment(a.id)
                               if (ok) toast.success('Affectation supprimée')
                               else toast.error('Erreur lors de la suppression')
