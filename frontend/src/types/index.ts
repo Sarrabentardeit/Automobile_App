@@ -433,7 +433,7 @@ export interface TeamMemberSlots {
 export interface TeamMoneyDayEntry {
   id: number
   date: string // YYYY-MM-DD
-  members: Record<string, TeamMemberSlots> // key = member name from TEAM_MONEY_MEMBERS
+  members: Record<string, TeamMemberSlots> // key = u:{userId} (legacy: display name)
 }
 
 /** Mouvement caisse (section DATE / MONTANT / RABI3-YASSINE / NOTES de l'Excel) */

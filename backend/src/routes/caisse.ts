@@ -2,6 +2,72 @@ import { Router } from 'express'
 import { prisma } from '../lib/prisma'
 import { authenticate } from '../middleware/auth'
 
+const KEY_PREFIX = 'u:'
+
+function teamMoneyMemberKey(userId: number): string {
+  return `${KEY_PREFIX}${userId}`
+}
+
+function normalizeName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+/** On read: attach legacy name keys to stable u:{userId} keys. */
+async function migrateTeamMoneyDaysOnRead(days: unknown[]): Promise<{ days: unknown[]; changed: boolean }> {
+  const users = await prisma.user.findMany({
+    where: { statut: 'actif' },
+    select: { id: true, fullName: true },
+  })
+  let changed = false
+  const assigned = new Set<number>()
+
+  const migrated = days.map(day => {
+    if (!day || typeof day !== 'object' || !('members' in day)) return day
+    const d = day as { members?: Record<string, unknown> }
+    if (!d.members || typeof d.members !== 'object') return day
+
+    const next: Record<string, unknown> = {}
+    for (const [key, slot] of Object.entries(d.members)) {
+      if (key.startsWith(KEY_PREFIX)) {
+        const id = Number(key.slice(KEY_PREFIX.length))
+        if (Number.isFinite(id)) {
+          next[key] = slot
+          assigned.add(id)
+          if (key !== teamMoneyMemberKey(id)) changed = true
+        } else {
+          next[key] = slot
+        }
+        continue
+      }
+
+      const norm = normalizeName(key)
+      let user =
+        users.find(u => !assigned.has(u.id) && normalizeName(u.fullName) === norm) ?? null
+      if (!user) {
+        const prefix = users.filter(u => {
+          if (assigned.has(u.id)) return false
+          const n = normalizeName(u.fullName)
+          return n.startsWith(norm) || norm.startsWith(n)
+        })
+        if (prefix.length === 1) user = prefix[0]
+      }
+
+      if (user) {
+        const stable = teamMoneyMemberKey(user.id)
+        next[stable] = next[stable] ?? slot
+        assigned.add(user.id)
+        changed = true
+      } else {
+        next[key] = slot
+      }
+    }
+
+    return { ...d, members: next }
+  })
+
+  return { days: migrated, changed }
+}
+
 const router = Router()
 
 // GET /caisse - renvoie le tableau complet des jours TeamMoneyDayEntry (JSON)
@@ -13,7 +79,15 @@ router.get('/', authenticate(), async (_req, res) => {
     }
     const data = (state.data ?? []) as unknown
     if (!Array.isArray(data)) return res.json({ data: [], updatedAt: state.updatedAt.toISOString() })
-    return res.json({ data, updatedAt: state.updatedAt.toISOString() })
+
+    const { days: migrated, changed } = await migrateTeamMoneyDaysOnRead(data)
+    if (changed) {
+      await prisma.teamMoneyState.update({
+        where: { id: 1 },
+        data: { data: migrated },
+      })
+    }
+    return res.json({ data: migrated, updatedAt: state.updatedAt.toISOString() })
   } catch (err) {
     console.error(err)
     if (typeof (prisma as any).teamMoneyState === 'undefined') {

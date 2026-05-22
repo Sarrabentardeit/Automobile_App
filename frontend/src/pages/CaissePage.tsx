@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useUsers } from '@/contexts/UsersContext'
 import { useCaisse } from '@/contexts/CaisseContext'
@@ -17,6 +17,11 @@ import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import { formatDate } from '@/lib/utils'
+import {
+  teamMoneyMemberKey,
+  migrateTeamMoneyDays,
+  getSlotForUser,
+} from '@/lib/teamMoneyMembers'
 import {
   Wallet,
   Plus,
@@ -41,14 +46,23 @@ import {
 
 const emptySlots = (): TeamMemberSlots => ({ inHand: null, taken: null, note: '', presence: null })
 
+type TeamMemberColumn = { id: number; name: string; key: string }
+
+function slotForColumn(
+  members: Record<string, TeamMemberSlots>,
+  col: TeamMemberColumn
+): TeamMemberSlots {
+  return getSlotForUser(members, col.id, col.name) ?? emptySlots()
+}
+
 function buildMembersRecord(
   partial: Partial<Record<string, Partial<TeamMemberSlots>>>,
-  memberNames: string[]
+  teamMembers: TeamMemberColumn[]
 ): Record<string, TeamMemberSlots> {
   const members: Record<string, TeamMemberSlots> = {}
-  memberNames.forEach(name => {
-    const p = partial[name]
-    members[name] = p
+  teamMembers.forEach(col => {
+    const p = partial[col.key] ?? partial[col.name]
+    members[col.key] = p
       ? { inHand: p.inHand ?? null, taken: p.taken ?? null, note: p.note ?? '', presence: p.presence ?? null }
       : emptySlots()
   })
@@ -71,7 +85,7 @@ type MemberSort = 'solde' | 'nom' | 'avances'
 export default function CaissePage() {
   const { user, permissions } = useAuth()
   const { users } = useUsers()
-  const { days, setDays } = useCaisse()
+  const { days, setDays, loading } = useCaisse()
   const { ins, outs, addOut, updateOut, removeOut } = useMoney()
   const toast = useToast()
   const [period, setPeriod] = useState(() => {
@@ -79,7 +93,7 @@ export default function CaissePage() {
     return { year: now.getFullYear(), month: now.getMonth() + 1 }
   })
   const [editingDay, setEditingDay] = useState<TeamMoneyDayEntry | null>(null)
-  const [editingCell, setEditingCell] = useState<{ day: TeamMoneyDayEntry; memberName: string } | null>(null)
+  const [editingCell, setEditingCell] = useState<{ day: TeamMoneyDayEntry; member: TeamMemberColumn } | null>(null)
   const [editingCellSlot, setEditingCellSlot] = useState<TeamMemberSlots | null>(null)
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table')
   const [mainTab, setMainTab] = useState<MainTab>('equipe')
@@ -87,24 +101,30 @@ export default function CaissePage() {
   const [memberSort, setMemberSort] = useState<MemberSort>('solde')
   const [searchQuery, setSearchQuery] = useState('')
 
-  const memberNames = useMemo(
+  const teamMembers = useMemo<TeamMemberColumn[]>(
     () =>
       users
-        // Dans Caisse, on affiche tous les comptes actifs, quel que soit le role.
         .filter(u => u.statut === 'actif')
-        .map(u => u.nom_complet),
+        .map(u => ({ id: u.id, name: u.nom_complet, key: teamMoneyMemberKey(u.id) })),
     [users]
   )
 
+  // Migrate legacy name-based keys to u:{id} so renaming a user does not lose history.
+  useEffect(() => {
+    if (loading || users.length === 0) return
+    const { days: next, changed } = migrateTeamMoneyDays(days, users)
+    if (changed) setDays(next)
+  }, [loading, days, users, setDays])
+
   const openAddDay = () => {
     const date = `${period.year}-${period.month.toString().padStart(2, '0')}-01`
-    setEditingDay({ id: -1, date, members: buildMembersRecord({}, memberNames) })
+    setEditingDay({ id: -1, date, members: buildMembersRecord({}, teamMembers) })
     setEditingCell(null)
   }
 
-  const openCellEdit = (day: TeamMoneyDayEntry, memberName: string) => {
-    setEditingCell({ day, memberName })
-    setEditingCellSlot(day.members[memberName] ?? emptySlots())
+  const openCellEdit = (day: TeamMoneyDayEntry, member: TeamMemberColumn) => {
+    setEditingCell({ day, member })
+    setEditingCellSlot(slotForColumn(day.members, member))
     setEditingDay(null)
   }
 
@@ -113,16 +133,21 @@ export default function CaissePage() {
     setEditingCell(null)
   }
 
-  const syncTakenToMoneyOut = async (dayId: number, date: string, memberName: string, taken: number) => {
-    const ref = `caisse:${dayId}:${memberName}`
+  const syncTakenToMoneyOut = async (
+    dayId: number,
+    date: string,
+    member: TeamMemberColumn,
+    taken: number
+  ) => {
+    const ref = `caisse:${dayId}:${member.key}`
     const existing = outs.find(o => o.sourceRef === ref)
     if (taken > 0) {
       const payload = {
         date,
         amount: taken,
         category: 'AUTRE',
-        description: `Avance ${memberName}`,
-        beneficiary: memberName,
+        description: `Avance ${member.name}`,
+        beneficiary: member.name,
         sourceRef: ref,
       }
       if (existing) await updateOut(existing.id, { amount: taken })
@@ -162,32 +187,32 @@ export default function CaissePage() {
 
   const memberTotals = useMemo(() => {
     const totals: Record<string, { inHand: number; taken: number; balance: number; moisPresent: number }> = {}
-    memberNames.forEach(name => {
-      totals[name] = { inHand: 0, taken: 0, balance: 0, moisPresent: 0 }
+    teamMembers.forEach(col => {
+      totals[col.key] = { inHand: 0, taken: 0, balance: 0, moisPresent: 0 }
     })
     filteredDays.forEach(day => {
-      memberNames.forEach(name => {
-        const slot = day.members[name] ?? emptySlots()
+      teamMembers.forEach(col => {
+        const slot = slotForColumn(day.members, col)
         const ih = slot.inHand ?? 0
         const tk = slot.taken ?? 0
-        totals[name].inHand += ih
-        totals[name].taken += tk
-        totals[name].balance += ih - tk
-        if (slot.presence != null) totals[name].moisPresent += 1
+        totals[col.key].inHand += ih
+        totals[col.key].taken += tk
+        totals[col.key].balance += ih - tk
+        if (slot.presence != null) totals[col.key].moisPresent += 1
       })
     })
     return totals
-  }, [filteredDays, memberNames])
+  }, [filteredDays, teamMembers])
 
   const globalTotals = useMemo(() => {
     let totalInHand = 0
     let totalTaken = 0
-    memberNames.forEach(name => {
-      totalInHand += memberTotals[name].inHand
-      totalTaken += memberTotals[name].taken
+    teamMembers.forEach(col => {
+      totalInHand += memberTotals[col.key].inHand
+      totalTaken += memberTotals[col.key].taken
     })
     return { totalInHand, totalTaken, balance: totalInHand - totalTaken }
-  }, [memberTotals, memberNames])
+  }, [memberTotals, teamMembers])
 
   const monthStr = useMemo(() => `${period.year}-${period.month.toString().padStart(2, '0')}`, [period])
   const monthIns = useMemo(() => ins.filter(i => i.date.startsWith(monthStr)).sort((a, b) => b.date.localeCompare(a.date)), [ins, monthStr])
@@ -200,23 +225,27 @@ export default function CaissePage() {
     return { ca, depenses, cashFlow }
   }, [monthIns, monthOuts])
 
-  const sortedMemberNames = useMemo(() => {
-    const withData = memberNames.filter(n => memberTotals[n].inHand !== 0 || memberTotals[n].taken !== 0)
-    if (memberSort === 'nom') return [...withData].sort((a, b) => a.localeCompare(b))
-    if (memberSort === 'avances') return [...withData].sort((a, b) => memberTotals[b].taken - memberTotals[a].taken)
-    return [...withData].sort((a, b) => memberTotals[b].balance - memberTotals[a].balance)
-  }, [memberNames, memberTotals, memberSort])
+  const sortedTeamMembers = useMemo(() => {
+    const withData = teamMembers.filter(
+      col => memberTotals[col.key].inHand !== 0 || memberTotals[col.key].taken !== 0
+    )
+    if (memberSort === 'nom') return [...withData].sort((a, b) => a.name.localeCompare(b.name))
+    if (memberSort === 'avances') {
+      return [...withData].sort((a, b) => memberTotals[b.key].taken - memberTotals[a.key].taken)
+    }
+    return [...withData].sort((a, b) => memberTotals[b.key].balance - memberTotals[a.key].balance)
+  }, [teamMembers, memberTotals, memberSort])
 
   const transactions = useMemo(() => {
     const tx: { date: string; member: string; presence: PresenceStatut | null; inHand: number; taken: number; note: string }[] = []
     filteredDays.forEach(day => {
-      memberNames.forEach(name => {
-        const slot = day.members[name] ?? emptySlots()
+      teamMembers.forEach(col => {
+        const slot = slotForColumn(day.members, col)
         const hasData = slot.inHand != null || slot.taken != null || (slot.note && slot.note.trim() !== '') || slot.presence != null
         if (!hasData) return
         tx.push({
           date: day.date,
-          member: name,
+          member: col.name,
           presence: slot.presence,
           inHand: slot.inHand ?? 0,
           taken: slot.taken ?? 0,
@@ -225,7 +254,7 @@ export default function CaissePage() {
       })
     })
     return tx.sort((a, b) => b.date.localeCompare(a.date))
-  }, [filteredDays, memberNames])
+  }, [filteredDays, teamMembers])
 
   const filteredTransactions = useMemo(() => {
     let list = transactions
@@ -250,10 +279,10 @@ export default function CaissePage() {
 
     if (editingDay.id === -1 && existingSameDate) {
       const mergedMembers: Record<string, TeamMemberSlots> = {}
-      memberNames.forEach(name => {
-        const oldSlot = existingSameDate.members[name] ?? emptySlots()
-        const newSlot = editingDay.members[name] ?? emptySlots()
-        mergedMembers[name] = {
+      teamMembers.forEach(col => {
+        const oldSlot = slotForColumn(existingSameDate.members, col)
+        const newSlot = editingDay.members[col.key] ?? emptySlots()
+        mergedMembers[col.key] = {
           inHand: newSlot.inHand != null ? newSlot.inHand : oldSlot.inHand,
           taken: newSlot.taken != null ? newSlot.taken : oldSlot.taken,
           note:
@@ -274,9 +303,9 @@ export default function CaissePage() {
     }
     try {
       await Promise.all(
-        memberNames.map(name => {
-          const taken = (savedDay.members[name]?.taken ?? 0) || 0
-          return syncTakenToMoneyOut(savedDay.id, savedDay.date, name, taken)
+        teamMembers.map(col => {
+          const taken = (savedDay.members[col.key]?.taken ?? 0) || 0
+          return syncTakenToMoneyOut(savedDay.id, savedDay.date, col, taken)
         })
       )
     } catch {
@@ -287,16 +316,16 @@ export default function CaissePage() {
 
   const handleSaveCell = async () => {
     if (!editingCell || !editingCellSlot) return
-    const { day, memberName } = editingCell
+    const { day, member } = editingCell
     const slot: TeamMemberSlots = editingCellSlot!
     const updatedDay: TeamMoneyDayEntry = {
       ...day,
-      members: { ...day.members, [memberName]: slot },
+      members: { ...day.members, [member.key]: slot },
     }
     setDays(prev => prev.map(d => (d.id === day.id ? updatedDay : d)))
     const taken = slot.taken ?? 0
     try {
-      await syncTakenToMoneyOut(day.id, day.date, memberName, taken)
+      await syncTakenToMoneyOut(day.id, day.date, member, taken)
     } catch {
       toast.error('Échec de synchronisation avec Money')
     }
@@ -304,12 +333,12 @@ export default function CaissePage() {
   }
 
   const updateEditingMember = (
-    memberName: string,
+    col: TeamMemberColumn,
     field: keyof TeamMemberSlots,
     value: number | string | PresenceStatut | null
   ) => {
     if (!editingDay) return
-    const slot = editingDay.members[memberName] ?? emptySlots()
+    const slot = editingDay.members[col.key] ?? emptySlots()
     const next = {
       ...slot,
       [field]:
@@ -321,7 +350,7 @@ export default function CaissePage() {
     }
     setEditingDay({
       ...editingDay,
-      members: { ...editingDay.members, [memberName]: next },
+      members: { ...editingDay.members, [col.key]: next },
     })
   }
 
@@ -447,7 +476,7 @@ export default function CaissePage() {
           <p className="text-xl sm:text-2xl font-bold text-amber-700 tabular-nums">
             {globalTotals.totalTaken.toLocaleString('fr-FR')} DT
           </p>
-          <p className="text-xs text-gray-500 mt-0.5">{sortedMemberNames.length} membres</p>
+          <p className="text-xs text-gray-500 mt-0.5">{sortedTeamMembers.length} membres</p>
         </Card>
       </div>
 
@@ -510,13 +539,13 @@ export default function CaissePage() {
                           <th className="text-left px-3 sm:px-4 py-3 text-[10px] font-semibold text-gray-500 uppercase sticky left-0 z-20 min-w-[90px] bg-gray-50 border-b border-gray-200">
                             Date
                           </th>
-                          {memberNames.map(name => (
+                          {teamMembers.map(col => (
                             <th
-                              key={name}
+                              key={col.key}
                               className="text-left px-2 sm:px-3 py-3 text-[10px] font-semibold text-gray-600 bg-gray-50 border-b border-l border-gray-100 min-w-[70px]"
                             >
-                              <span className="truncate block max-w-[70px]" title={name}>
-                                {name}
+                              <span className="truncate block max-w-[70px]" title={col.name}>
+                                {col.name}
                               </span>
                             </th>
                           ))}
@@ -537,8 +566,8 @@ export default function CaissePage() {
                             >
                               {formatDate(day.date)}
                             </td>
-                            {memberNames.map(memberName => {
-                              const slot = day.members[memberName] ?? emptySlots()
+                            {teamMembers.map(col => {
+                              const slot = slotForColumn(day.members, col)
                               const hasData =
                                 slot.inHand != null ||
                                 slot.taken != null ||
@@ -546,8 +575,8 @@ export default function CaissePage() {
                                 slot.presence != null
                               return (
                                 <td
-                                  key={memberName}
-                                  onClick={() => openCellEdit(day, memberName)}
+                                  key={col.key}
+                                  onClick={() => openCellEdit(day, col)}
                                   className="px-2 sm:px-3 py-2 border-l border-gray-50 align-top min-w-[60px] cursor-pointer hover:bg-emerald-50/70"
                                 >
                                   {!hasData ? (
@@ -593,11 +622,11 @@ export default function CaissePage() {
                             <td className="px-3 sm:px-4 py-2.5 font-semibold text-gray-800 sticky left-0 z-10 bg-emerald-50/95 border-r border-emerald-100 text-sm">
                               Total
                             </td>
-                            {memberNames.map(memberName => {
-                              const t = memberTotals[memberName]
+                            {teamMembers.map(col => {
+                              const t = memberTotals[col.key]
                               const hasAny = t.inHand !== 0 || t.taken !== 0
                               return (
-                                <td key={memberName} className="px-2 sm:px-3 py-2 border-l border-emerald-100 align-top">
+                                <td key={col.key} className="px-2 sm:px-3 py-2 border-l border-emerald-100 align-top">
                                   {!hasAny ? (
                                     <span className="text-gray-300 text-xs">—</span>
                                   ) : (
@@ -737,7 +766,8 @@ export default function CaissePage() {
                         key={`${t.date}-${t.member}-${i}`}
                         onClick={() => {
                           const day = filteredDays.find(d => d.date === t.date)
-                          if (day) openCellEdit(day, t.member)
+                          const col = teamMembers.find(m => m.name === t.member)
+                          if (day && col) openCellEdit(day, col)
                         }}
                         className="border-b border-gray-50 hover:bg-emerald-50/50 cursor-pointer transition-colors"
                       >
@@ -806,13 +836,13 @@ export default function CaissePage() {
               </select>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
-              {sortedMemberNames.map((name, i) => {
-                const t = memberTotals[name]
-                const isSelected = selectedMember === name
+              {sortedTeamMembers.map((col, i) => {
+                const t = memberTotals[col.key]
+                const isSelected = selectedMember === col.name
                 return (
                   <button
-                    key={name}
-                    onClick={() => setSelectedMember(isSelected ? null : name)}
+                    key={col.key}
+                    onClick={() => setSelectedMember(isSelected ? null : col.name)}
                     className={cn(
                       'text-left rounded-xl border p-4 transition-all',
                       isSelected
@@ -827,9 +857,9 @@ export default function CaissePage() {
                         color: avatarColors[i % avatarColors.length][1],
                       }}
                     >
-                      {getInitials(name)}
+                      {getInitials(col.name)}
                     </div>
-                    <p className="font-semibold text-gray-900 text-sm truncate">{name}</p>
+                    <p className="font-semibold text-gray-900 text-sm truncate">{col.name}</p>
                     <div className="flex justify-between text-xs mt-2">
                       <span className="text-emerald-700 font-medium">En main: {t.inHand}</span>
                       <span className="text-amber-700 font-medium">Pris: {t.taken}</span>
@@ -844,7 +874,7 @@ export default function CaissePage() {
                 )
               })}
             </div>
-            {sortedMemberNames.length === 0 && (
+            {sortedTeamMembers.length === 0 && (
               <Card padding="lg">
                 <p className="text-center text-gray-500">Aucun membre avec des données ce mois</p>
               </Card>
@@ -892,18 +922,18 @@ export default function CaissePage() {
               />
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto pr-1">
-              {memberNames.length === 0 ? (
+              {teamMembers.length === 0 ? (
                 <p className="text-gray-500 text-sm col-span-full py-4">
                   Aucun membre dans l'équipe. Ajoutez des membres dans Équipe → Membres équipe.
                 </p>
               ) : (
-                memberNames.map(memberName => {
-                  const slot = editingDay.members[memberName] ?? emptySlots()
+                teamMembers.map(col => {
+                  const slot = editingDay.members[col.key] ?? emptySlots()
                   return (
-                    <div key={memberName} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                    <div key={col.key} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
                       <p className="font-semibold text-gray-800 text-sm flex items-center gap-1.5 mb-2">
                         <User className="w-3.5 h-3.5 text-gray-400" />
-                        {memberName}
+                        {col.name}
                       </p>
                       <div className="mb-2">
                         <label className="text-[10px] font-medium text-gray-500 uppercase tracking-wide block mb-1">Présence</label>
@@ -911,7 +941,7 @@ export default function CaissePage() {
                           value={slot.presence ?? ''}
                           onChange={e =>
                             updateEditingMember(
-                              memberName,
+                              col,
                               'presence',
                               e.target.value === '' ? null : (e.target.value as PresenceStatut)
                             )
@@ -945,7 +975,7 @@ export default function CaissePage() {
                             placeholder="0"
                             value={slot.inHand ?? ''}
                             onChange={e =>
-                              updateEditingMember(memberName, 'inHand', e.target.value === '' ? null : Number(e.target.value))
+                              updateEditingMember(col, 'inHand', e.target.value === '' ? null : Number(e.target.value))
                             }
                           />
                         </div>
@@ -959,7 +989,7 @@ export default function CaissePage() {
                             placeholder="0"
                             value={slot.taken ?? ''}
                             onChange={e =>
-                              updateEditingMember(memberName, 'taken', e.target.value === '' ? null : Number(e.target.value))
+                              updateEditingMember(col, 'taken', e.target.value === '' ? null : Number(e.target.value))
                             }
                           />
                         </div>
@@ -971,7 +1001,7 @@ export default function CaissePage() {
                           className="w-full mt-0.5 px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500"
                           placeholder="Optionnel"
                           value={slot.note}
-                          onChange={e => updateEditingMember(memberName, 'note', e.target.value)}
+                          onChange={e => updateEditingMember(col, 'note', e.target.value)}
                         />
                       </div>
                     </div>
@@ -998,7 +1028,7 @@ export default function CaissePage() {
           setEditingCell(null)
           setEditingCellSlot(null)
         }}
-        title={editingCell ? `Caisse — ${editingCell.memberName} — ${formatDate(editingCell.day.date)}` : ''}
+        title={editingCell ? `Caisse — ${editingCell.member.name} — ${formatDate(editingCell.day.date)}` : ''}
         subtitle="Modifier ce membre"
         maxWidth="sm"
       >

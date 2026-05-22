@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import { prisma } from '../lib/prisma'
+import { migrateTeamMoneyOnUserRename } from '../lib/teamMoneyMigrate'
 import { authenticate, type AuthRequest } from '../middleware/auth'
 
 const router = Router()
@@ -136,6 +137,14 @@ router.put('/:id', authenticate(), async (req: AuthRequest, res) => {
       where: { id },
       data,
     }) as UserRow
+
+    if (fullName != null && String(fullName).trim() !== existing.fullName) {
+      try {
+        await migrateTeamMoneyOnUserRename(id, existing.fullName, String(fullName).trim())
+      } catch (e) {
+        console.error('[users] migrateTeamMoneyOnUserRename:', e)
+      }
+    }
 
     return res.json({
       id: user.id,
