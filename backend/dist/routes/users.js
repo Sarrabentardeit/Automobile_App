@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const prisma_1 = require("../lib/prisma");
+const teamMoneyMigrate_1 = require("../lib/teamMoneyMigrate");
 const auth_1 = require("../middleware/auth");
 const router = (0, express_1.Router)();
 const ROLES = ['admin', 'responsable', 'technicien', 'financier'];
@@ -120,6 +121,14 @@ router.put('/:id', (0, auth_1.authenticate)(), async (req, res) => {
             where: { id },
             data,
         });
+        if (fullName != null && String(fullName).trim() !== existing.fullName) {
+            try {
+                await (0, teamMoneyMigrate_1.migrateTeamMoneyOnUserRename)(id, existing.fullName, String(fullName).trim());
+            }
+            catch (e) {
+                console.error('[users] migrateTeamMoneyOnUserRename:', e);
+            }
+        }
         return res.json({
             id: user.id,
             email: user.email,

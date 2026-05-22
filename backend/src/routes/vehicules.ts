@@ -423,7 +423,7 @@ router.get('/', authenticate(), async (req, res) => {
         where: Object.keys(baseWhere).length ? baseWhere : undefined,
         orderBy: { id: 'desc' },
       })
-      const autres = all.filter(v => detectVehiculeBrand(v.modele) === 'Autres')
+      const autres = all.filter((v: { modele: string }) => detectVehiculeBrand(v.modele) === 'Autres')
       const total = autres.length
       const slice = autres.slice((page - 1) * limit, page * limit)
       return res.json({ data: slice.map(toVehicule), total, page, limit })
@@ -480,7 +480,7 @@ router.get('/brands', authenticate(), async (req, res) => {
       orderBy: { id: 'desc' },
     })
 
-    const brands = groupModelesByBrand(rows.map(r => r.modele))
+    const brands = groupModelesByBrand(rows.map((r: { modele: string }) => r.modele))
     return res.json({ brands, totalVehicles: rows.length })
   } catch (err) {
     console.error(err)

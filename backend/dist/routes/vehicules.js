@@ -5,29 +5,32 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const prisma_1 = require("../lib/prisma");
+const vehiculeBrands_1 = require("../lib/vehiculeBrands");
 const auth_1 = require("../middleware/auth");
 const fs_1 = require("fs");
 const path_1 = __importDefault(require("path"));
 const router = (0, express_1.Router)();
 const db = prisma_1.prisma;
-const ETATS = ['orange', 'mauve', 'bleu', 'rouge', 'remise_cle', 'vert', 'retour'];
+const ETATS = ['orange', 'mauve', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'vert', 'retour'];
 const TYPES = ['voiture', 'moto'];
 const IMAGE_CATEGORIES = ['etat_exterieur', 'etat_interieur', 'compteur', 'plaque', 'dommage', 'intervention'];
 const ALLOWED_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const UPLOADS_ROOT = path_1.default.resolve(process.cwd(), 'uploads', 'vehicules');
 const TRANSITIONS = {
-    orange: ['bleu', 'mauve', 'rouge', 'remise_cle', 'retour'],
-    mauve: ['orange'],
-    bleu: ['remise_cle', 'orange'],
-    rouge: ['orange', 'mauve'],
-    remise_cle: ['vert', 'orange'],
+    orange: ['bleu', 'mauve', 'attente_client', 'rouge', 'remise_cle', 'retour'],
+    mauve: ['orange', 'attente_client'],
+    attente_client: ['orange', 'mauve', 'bleu', 'rouge', 'remise_cle', 'vert'],
+    bleu: ['remise_cle', 'orange', 'attente_client'],
+    rouge: ['orange', 'mauve', 'attente_client'],
+    remise_cle: ['vert', 'orange', 'attente_client'],
     vert: ['retour'],
-    retour: ['orange', 'mauve', 'bleu', 'rouge', 'remise_cle', 'vert'],
+    retour: ['orange', 'mauve', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'vert'],
 };
 const ETAT_LABELS = {
     orange: 'Orange',
     mauve: 'Mauve',
+    attente_client: 'Attente client',
     bleu: 'Bleu',
     rouge: 'Problème',
     remise_cle: 'Remise clé',
@@ -351,9 +354,30 @@ router.get('/', (0, auth_1.authenticate)(), async (req, res) => {
         const date_debut = req.query.date_debut;
         const date_fin = req.query.date_fin;
         const q = req.query.q?.trim();
+        const marque = req.query.marque?.trim().toLowerCase();
         const page = Math.max(1, parseInt(req.query.page, 10) || 1);
         const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
-        const where = buildVehiculesWhere({ etat, exclude_etat, technicien_id, type, date_debut, date_fin, q }, true);
+        const baseWhere = buildVehiculesWhere({ etat, exclude_etat, technicien_id, type, date_debut, date_fin, q }, true);
+        if (marque === 'autres') {
+            const all = await db.vehicule.findMany({
+                where: Object.keys(baseWhere).length ? baseWhere : undefined,
+                orderBy: { id: 'desc' },
+            });
+            const autres = all.filter((v) => (0, vehiculeBrands_1.detectVehiculeBrand)(v.modele) === 'Autres');
+            const total = autres.length;
+            const slice = autres.slice((page - 1) * limit, page * limit);
+            return res.json({ data: slice.map(toVehicule), total, page, limit });
+        }
+        let where = baseWhere;
+        if (marque) {
+            const prefix = (0, vehiculeBrands_1.slugToModelePrefix)(marque);
+            if (prefix) {
+                const brandClause = { modele: { startsWith: prefix, mode: 'insensitive' } };
+                where = Object.keys(baseWhere).length
+                    ? { AND: [baseWhere, brandClause] }
+                    : brandClause;
+            }
+        }
         const [list, total] = await Promise.all([
             db.vehicule.findMany({
                 where: Object.keys(where).length ? where : undefined,
@@ -366,6 +390,30 @@ router.get('/', (0, auth_1.authenticate)(), async (req, res) => {
             }),
         ]);
         return res.json({ data: list.map(toVehicule), total, page, limit });
+    }
+    catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+/** Brand folders with counts — uses full filtered set, not a vehicle page slice. */
+router.get('/brands', (0, auth_1.authenticate)(), async (req, res) => {
+    try {
+        const etat = req.query.etat;
+        const exclude_etat = req.query.exclude_etat;
+        const technicien_id = req.query.technicien_id;
+        const type = req.query.type;
+        const date_debut = req.query.date_debut;
+        const date_fin = req.query.date_fin;
+        const q = req.query.q?.trim();
+        const where = buildVehiculesWhere({ etat, exclude_etat, technicien_id, type, date_debut, date_fin, q }, true);
+        const rows = await db.vehicule.findMany({
+            where: Object.keys(where).length ? where : undefined,
+            select: { modele: true },
+            orderBy: { id: 'desc' },
+        });
+        const brands = (0, vehiculeBrands_1.groupModelesByBrand)(rows.map((r) => r.modele));
+        return res.json({ brands, totalVehicles: rows.length });
     }
     catch (err) {
         console.error(err);
