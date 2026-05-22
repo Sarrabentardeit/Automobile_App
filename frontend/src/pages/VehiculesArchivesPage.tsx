@@ -14,27 +14,9 @@ import VehiculeFicheFinanciereModal from '@/components/vehicules/VehiculeFicheFi
 import ChangeEtatModal from '@/components/vehicules/ChangeEtatModal'
 import { Car, Bike, Search, Filter, ChevronLeft, ChevronRight, Archive, Trash2, Download, Folder, ArrowLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { BRAND_FOLDER_PAGE_SIZE, type BrandFolder } from '@/lib/vehiculeBrands'
 
-const PAGE_SIZE = 20
-const KNOWN_BRANDS = [
-  'audi', 'bmw', 'changan', 'cherry', 'chevrolet', 'citroen', 'dacia', 'fiat', 'ford', 'haval',
-  'honda', 'hyundai', 'jeep', 'kia', 'mazda', 'mercedes', 'mg', 'mini', 'mitsubishi', 'nissan',
-  'opel', 'peugeot', 'porsche', 'range', 'renault', 'ssangyong', 'seat', 'skoda', 'suzuki',
-  'toyota', 'volkswagen', 'volvo', 'jetour', 'geely', 'isuzu', 'mahindra', 'tata', 'lada',
-] as const
-
-function detectVehiculeBrand(modele: string): string {
-  const raw = (modele || '').trim()
-  if (!raw) return 'Autres'
-  const firstWord = raw.split(/\s+/)[0]?.toLowerCase() ?? ''
-  const matched = KNOWN_BRANDS.find(b => b === firstWord)
-  if (!matched) return 'Autres'
-  return matched.charAt(0).toUpperCase() + matched.slice(1)
-}
-
-function brandToSlug(brand: string): string {
-  return brand.trim().toLowerCase().replace(/\s+/g, '-')
-}
+const VEHICLE_PAGE_SIZE = 20
 
 function getDateRange(mode: string, dateFilter: string): { date_debut?: string; date_fin?: string } {
   const today = new Date()
@@ -93,15 +75,17 @@ export default function VehiculesArchivesPage() {
   const [technicienId, setTechnicienId] = useState<number | undefined>()
   const [dateFilterMode, setDateFilterMode] = useState<'toutes' | 'aujourdhui' | 'hier' | 'semaine' | 'date'>('toutes')
   const [dateFilter, setDateFilter] = useState('')
-  const [currentPage, setCurrentPage] = useState(1)
+  const [vehiclePage, setVehiclePage] = useState(1)
+  const [folderPage, setFolderPage] = useState(1)
+  const [brandFolders, setBrandFolders] = useState<BrandFolder[]>([])
+  const [brandsLoading, setBrandsLoading] = useState(false)
+  const isBrandView = Boolean(brandParam)
   const [changeEtatVehicule, setChangeEtatVehicule] = useState<Vehicule | null>(null)
   const [editingVehicule, setEditingVehicule] = useState<Vehicule | null>(null)
   const [showEditForm, setShowEditForm] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<Vehicule | null>(null)
   const [ficheVehicule, setFicheVehicule] = useState<Vehicule | null>(null)
   const [exporting, setExporting] = useState(false)
-
-  if (!user || !permissions) return null
 
   const techniciens = (users ?? []).filter(u => u.role === 'technicien')
 
@@ -110,36 +94,84 @@ export default function VehiculesArchivesPage() {
     return () => clearTimeout(t)
   }, [recherche])
 
-  const loadVehicules = useCallback(() => {
+  const loadBrandFolders = useCallback(async () => {
+    if (!user || !permissions) return
+    const token = getAccessToken()
+    if (!token) {
+      setBrandFolders([])
+      return
+    }
+    setBrandsLoading(true)
+    try {
+      const { date_debut, date_fin } = getDateRange(dateFilterMode, dateFilter)
+      const params: Record<string, string | number | undefined> = {
+        type: tab,
+        etat: 'vert',
+      }
+      if (permissions.vehiculeVisibility === 'own') params.technicien_id = user.id
+      else if (technicienId) params.technicien_id = technicienId
+      if (date_debut) params.date_debut = date_debut
+      if (date_fin) params.date_fin = date_fin
+      if (rechercheDebounced) params.q = rechercheDebounced
+      const res = await apiFetch<{ brands: BrandFolder[]; totalVehicles: number }>('/vehicules/brands', {
+        token,
+        params,
+      })
+      setBrandFolders(Array.isArray(res.brands) ? res.brands : [])
+    } catch {
+      setBrandFolders([])
+    } finally {
+      setBrandsLoading(false)
+    }
+  }, [
+    getAccessToken,
+    tab,
+    technicienId,
+    dateFilterMode,
+    dateFilter,
+    rechercheDebounced,
+    permissions?.vehiculeVisibility,
+    user?.id,
+  ])
+
+  const loadVehiclesForBrand = useCallback(() => {
+    if (!brandParam || !user || !permissions) return
     const { date_debut, date_fin } = getDateRange(dateFilterMode, dateFilter)
-    const filters: VehiculesFilters = {
+    fetchVehicules({
       type: tab,
       etat: 'vert',
       technicien_id: permissions.vehiculeVisibility === 'own' ? user.id : technicienId,
       date_debut,
       date_fin,
       q: rechercheDebounced || undefined,
-      page: currentPage,
-      limit: PAGE_SIZE,
-    }
-    fetchVehicules(filters)
-    fetchFilteredCounts(filters, true)
+      marque: brandParam,
+      page: vehiclePage,
+      limit: VEHICLE_PAGE_SIZE,
+    })
   }, [
+    brandParam,
     tab,
     technicienId,
     dateFilterMode,
     dateFilter,
-    currentPage,
     rechercheDebounced,
-    permissions.vehiculeVisibility,
+    vehiclePage,
+    permissions?.vehiculeVisibility,
     user?.id,
     fetchVehicules,
-    fetchFilteredCounts,
   ])
 
   useEffect(() => {
-    loadVehicules()
-  }, [loadVehicules])
+    if (isBrandView) loadVehiclesForBrand()
+    else loadBrandFolders()
+  }, [isBrandView, loadBrandFolders, loadVehiclesForBrand])
+
+  useEffect(() => {
+    setVehiclePage(1)
+    setFolderPage(1)
+  }, [tab, technicienId, dateFilterMode, dateFilter, rechercheDebounced, brandParam])
+
+  if (!user || !permissions) return null
 
   const myVehicules = permissions.vehiculeVisibility === 'all'
     ? vehicules
@@ -153,36 +185,30 @@ export default function VehiculesArchivesPage() {
       )
       : []
 
-  const totalPages = Math.ceil(total / limit) || 1
   const canEditFicheFinanciere = permissions.canEditVehicule || permissions.canViewFinance
-  const groupedVehicules = myVehicules.reduce<Record<string, Vehicule[]>>((acc, v) => {
-    const brand = detectVehiculeBrand(v.modele)
-    if (!acc[brand]) acc[brand] = []
-    acc[brand].push(v)
-    return acc
-  }, {})
-  const sortedBrandEntries = Object.entries(groupedVehicules)
-    .sort(([a], [b]) => {
-      if (a === 'Autres') return 1
-      if (b === 'Autres') return -1
-      return a.localeCompare(b, 'fr', { sensitivity: 'base' })
-    })
-    .map(([brand, list]) => [
-      brand,
-      list.slice().sort((a, b) => a.modele.localeCompare(b.modele, 'fr', { sensitivity: 'base' })),
-    ] as const)
-  const selectedBrandEntry = brandParam
-    ? sortedBrandEntries.find(([brand]) => brandToSlug(brand) === brandParam)
-    : undefined
-  const isBrandView = Boolean(brandParam)
-  const vehiclesToRender = isBrandView ? (selectedBrandEntry?.[1] ?? []) : []
+  const selectedBrandFolder = brandParam ? brandFolders.find(b => b.slug === brandParam) : undefined
+  const selectedBrandName =
+    selectedBrandFolder?.name ??
+    (brandParam
+      ? brandParam.split('-').map(w => (w ? w.charAt(0).toUpperCase() + w.slice(1) : '')).join(' ')
+      : '')
+  const folderTotalPages = Math.max(1, Math.ceil(brandFolders.length / BRAND_FOLDER_PAGE_SIZE))
+  const paginatedBrandFolders = brandFolders.slice(
+    (folderPage - 1) * BRAND_FOLDER_PAGE_SIZE,
+    folderPage * BRAND_FOLDER_PAGE_SIZE
+  )
+  const vehicleTotalPages = Math.ceil(total / limit) || 1
+  const vehiclesToRender = isBrandView ? myVehicules : []
+  const contentLoading = isBrandView ? loading : brandsLoading
+  const archiveTotal = brandFolders.reduce((s, b) => s + b.count, 0)
 
   const handleDelete = async (v: Vehicule) => {
     const ok = await deleteVehicule(v.id)
     if (ok) {
       toast.success('Véhicule supprimé')
       setDeleteConfirm(null)
-      loadVehicules()
+      if (isBrandView) loadVehiclesForBrand()
+      else loadBrandFolders()
     } else {
       toast.error('Erreur lors de la suppression')
     }
@@ -244,7 +270,7 @@ export default function VehiculesArchivesPage() {
             Archives véhicules validés
           </h1>
           <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
-            {total} véhicule(s) validé(s)
+            {isBrandView ? `${total} véhicule(s) validé(s)` : `${archiveTotal} véhicule(s) · ${brandFolders.length} marque(s)`}
           </p>
         </div>
         <button
@@ -265,7 +291,8 @@ export default function VehiculesArchivesPage() {
             key={type}
             onClick={() => {
               setTab(type)
-              setCurrentPage(1)
+              setVehiclePage(1)
+              setFolderPage(1)
             }}
             className={cn(
               'flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all',
@@ -303,7 +330,8 @@ export default function VehiculesArchivesPage() {
                 onClick={() => {
                   setDateFilterMode(mode as typeof dateFilterMode)
                   setDateFilter('')
-                  setCurrentPage(1)
+                  setVehiclePage(1)
+              setFolderPage(1)
                 }}
                 className={cn(
                   'px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs font-medium border transition-all',
@@ -320,7 +348,11 @@ export default function VehiculesArchivesPage() {
             {permissions.vehiculeVisibility === 'all' && techniciens.length > 0 && (
               <select
                 value={technicienId ?? ''}
-                onChange={e => { setTechnicienId(e.target.value ? Number(e.target.value) : undefined); setCurrentPage(1) }}
+                onChange={e => {
+                  setTechnicienId(e.target.value ? Number(e.target.value) : undefined)
+                  setVehiclePage(1)
+                  setFolderPage(1)
+                }}
                 className="px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px] sm:text-xs text-gray-700 bg-white focus:ring-2 focus:ring-orange-500"
               >
                 <option value="">Tous techniciens</option>
@@ -336,7 +368,8 @@ export default function VehiculesArchivesPage() {
               onChange={e => {
                 setDateFilter(e.target.value)
                 setDateFilterMode(e.target.value ? 'date' : 'toutes')
-                setCurrentPage(1)
+                setVehiclePage(1)
+              setFolderPage(1)
               }}
               className="px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px] sm:text-xs text-gray-700 bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
             />
@@ -345,11 +378,11 @@ export default function VehiculesArchivesPage() {
       </div>
 
       <div className="space-y-3 sm:space-y-4">
-        {loading ? (
+        {contentLoading ? (
           <div className="bg-white rounded-2xl p-10 sm:p-16 text-center shadow-sm border border-gray-100">
             <p className="text-gray-500 font-medium text-sm sm:text-base">Chargement...</p>
           </div>
-        ) : myVehicules.length === 0 ? (
+        ) : !isBrandView && brandFolders.length === 0 ? (
           <div className="bg-white rounded-2xl p-10 sm:p-16 text-center shadow-sm border border-gray-100">
             <Filter className="w-10 h-10 sm:w-12 sm:h-12 text-gray-200 mx-auto mb-3" />
             <p className="text-gray-500 font-medium text-sm sm:text-base">Aucun véhicule validé trouvé</p>
@@ -357,20 +390,20 @@ export default function VehiculesArchivesPage() {
           </div>
         ) : !isBrandView ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {sortedBrandEntries.map(([brand, brandVehicules]) => (
+            {paginatedBrandFolders.map(folder => (
               <button
-                key={brand}
+                key={folder.slug}
                 type="button"
-                onClick={() => navigate(`/vehicules/archives/marque/${brandToSlug(brand)}`)}
+                onClick={() => navigate(`/vehicules/archives/marque/${folder.slug}`)}
                 className="group text-left bg-white rounded-2xl p-4 border border-gray-200 hover:border-orange-400 hover:shadow-md transition-all"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <Folder className="w-5 h-5 text-orange-500 flex-shrink-0" />
-                    <h3 className="font-bold text-gray-900 truncate">{brand}</h3>
+                    <h3 className="font-bold text-gray-900 truncate">{folder.name}</h3>
                   </div>
                   <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-                    {brandVehicules.length}
+                    {folder.count}
                   </span>
                 </div>
                 <p className="text-xs text-gray-500 mt-2">Cliquer pour voir les archives de cette marque</p>
@@ -389,7 +422,7 @@ export default function VehiculesArchivesPage() {
                 Retour aux dossiers
               </button>
               <h3 className="text-xs sm:text-sm font-bold text-gray-700">
-                {selectedBrandEntry?.[0] ?? 'Marque'} ({vehiclesToRender.length})
+                {selectedBrandName} ({total})
               </h3>
             </div>
             {vehiclesToRender.length === 0 ? (
@@ -414,22 +447,46 @@ export default function VehiculesArchivesPage() {
         )}
       </div>
 
-      {totalPages > 1 && (
+      {!isBrandView && folderTotalPages > 1 && (
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs sm:text-sm text-gray-500">
-            Page {page} sur {totalPages} ({total} résultat{total > 1 ? 's' : ''})
+            Marques — page {folderPage} sur {folderTotalPages} ({brandFolders.length} dossiers)
           </p>
           <div className="flex items-center gap-1">
             <button
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={page <= 1}
+              onClick={() => setFolderPage(p => Math.max(1, p - 1))}
+              disabled={folderPage <= 1}
               className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
+              onClick={() => setFolderPage(p => Math.min(folderTotalPages, p + 1))}
+              disabled={folderPage >= folderTotalPages}
+              className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isBrandView && vehicleTotalPages > 1 && (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs sm:text-sm text-gray-500">
+            Véhicules — page {vehiclePage} sur {vehicleTotalPages} ({total} résultats)
+          </p>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setVehiclePage(p => Math.max(1, p - 1))}
+              disabled={vehiclePage <= 1}
+              className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setVehiclePage(p => Math.min(vehicleTotalPages, p + 1))}
+              disabled={vehiclePage >= vehicleTotalPages}
               className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ChevronRight className="w-4 h-4" />
@@ -447,7 +504,8 @@ export default function VehiculesArchivesPage() {
             if (ok) {
               toast.success('État mis à jour avec succès')
               setChangeEtatVehicule(null)
-              loadVehicules()
+              if (isBrandView) loadVehiclesForBrand()
+              else loadBrandFolders()
             } else {
               toast.error('Transition non autorisée')
             }
@@ -503,7 +561,8 @@ export default function VehiculesArchivesPage() {
               toast.success('Véhicule modifié avec succès')
               setShowEditForm(false)
               setEditingVehicule(null)
-              loadVehicules()
+              if (isBrandView) loadVehiclesForBrand()
+              else loadBrandFolders()
             } catch (err) {
               toast.error(err instanceof Error ? err.message : 'Erreur')
             }

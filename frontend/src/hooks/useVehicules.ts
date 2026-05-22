@@ -21,6 +21,8 @@ export interface VehiculesFilters {
   date_debut?: string
   date_fin?: string
   q?: string
+  /** Brand folder slug (e.g. volkswagen, autres) — list vehicles for one brand only */
+  marque?: string
   page?: number
   limit?: number
 }
@@ -80,6 +82,7 @@ export function useVehicules() {
         if (filters?.date_debut) params.date_debut = filters.date_debut
         if (filters?.date_fin) params.date_fin = filters.date_fin
         if (filters?.q) params.q = filters.q
+        if (filters?.marque) params.marque = filters.marque
 
         const res = await apiFetch<{ data: Vehicule[]; total: number; page: number; limit: number }>('/vehicules', {
           token,

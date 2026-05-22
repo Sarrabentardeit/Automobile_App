@@ -1,5 +1,10 @@
 import { Router } from 'express'
 import { prisma } from '../lib/prisma'
+import {
+  detectVehiculeBrand,
+  groupModelesByBrand,
+  slugToModelePrefix,
+} from '../lib/vehiculeBrands'
 import { authenticate, type AuthRequest } from '../middleware/auth'
 import { promises as fs } from 'fs'
 import path from 'path'
@@ -407,10 +412,33 @@ router.get('/', authenticate(), async (req, res) => {
     const date_debut = req.query.date_debut as string | undefined
     const date_fin = req.query.date_fin as string | undefined
     const q = (req.query.q as string)?.trim()
+    const marque = (req.query.marque as string)?.trim().toLowerCase()
     const page = Math.max(1, parseInt(req.query.page as string, 10) || 1)
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string, 10) || 20))
 
-    const where = buildVehiculesWhere({ etat, exclude_etat, technicien_id, type, date_debut, date_fin, q }, true)
+    const baseWhere = buildVehiculesWhere({ etat, exclude_etat, technicien_id, type, date_debut, date_fin, q }, true)
+
+    if (marque === 'autres') {
+      const all = await db.vehicule.findMany({
+        where: Object.keys(baseWhere).length ? baseWhere : undefined,
+        orderBy: { id: 'desc' },
+      })
+      const autres = all.filter(v => detectVehiculeBrand(v.modele) === 'Autres')
+      const total = autres.length
+      const slice = autres.slice((page - 1) * limit, page * limit)
+      return res.json({ data: slice.map(toVehicule), total, page, limit })
+    }
+
+    let where: Record<string, unknown> = baseWhere
+    if (marque) {
+      const prefix = slugToModelePrefix(marque)
+      if (prefix) {
+        const brandClause = { modele: { startsWith: prefix, mode: 'insensitive' } }
+        where = Object.keys(baseWhere).length
+          ? { AND: [baseWhere, brandClause] }
+          : brandClause
+      }
+    }
 
     const [list, total] = await Promise.all([
       db.vehicule.findMany({
@@ -424,6 +452,36 @@ router.get('/', authenticate(), async (req, res) => {
       }),
     ])
     return res.json({ data: list.map(toVehicule), total, page, limit })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+/** Brand folders with counts — uses full filtered set, not a vehicle page slice. */
+router.get('/brands', authenticate(), async (req, res) => {
+  try {
+    const etat = req.query.etat as string | undefined
+    const exclude_etat = req.query.exclude_etat as string | undefined
+    const technicien_id = req.query.technicien_id as string | undefined
+    const type = req.query.type as string | undefined
+    const date_debut = req.query.date_debut as string | undefined
+    const date_fin = req.query.date_fin as string | undefined
+    const q = (req.query.q as string)?.trim()
+
+    const where = buildVehiculesWhere(
+      { etat, exclude_etat, technicien_id, type, date_debut, date_fin, q },
+      true
+    )
+
+    const rows = await db.vehicule.findMany({
+      where: Object.keys(where).length ? where : undefined,
+      select: { modele: true },
+      orderBy: { id: 'desc' },
+    })
+
+    const brands = groupModelesByBrand(rows.map(r => r.modele))
+    return res.json({ brands, totalVehicles: rows.length })
   } catch (err) {
     console.error(err)
     return res.status(500).json({ error: 'Internal server error' })
