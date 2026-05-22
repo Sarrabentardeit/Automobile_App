@@ -1,74 +1,17 @@
 import { Router } from 'express'
 import { prisma } from '../lib/prisma'
-import { authenticate } from '../middleware/auth'
-
-const KEY_PREFIX = 'u:'
-
-function teamMoneyMemberKey(userId: number): string {
-  return `${KEY_PREFIX}${userId}`
-}
-
-function normalizeName(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, ' ')
-}
-
-/** On read: attach legacy name keys to stable u:{userId} keys. */
-async function migrateTeamMoneyDaysOnRead(days: unknown[]): Promise<{ days: unknown[]; changed: boolean }> {
-  const users = await prisma.user.findMany({
-    where: { statut: 'actif' },
-    select: { id: true, fullName: true },
-  })
-  let changed = false
-  const assigned = new Set<number>()
-
-  const migrated = days.map(day => {
-    if (!day || typeof day !== 'object' || !('members' in day)) return day
-    const d = day as { members?: Record<string, unknown> }
-    if (!d.members || typeof d.members !== 'object') return day
-
-    const next: Record<string, unknown> = {}
-    for (const [key, slot] of Object.entries(d.members)) {
-      if (key.startsWith(KEY_PREFIX)) {
-        const id = Number(key.slice(KEY_PREFIX.length))
-        if (Number.isFinite(id)) {
-          next[key] = slot
-          assigned.add(id)
-          if (key !== teamMoneyMemberKey(id)) changed = true
-        } else {
-          next[key] = slot
-        }
-        continue
-      }
-
-      const norm = normalizeName(key)
-      let user =
-        users.find(u => !assigned.has(u.id) && normalizeName(u.fullName) === norm) ?? null
-      if (!user) {
-        const prefix = users.filter(u => {
-          if (assigned.has(u.id)) return false
-          const n = normalizeName(u.fullName)
-          return n.startsWith(norm) || norm.startsWith(n)
-        })
-        if (prefix.length === 1) user = prefix[0]
-      }
-
-      if (user) {
-        const stable = teamMoneyMemberKey(user.id)
-        next[stable] = next[stable] ?? slot
-        assigned.add(user.id)
-        changed = true
-      } else {
-        next[key] = slot
-      }
-    }
-
-    return { ...d, members: next }
-  })
-
-  return { days: migrated, changed }
-}
+import { authenticate, type AuthRequest } from '../middleware/auth'
+import {
+  loadUsersForTeamMoneyMigration,
+  migrateTeamMoneyDaysWithUsers,
+  repairTeamMoneyState,
+} from '../lib/teamMoneyMigrate'
 
 const router = Router()
+
+function isAdmin(req: AuthRequest): boolean {
+  return req.user?.role === 'admin'
+}
 
 // GET /caisse - renvoie le tableau complet des jours TeamMoneyDayEntry (JSON)
 router.get('/', authenticate(), async (_req, res) => {
@@ -80,11 +23,12 @@ router.get('/', authenticate(), async (_req, res) => {
     const data = (state.data ?? []) as unknown
     if (!Array.isArray(data)) return res.json({ data: [], updatedAt: state.updatedAt.toISOString() })
 
-    const { days: migrated, changed } = await migrateTeamMoneyDaysOnRead(data)
+    const users = await loadUsersForTeamMoneyMigration()
+    const { days: migrated, changed } = migrateTeamMoneyDaysWithUsers(data, users)
     if (changed) {
       await prisma.teamMoneyState.update({
         where: { id: 1 },
-        data: { data: migrated },
+        data: { data: migrated as object },
       })
     }
     return res.json({ data: migrated, updatedAt: state.updatedAt.toISOString() })
@@ -95,6 +39,25 @@ router.get('/', authenticate(), async (_req, res) => {
         error: 'Backend: exécutez "npx prisma generate" puis redémarrez le serveur.',
       })
     }
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// POST /caisse/repair — admin: force re-link legacy name columns to user ids
+router.post('/repair', authenticate(), async (req: AuthRequest, res) => {
+  if (!isAdmin(req)) {
+    return res.status(403).json({ error: 'Accès réservé aux administrateurs' })
+  }
+  try {
+    const result = await repairTeamMoneyState()
+    const state = await prisma.teamMoneyState.findUnique({ where: { id: 1 } })
+    return res.json({
+      ...result,
+      data: state?.data ?? [],
+      updatedAt: state?.updatedAt?.toISOString() ?? null,
+    })
+  } catch (err) {
+    console.error(err)
     return res.status(500).json({ error: 'Internal server error' })
   }
 })
@@ -118,11 +81,14 @@ router.put('/', authenticate(), async (req, res) => {
       }
     }
 
+    const users = await loadUsersForTeamMoneyMigration()
+    const { days: normalized } = migrateTeamMoneyDaysWithUsers(days, users)
+
     const now = new Date()
     const state = await prisma.teamMoneyState.upsert({
       where: { id: 1 },
-      update: { data: days, updatedAt: now },
-      create: { id: 1, data: days, updatedAt: now },
+      update: { data: normalized as object, updatedAt: now },
+      create: { id: 1, data: normalized as object, updatedAt: now },
     })
 
     return res.json({ data: state.data, updatedAt: state.updatedAt.toISOString() })
@@ -133,4 +99,3 @@ router.put('/', authenticate(), async (req, res) => {
 })
 
 export default router
-

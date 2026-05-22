@@ -17,6 +17,7 @@ import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import { formatDate } from '@/lib/utils'
+import { apiFetch } from '@/lib/api'
 import {
   teamMoneyMemberKey,
   migrateTeamMoneyDays,
@@ -50,9 +51,10 @@ type TeamMemberColumn = { id: number; name: string; key: string }
 
 function slotForColumn(
   members: Record<string, TeamMemberSlots>,
-  col: TeamMemberColumn
+  col: TeamMemberColumn,
+  users: { id: number; nom_complet: string }[]
 ): TeamMemberSlots {
-  return getSlotForUser(members, col.id, col.name) ?? emptySlots()
+  return getSlotForUser(members, col.id, col.name, users) ?? emptySlots()
 }
 
 function buildMembersRecord(
@@ -83,9 +85,9 @@ type MainTab = 'equipe' | 'historique' | 'resume'
 type MemberSort = 'solde' | 'nom' | 'avances'
 
 export default function CaissePage() {
-  const { user, permissions } = useAuth()
+  const { user, permissions, getAccessToken } = useAuth()
   const { users } = useUsers()
-  const { days, setDays, loading } = useCaisse()
+  const { days, setDays, loading, refetchDays } = useCaisse()
   const { ins, outs, addOut, updateOut, removeOut } = useMoney()
   const toast = useToast()
   const [period, setPeriod] = useState(() => {
@@ -124,7 +126,7 @@ export default function CaissePage() {
 
   const openCellEdit = (day: TeamMoneyDayEntry, member: TeamMemberColumn) => {
     setEditingCell({ day, member })
-    setEditingCellSlot(slotForColumn(day.members, member))
+    setEditingCellSlot(slotForColumn(day.members, member, users))
     setEditingDay(null)
   }
 
@@ -192,7 +194,7 @@ export default function CaissePage() {
     })
     filteredDays.forEach(day => {
       teamMembers.forEach(col => {
-        const slot = slotForColumn(day.members, col)
+        const slot = slotForColumn(day.members, col, users)
         const ih = slot.inHand ?? 0
         const tk = slot.taken ?? 0
         totals[col.key].inHand += ih
@@ -240,7 +242,7 @@ export default function CaissePage() {
     const tx: { date: string; member: string; presence: PresenceStatut | null; inHand: number; taken: number; note: string }[] = []
     filteredDays.forEach(day => {
       teamMembers.forEach(col => {
-        const slot = slotForColumn(day.members, col)
+        const slot = slotForColumn(day.members, col, users)
         const hasData = slot.inHand != null || slot.taken != null || (slot.note && slot.note.trim() !== '') || slot.presence != null
         if (!hasData) return
         tx.push({
@@ -280,7 +282,7 @@ export default function CaissePage() {
     if (editingDay.id === -1 && existingSameDate) {
       const mergedMembers: Record<string, TeamMemberSlots> = {}
       teamMembers.forEach(col => {
-        const oldSlot = slotForColumn(existingSameDate.members, col)
+        const oldSlot = slotForColumn(existingSameDate.members, col, users)
         const newSlot = editingDay.members[col.key] ?? emptySlots()
         mergedMembers[col.key] = {
           inHand: newSlot.inHand != null ? newSlot.inHand : oldSlot.inHand,
@@ -514,14 +516,47 @@ export default function CaissePage() {
           {viewMode === 'table' && (
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4">
               <Card padding="none" className="overflow-hidden shadow-sm border border-gray-100 rounded-2xl">
-                <div className="px-3 sm:px-5 py-3 sm:py-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100">
-                  <h2 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center gap-2">
-                    <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
-                    Suivi argent équipe
-                  </h2>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Cliquez sur la date pour modifier le jour, ou sur une cellule membre pour modifier ce membre
-                  </p>
+                <div className="px-3 sm:px-5 py-3 sm:py-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100 flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h2 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center gap-2">
+                      <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                      Suivi argent équipe
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Cliquez sur la date pour modifier le jour, ou sur une cellule membre pour modifier ce membre
+                    </p>
+                  </div>
+                  {user?.role === 'admin' && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        const token = getAccessToken()
+                        if (!token) return
+                        try {
+                          const res = await apiFetch<{
+                            changed: boolean
+                            orphanKeys: string[]
+                          }>('/caisse/repair', { method: 'POST', token })
+                          await refetchDays()
+                          if (res.changed) {
+                            toast.success('Historique caisse réparé et rechargé')
+                          } else if (res.orphanKeys?.length) {
+                            toast.error(
+                              `Clés non reconnues : ${res.orphanKeys.slice(0, 5).join(', ')}${res.orphanKeys.length > 5 ? '…' : ''}`
+                            )
+                          } else {
+                            toast.success('Données déjà à jour')
+                          }
+                        } catch {
+                          toast.error('Échec de la réparation de l\'historique')
+                        }
+                      }}
+                    >
+                      Réparer historique
+                    </Button>
+                  )}
                 </div>
                 {filteredDays.length === 0 ? (
                   <div className="text-center py-12 text-gray-500 px-4">
@@ -567,7 +602,7 @@ export default function CaissePage() {
                               {formatDate(day.date)}
                             </td>
                             {teamMembers.map(col => {
-                              const slot = slotForColumn(day.members, col)
+                              const slot = slotForColumn(day.members, col, users)
                               const hasData =
                                 slot.inHand != null ||
                                 slot.taken != null ||

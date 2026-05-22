@@ -25,6 +25,42 @@ function normalizeName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
+function nameTokens(name: string): string[] {
+  return normalizeName(name).split(' ').filter(t => t.length >= 2)
+}
+
+function matchScore(legacyKey: string, fullName: string): number {
+  const k = normalizeName(legacyKey)
+  const n = normalizeName(fullName)
+  if (k === n) return 100
+  if (n.startsWith(k) || k.startsWith(n)) return 80
+
+  const kt = nameTokens(legacyKey)
+  const nt = nameTokens(fullName)
+  if (kt.length === 0 || nt.length === 0) return 0
+
+  let score = 0
+  for (const t of kt) {
+    if (nt.includes(t)) score += 10
+  }
+  if (kt.length >= 2 && score < 20) return 0
+  return score
+}
+
+function resolveUserForLegacyKey(legacyKey: string, users: TeamMoneyUserRef[]): TeamMoneyUserRef | null {
+  let best: TeamMoneyUserRef | null = null
+  let bestScore = 0
+  for (const u of users) {
+    const s = matchScore(legacyKey, u.nom_complet)
+    if (s > bestScore) {
+      bestScore = s
+      best = u
+    }
+  }
+  if (bestScore < 20) return null
+  return best
+}
+
 function mergeSlots(a: TeamMemberSlots, b: TeamMemberSlots): TeamMemberSlots {
   const pickNum = (x: number | null, y: number | null) => {
     if (x != null && y != null) return Math.max(x, y)
@@ -40,61 +76,40 @@ function mergeSlots(a: TeamMemberSlots, b: TeamMemberSlots): TeamMemberSlots {
   }
 }
 
-function findUserForLegacyKey(
-  key: string,
-  users: TeamMoneyUserRef[],
-  assignedUserIds: Set<number>
-): TeamMoneyUserRef | null {
-  const norm = normalizeName(key)
-  const exact = users.find(
-    u => !assignedUserIds.has(u.id) && normalizeName(u.nom_complet) === norm
-  )
-  if (exact) return exact
-
-  const prefixMatches = users.filter(u => {
-    if (assignedUserIds.has(u.id)) return false
-    const n = normalizeName(u.nom_complet)
-    return n.startsWith(norm) || norm.startsWith(n)
-  })
-  if (prefixMatches.length === 1) return prefixMatches[0]
-
-  const first = norm.split(' ')[0]
-  if (first.length >= 3) {
-    const byFirst = users.filter(u => {
-      if (assignedUserIds.has(u.id)) return false
-      return normalizeName(u.nom_complet).startsWith(first)
-    })
-    if (byFirst.length === 1) return byFirst[0]
-  }
-
-  return null
-}
-
 /** Re-key member slots from display names to stable user ids (u:123). */
 export function migrateTeamMoneyDays(
   days: TeamMoneyDayEntry[],
   users: TeamMoneyUserRef[]
 ): { days: TeamMoneyDayEntry[]; changed: boolean } {
+  const legacyToUserId = new Map<string, number>()
+
+  for (const day of days) {
+    for (const key of Object.keys(day.members ?? {})) {
+      if (isTeamMoneyMemberKey(key)) continue
+      if (!legacyToUserId.has(key)) {
+        const user = resolveUserForLegacyKey(key, users)
+        if (user) legacyToUserId.set(key, user.id)
+      }
+    }
+  }
+
   let changed = false
   const migrated = days.map(day => {
     const nextMembers: Record<string, TeamMemberSlots> = {}
-    const assignedUserIds = new Set<number>()
 
     for (const [key, slot] of Object.entries(day.members ?? {})) {
       const userId = parseTeamMoneyMemberKey(key)
       if (userId != null) {
         const stable = teamMoneyMemberKey(userId)
         nextMembers[stable] = nextMembers[stable] ? mergeSlots(nextMembers[stable], slot) : slot
-        assignedUserIds.add(userId)
         if (stable !== key) changed = true
         continue
       }
 
-      const user = findUserForLegacyKey(key, users, assignedUserIds)
-      if (user) {
-        const stable = teamMoneyMemberKey(user.id)
+      const mappedId = legacyToUserId.get(key)
+      if (mappedId != null) {
+        const stable = teamMoneyMemberKey(mappedId)
         nextMembers[stable] = nextMembers[stable] ? mergeSlots(nextMembers[stable], slot) : slot
-        assignedUserIds.add(user.id)
         changed = true
         continue
       }
@@ -108,12 +123,27 @@ export function migrateTeamMoneyDays(
   return { days: migrated, changed }
 }
 
+/** Read slot for a user — stable key, current name, or any legacy alias in the row. */
 export function getSlotForUser(
   members: Record<string, TeamMemberSlots>,
   userId: number,
-  displayName: string
+  displayName: string,
+  users?: TeamMoneyUserRef[]
 ): TeamMemberSlots | undefined {
-  const byId = members[teamMoneyMemberKey(userId)]
-  if (byId) return byId
-  return members[displayName]
+  const stable = teamMoneyMemberKey(userId)
+  if (members[stable]) return members[stable]
+  if (members[displayName]) return members[displayName]
+
+  if (users) {
+    for (const [key, slot] of Object.entries(members)) {
+      if (isTeamMoneyMemberKey(key)) {
+        if (parseTeamMoneyMemberKey(key) === userId) return slot
+        continue
+      }
+      const matched = resolveUserForLegacyKey(key, users)
+      if (matched?.id === userId) return slot
+    }
+  }
+
+  return undefined
 }

@@ -7,6 +7,7 @@ interface CaisseContextValue {
   days: TeamMoneyDayEntry[]
   loading: boolean
   setDays: React.Dispatch<React.SetStateAction<TeamMoneyDayEntry[]>>
+  refetchDays: () => Promise<void>
 }
 
 const Context = createContext<CaisseContextValue | null>(null)
@@ -74,7 +75,7 @@ export function CaisseProvider({ children }: { children: ReactNode }) {
   )
 
   return (
-    <Context.Provider value={{ days, loading, setDays }}>
+    <Context.Provider value={{ days, loading, setDays, refetchDays: fetchDays }}>
       {children}
     </Context.Provider>
   )
