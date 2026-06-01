@@ -33,6 +33,7 @@ import outilsRouter from './routes/outils'
 import checklistsRouter from './routes/checklists'
 import statsRouter from './routes/stats'
 import settingsRouter from './routes/settings'
+import { ensureDocumentTemplates } from './lib/seedDocumentTemplates'
 
 const app = express()
 
@@ -118,7 +119,14 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
   res.status(500).json({ error: 'Unexpected error' })
 })
 
-app.listen(env.PORT, () => {
-  console.log(`Backend listening on http://localhost:${env.PORT}`)
-})
+void ensureDocumentTemplates()
+  .then(() => {
+    app.listen(env.PORT, () => {
+      console.log(`Backend listening on http://localhost:${env.PORT}`)
+    })
+  })
+  .catch((err) => {
+    console.error('[templates] startup seed failed:', err)
+    process.exit(1)
+  })
 

@@ -38,6 +38,7 @@ const outils_1 = __importDefault(require("./routes/outils"));
 const checklists_1 = __importDefault(require("./routes/checklists"));
 const stats_1 = __importDefault(require("./routes/stats"));
 const settings_1 = __importDefault(require("./routes/settings"));
+const seedDocumentTemplates_1 = require("./lib/seedDocumentTemplates");
 const app = (0, express_1.default)();
 function canReadUploads(req) {
     const header = req.headers.authorization;
@@ -116,6 +117,13 @@ app.use((err, _req, res, _next) => {
     console.error(err);
     res.status(500).json({ error: 'Unexpected error' });
 });
-app.listen(env_1.env.PORT, () => {
-    console.log(`Backend listening on http://localhost:${env_1.env.PORT}`);
+void (0, seedDocumentTemplates_1.ensureDocumentTemplates)()
+    .then(() => {
+    app.listen(env_1.env.PORT, () => {
+        console.log(`Backend listening on http://localhost:${env_1.env.PORT}`);
+    });
+})
+    .catch((err) => {
+    console.error('[templates] startup seed failed:', err);
+    process.exit(1);
 });
