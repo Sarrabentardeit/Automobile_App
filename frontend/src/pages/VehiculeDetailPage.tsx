@@ -15,8 +15,7 @@ import ChangeEtatModal from '@/components/vehicules/ChangeEtatModal'
 import VehiculeForm from '@/components/vehicules/VehiculeForm'
 import VehiculeOrdresReparation from '@/components/vehicules/VehiculeOrdresReparation'
 import VehiculeSuivis from '@/components/vehicules/VehiculeSuivis'
-import VehiculePhotosSection from '@/components/vehicules/VehiculePhotosSection'
-import { ArrowLeft, ArrowRightLeft, Pencil, Phone, Calendar, User, Clock, Car, Bike } from 'lucide-react'
+import { ArrowLeft, ArrowRightLeft, Pencil, Phone, Calendar, User, Clock, Car, Bike, Image as ImageIcon, Trash2 } from 'lucide-react'
 import { daysSince, getUserDisplayName, formatDuree, formatDate } from '@/lib/utils'
 
 export default function VehiculeDetailPage() {
@@ -104,9 +103,6 @@ export default function VehiculeDetailPage() {
       vehicule.technicien_id === user.id ||
       (vehicule.technicien_ids?.includes(user.id) ?? false)
     )
-
-  const canManagePhotos =
-    permissions.canEditVehicule || permissions.canAddVehicule || permissions.canChangeEtat
 
   const notifyAssignedUsers = (
     technicienIds: number[] | undefined,
@@ -224,21 +220,56 @@ export default function VehiculeDetailPage() {
         </Card>
       </div>
 
-      <VehiculePhotosSection
-        vehiculeId={vehiculeId}
-        images={vehiculeImages}
-        canUpload={canManagePhotos}
-        canDelete={permissions.canEditVehicule}
-        toast={toast}
-        onPreview={url => {
-          setCurrentImageUrl(url)
-          setShowImageModal(true)
-        }}
-        onUpload={async payload => {
-          await uploadVehiculeImage(vehiculeId, payload)
-        }}
-        onDelete={imageId => deleteVehiculeImage(vehiculeId, imageId)}
-      />
+      <div>
+        <h2 className="text-sm sm:text-base font-bold text-gray-900 mb-2 sm:mb-3 flex items-center gap-2">
+          <ImageIcon className="w-4 h-4 text-orange-500" />
+          Photos du véhicule
+        </h2>
+        <Card padding="sm">
+          {vehiculeImages.length === 0 ? (
+            <p className="text-sm text-gray-500">Aucune photo enregistrée pour ce véhicule.</p>
+          ) : (
+            <div key={vehiculeId} className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+              {vehiculeImages.map(img => (
+                <div key={img.id} className="rounded-lg border border-gray-100 overflow-hidden bg-white cursor-pointer group">
+                  <img
+                    src={`/api${img.url_path}`}
+                    alt={img.note || img.original_name || `Photo ${img.id}`}
+                    loading="lazy"
+                    onClick={() => {
+                      setCurrentImageUrl(`/api${img.url_path}`)
+                      setShowImageModal(true)
+                    }}
+                    className="w-full h-32 md:h-40 object-cover rounded-xl shadow-sm hover:scale-[1.02] transition-transform duration-200 cursor-pointer"
+                    title="Cliquez pour agrandir"
+                  />
+                  <div className="p-2 space-y-1">
+                    <p className="text-[11px] text-gray-700 truncate" title={img.note || img.original_name}>
+                      {img.note || img.original_name || 'Photo véhicule'}
+                    </p>
+                    <p className="text-[10px] text-gray-400">{new Date(img.created_at).toLocaleDateString('fr-FR')}</p>
+                    {permissions.canEditVehicule && (
+                      <button
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          const ok = await deleteVehiculeImage(vehiculeId, img.id)
+                          if (ok) toast.success('Photo supprimée')
+                          else toast.error('Suppression impossible')
+                        }}
+                        className="inline-flex items-center gap-1 text-[10px] text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        Supprimer
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
 
       {showImageModal && (
         <div 

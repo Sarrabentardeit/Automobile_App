@@ -15,7 +15,7 @@ const db = prisma as any
 const ETATS = ['orange', 'mauve', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'vert', 'retour'] as const
 const TYPES = ['voiture', 'moto'] as const
 const IMAGE_CATEGORIES = ['etat_exterieur', 'etat_interieur', 'compteur', 'plaque', 'dommage', 'intervention'] as const
-const ALLOWED_IMAGE_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic'] as const
+const ALLOWED_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'] as const
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024
 const UPLOADS_ROOT = path.resolve(process.cwd(), 'uploads', 'vehicules')
 const TRANSITIONS: Record<string, string[]> = {
@@ -107,7 +107,7 @@ function toVehiculeImage(i: {
 }
 
 function getImageExtension(mimeType: string): string {
-  if (mimeType === 'image/jpeg' || mimeType === 'image/jpg') return 'jpg'
+  if (mimeType === 'image/jpeg') return 'jpg'
   if (mimeType === 'image/png') return 'png'
   if (mimeType === 'image/webp') return 'webp'
   if (mimeType === 'image/heic') return 'heic'
