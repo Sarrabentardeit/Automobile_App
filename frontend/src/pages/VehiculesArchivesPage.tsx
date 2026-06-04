@@ -361,7 +361,7 @@ export default function VehiculesArchivesPage() {
                 ))}
               </select>
             )}
-            <span className="text-[11px] sm:text-xs text-gray-500 whitespace-nowrap">Jour précis</span>
+            <span className="text-[11px] sm:text-xs text-gray-500 whitespace-nowrap">Date validation</span>
             <input
               type="date"
               value={dateFilter}

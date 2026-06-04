@@ -15,6 +15,7 @@ import Textarea from '@/components/ui/Textarea'
 import Button from '@/components/ui/Button'
 import { Save, Car, Bike, Camera, ImagePlus, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { fileToVehiculeImagePayload, isAcceptableImageFile } from '@/lib/vehiculeImageFiles'
 
 interface Props {
   vehicule: Vehicule | null
@@ -164,14 +165,6 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
     )
   }
 
-  const readFileAsDataUrl = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(String(reader.result ?? ''))
-      reader.onerror = () => reject(new Error('Erreur lecture fichier'))
-      reader.readAsDataURL(file)
-    })
-
   const handlePickFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return
     const availableSlots = Math.max(0, MAX_IMAGES - pendingImages.length)
@@ -183,25 +176,32 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
     const selected = Array.from(files).slice(0, availableSlots)
     const accepted: PendingImage[] = []
     for (const file of selected) {
-      if (!file.type.startsWith('image/')) continue
+      if (!isAcceptableImageFile(file)) {
+        setErrors(prev => ({
+          ...prev,
+          images: `Format non supporté (${file.name || 'fichier'}). Utilisez JPEG, PNG ou WEBP.`,
+        }))
+        continue
+      }
       if (file.size > MAX_IMAGE_SIZE_BYTES) {
-        setErrors(prev => ({ ...prev, images: `Une image dépasse 8 MB (${file.name})` }))
+        setErrors(prev => ({ ...prev, images: `Une image dépasse 8 MB (${file.name || 'photo'})` }))
         continue
       }
       try {
-        const dataUrl = await readFileAsDataUrl(file)
+        const payload = await fileToVehiculeImagePayload(file, {
+          category: imageCategory,
+          note: imageNote,
+        })
         accepted.push({
           id: `${Date.now()}-${Math.random()}`,
           previewUrl: URL.createObjectURL(file),
-          payload: {
-            dataUrl,
-            fileName: file.name,
-            category: imageCategory,
-            note: imageNote.trim(),
-          },
+          payload,
         })
       } catch {
-        setErrors(prev => ({ ...prev, images: `Impossible de lire le fichier ${file.name}` }))
+        setErrors(prev => ({
+          ...prev,
+          images: `Impossible de lire la photo (${file.name || 'fichier'}). Réessayez via la galerie.`,
+        }))
       }
     }
 
@@ -212,6 +212,13 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
         delete next.images
         return next
       })
+    } else if (selected.length > 0) {
+      setErrors(prev => ({
+        ...prev,
+        images:
+          prev.images ??
+          'Photo non reconnue. Réessayez avec « Depuis galerie » ou vérifiez que vous cliquez sur Enregistrer après la prise de vue.',
+      }))
     }
   }
 
@@ -400,6 +407,9 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
             <label className="block text-sm font-medium text-gray-700">Photos véhicule (optionnel)</label>
             <span className="text-xs text-gray-500">{pendingImages.length}/{MAX_IMAGES}</span>
           </div>
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5">
+            Les photos ne sont envoyées qu&apos;après avoir cliqué sur <strong>Enregistrer</strong> en bas du formulaire.
+          </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <select
               value={imageCategory}

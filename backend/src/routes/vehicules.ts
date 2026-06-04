@@ -15,7 +15,7 @@ const db = prisma as any
 const ETATS = ['orange', 'mauve', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'vert', 'retour'] as const
 const TYPES = ['voiture', 'moto'] as const
 const IMAGE_CATEGORIES = ['etat_exterieur', 'etat_interieur', 'compteur', 'plaque', 'dommage', 'intervention'] as const
-const ALLOWED_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'] as const
+const ALLOWED_IMAGE_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic'] as const
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024
 const UPLOADS_ROOT = path.resolve(process.cwd(), 'uploads', 'vehicules')
 const TRANSITIONS: Record<string, string[]> = {
@@ -107,7 +107,7 @@ function toVehiculeImage(i: {
 }
 
 function getImageExtension(mimeType: string): string {
-  if (mimeType === 'image/jpeg') return 'jpg'
+  if (mimeType === 'image/jpeg' || mimeType === 'image/jpg') return 'jpg'
   if (mimeType === 'image/png') return 'png'
   if (mimeType === 'image/webp') return 'webp'
   if (mimeType === 'image/heic') return 'heic'
@@ -261,31 +261,54 @@ function buildVehiculesWhere(query: {
     where.etat_actuel = { not: query.exclude_etat }
   }
 
-  if (query.technicien_id) {
-    const tid = parseInt(query.technicien_id, 10)
-    if (!isNaN(tid)) {
-      where.OR = [
-        { technicien_id: tid },
-        { responsable_id: tid }
-      ]
-    }
-  }
-
   if (query.type && TYPES.includes(query.type as (typeof TYPES)[number])) {
     where.type = query.type
   }
+
+  const andClauses: Record<string, unknown>[] = []
+
+  if (query.technicien_id) {
+    const tid = parseInt(query.technicien_id, 10)
+    if (!isNaN(tid)) {
+      andClauses.push({
+        OR: [{ technicien_id: tid }, { responsable_id: tid }],
+      })
+    }
+  }
+
   if (query.date_debut || query.date_fin) {
-    where.date_entree = {}
-    if (query.date_debut) (where.date_entree as Record<string, string>).gte = query.date_debut
-    if (query.date_fin) (where.date_entree as Record<string, string>).lte = query.date_fin
+    const range: Record<string, string> = {}
+    if (query.date_debut) range.gte = query.date_debut
+    if (query.date_fin) range.lte = query.date_fin
+    // Archives (validés) : filtrer sur la date de sortie / validation, pas l'entrée atelier
+    if (query.etat === 'vert') {
+      andClauses.push({
+        OR: [
+          { date_sortie: range },
+          { date_sortie: null, date_entree: range },
+        ],
+      })
+    } else {
+      andClauses.push({ date_entree: range })
+    }
   }
+
   if (query.q) {
-    where.OR = [
-      { modele: { contains: query.q, mode: 'insensitive' } },
-      { immatriculation: { contains: query.q, mode: 'insensitive' } },
-      { defaut: { contains: query.q, mode: 'insensitive' } },
-    ]
+    andClauses.push({
+      OR: [
+        { modele: { contains: query.q, mode: 'insensitive' } },
+        { immatriculation: { contains: query.q, mode: 'insensitive' } },
+        { defaut: { contains: query.q, mode: 'insensitive' } },
+      ],
+    })
   }
+
+  if (andClauses.length === 1) {
+    Object.assign(where, andClauses[0])
+  } else if (andClauses.length > 1) {
+    where.AND = andClauses
+  }
+
   return where
 }
 
