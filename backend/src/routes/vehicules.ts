@@ -122,9 +122,11 @@ function sanitizeOriginalName(fileName?: string): string {
 
 function parseDataUrl(dataUrl?: string): { mimeType: string; buffer: Buffer } | null {
   if (!dataUrl) return null
-  const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/)
+  const match = dataUrl.match(/^data:([^;]*);base64,(.+)$/i)
   if (!match) return null
-  const mimeType = match[1].toLowerCase()
+  let mimeType = (match[1] || '').trim().toLowerCase()
+  if (!mimeType || mimeType === 'application/octet-stream') mimeType = 'image/jpeg'
+  if (mimeType === 'image/jpg') mimeType = 'image/jpeg'
   if (!ALLOWED_IMAGE_MIME_TYPES.includes(mimeType as (typeof ALLOWED_IMAGE_MIME_TYPES)[number])) return null
   try {
     const buffer = Buffer.from(match[2], 'base64')
