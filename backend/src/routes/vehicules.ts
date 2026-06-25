@@ -178,22 +178,85 @@ function normalizeIds(input: unknown): number[] {
 
 function splitNotesAndAssignees(rawNotes: string | null | undefined) {
   const notes = String(rawNotes ?? '')
-  const start = notes.lastIndexOf(ASSIGNEES_TAG)
-  if (start < 0) return { notes: notes.trim(), technicien_ids: [] as number[], responsable_ids: [] as number[] }
-  const end = notes.indexOf(']]', start)
-  if (end < 0) return { notes: notes.trim(), technicien_ids: [] as number[], responsable_ids: [] as number[] }
-  const jsonPart = notes.slice(start + ASSIGNEES_TAG.length, end)
   let technicien_ids: number[] = []
   let responsable_ids: number[] = []
-  try {
-    const parsed = JSON.parse(jsonPart) as { technicien_ids?: unknown; responsable_ids?: unknown }
-    technicien_ids = normalizeIds(parsed.technicien_ids)
-    responsable_ids = normalizeIds(parsed.responsable_ids)
-  } catch {
-    // ignore malformed metadata
+  let raw = notes
+
+  const merge = (t: number[], r: number[]) => {
+    technicien_ids = Array.from(new Set([...technicien_ids, ...t]))
+    responsable_ids = Array.from(new Set([...responsable_ids, ...r]))
   }
-  const cleaned = (notes.slice(0, start) + notes.slice(end + 2)).trim()
-  return { notes: cleaned, technicien_ids, responsable_ids }
+
+  const startTag = notes.lastIndexOf(ASSIGNEES_TAG)
+  if (startTag >= 0) {
+    const end = notes.indexOf(']]', startTag)
+    if (end >= 0) {
+      const jsonPart = notes.slice(startTag + ASSIGNEES_TAG.length, end)
+      try {
+        const parsed = JSON.parse(jsonPart) as { technicien_ids?: unknown; responsable_ids?: unknown; technician_ids?: unknown }
+        merge(normalizeIds(parsed.technicien_ids ?? parsed.technician_ids), normalizeIds(parsed.responsable_ids))
+      } catch {
+        // ignore malformed metadata
+      }
+      raw = (notes.slice(0, startTag) + notes.slice(end + 2)).trim()
+    } else {
+      raw = notes.trim()
+    }
+  }
+
+  const extractJsonBlock = (text: string) => {
+    const idx = text.indexOf('ASSIGNEES')
+    if (idx < 0) return null
+    let start = -1
+    for (let i = idx; i >= 0; i--) {
+      if (text[i] === '{' || text[i] === '[') {
+        start = i
+        break
+      }
+    }
+    if (start < 0) return null
+    const stack: string[] = []
+    for (let i = start; i < text.length; i++) {
+      const c = text[i]
+      if (c === '{' || c === '[') stack.push(c === '{' ? '}' : ']')
+      else if (c === '}' || c === ']') {
+        if (stack.length === 0 || stack[stack.length - 1] !== c) continue
+        stack.pop()
+        if (stack.length === 0) {
+          return { json: text.slice(start, i + 1), start, end: i + 1 }
+        }
+      }
+    }
+    return null
+  }
+
+  const extractFromJson = (value: unknown) => {
+    if (!value || typeof value !== 'object') return
+    const o = value as Record<string, unknown>
+    if (o.ASSIGNEES && typeof o.ASSIGNEES === 'object') {
+      const a = o.ASSIGNEES as Record<string, unknown>
+      merge(normalizeIds(a.technicien_ids ?? a.technician_ids), normalizeIds(a.responsable_ids))
+      return
+    }
+    if ('technicien_ids' in o || 'technician_ids' in o || 'responsable_ids' in o) {
+      merge(normalizeIds(o.technicien_ids ?? o.technician_ids), normalizeIds(o.responsable_ids))
+    }
+  }
+
+  let block = extractJsonBlock(raw)
+  while (block) {
+    try {
+      const parsed = JSON.parse(block.json) as unknown
+      if (Array.isArray(parsed)) parsed.forEach(extractFromJson)
+      else extractFromJson(parsed)
+      raw = (raw.slice(0, block.start) + raw.slice(block.end)).trim()
+    } catch {
+      break
+    }
+    block = extractJsonBlock(raw)
+  }
+
+  return { notes: raw.trim(), technicien_ids, responsable_ids }
 }
 
 function mergeNotesWithAssignees(notesRaw: string | null | undefined, technicien_ids: number[], responsable_ids: number[]) {

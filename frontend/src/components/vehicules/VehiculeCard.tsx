@@ -3,7 +3,7 @@ import { ETAT_CONFIG, type Vehicule } from '@/types'
 import { useUsers } from '@/contexts/UsersContext'
 import EtatBadge from './EtatBadge'
 import { Phone, Calendar, ArrowRightLeft, Eye, Pencil, Clock, Trash2, Wallet, ClipboardList } from 'lucide-react'
-import { daysSince, getUserDisplayNames, formatDuree, formatDate, stripVehiculeAssigneesMeta } from '@/lib/utils'
+import { daysSince, getUserDisplayNames, formatDuree, formatDate, stripVehiculeAssigneesMeta, parseVehiculeAssigneesFromText, resolveVehiculeAssigneeIds } from '@/lib/utils'
 import type { Permissions } from '@/types'
 
 interface Props {
@@ -29,8 +29,10 @@ export default function VehiculeCard({
   const { users } = useUsers()
   const cfg = ETAT_CONFIG[v.etat_actuel]
   const jours = daysSince(v.date_entree)
-  const techNames = getUserDisplayNames(v.technicien_ids, v.technicien_id, users)
-  const respNames = getUserDisplayNames(v.responsable_ids, v.responsable_id, users)
+  const assignees = resolveVehiculeAssigneeIds(v)
+  const techNames = getUserDisplayNames(assignees.technicien_ids, null, users)
+  const respNames = getUserDisplayNames(assignees.responsable_ids, null, users)
+  const noteText = parseVehiculeAssigneesFromText(v.notes).notes
 
   const minutesSinceUpdate = Math.round(
     (Date.now() - new Date(v.derniere_mise_a_jour).getTime()) / 60000
@@ -110,10 +112,20 @@ export default function VehiculeCard({
           {/* Info grid - compact on mobile */}
           <div className="flex flex-wrap gap-x-3 sm:gap-x-5 gap-y-1 text-[10px] sm:text-xs text-gray-500">
             {techNames !== '-' && (
-              <span><span className="text-gray-400">Tech:</span> <span className="font-medium text-gray-700">{techNames}</span></span>
+              <span>
+                <span className="text-gray-400">
+                  Technicien{assignees.technicien_ids.length > 1 ? 's' : ''}:
+                </span>{' '}
+                <span className="font-medium text-gray-700">{techNames}</span>
+              </span>
             )}
             {respNames !== '-' && (
-              <span className="hidden sm:inline"><span className="text-gray-400">Resp:</span> <span className="font-medium text-gray-700">{respNames}</span></span>
+              <span>
+                <span className="text-gray-400">
+                  Responsable{assignees.responsable_ids.length > 1 ? 's' : ''}:
+                </span>{' '}
+                <span className="font-medium text-gray-700">{respNames}</span>
+              </span>
             )}
             {v.client_telephone && (
               <span className="hidden sm:inline-flex items-center gap-1"><Phone className="w-3 h-3" />{v.client_telephone}</span>
@@ -131,9 +143,11 @@ export default function VehiculeCard({
             </span>
           </div>
 
-          {v.notes && (
-            <p className="text-[10px] sm:text-xs text-gray-400 mt-1.5 sm:mt-2 italic truncate">Note: {v.notes}</p>
-          )}
+          {noteText ? (
+            <p className="text-[10px] sm:text-xs text-gray-400 mt-1.5 sm:mt-2 italic line-clamp-2">
+              Note: {noteText}
+            </p>
+          ) : null}
         </div>
       </div>
     </div>

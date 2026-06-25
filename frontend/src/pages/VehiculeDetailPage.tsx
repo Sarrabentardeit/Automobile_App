@@ -16,7 +16,7 @@ import VehiculeForm from '@/components/vehicules/VehiculeForm'
 import VehiculeOrdresReparation from '@/components/vehicules/VehiculeOrdresReparation'
 import VehiculeSuivis from '@/components/vehicules/VehiculeSuivis'
 import { ArrowLeft, ArrowRightLeft, Pencil, Phone, Calendar, User, Clock, Car, Bike, Image as ImageIcon, Trash2 } from 'lucide-react'
-import { daysSince, getUserDisplayNames, formatDuree, formatDate, stripVehiculeAssigneesMeta } from '@/lib/utils'
+import { daysSince, getUserDisplayNames, formatDuree, formatDate, stripVehiculeAssigneesMeta, parseVehiculeAssigneesFromText, resolveVehiculeAssigneeIds } from '@/lib/utils'
 
 export default function VehiculeDetailPage() {
   const { id } = useParams()
@@ -94,8 +94,10 @@ export default function VehiculeDetailPage() {
 
   const cfg = ETAT_CONFIG[vehicule.etat_actuel]
   const jours = daysSince(vehicule.date_entree)
-  const techNames = getUserDisplayNames(vehicule.technicien_ids, vehicule.technicien_id, users)
-  const respNames = getUserDisplayNames(vehicule.responsable_ids, vehicule.responsable_id, users)
+  const assignees = resolveVehiculeAssigneeIds(vehicule)
+  const techNames = getUserDisplayNames(assignees.technicien_ids, null, users)
+  const respNames = getUserDisplayNames(assignees.responsable_ids, null, users)
+  const noteText = parseVehiculeAssigneesFromText(vehicule.notes).notes
 
   const canChangeEtat = permissions.canChangeEtat && vehicule.etat_actuel !== 'vert'
     && (
@@ -141,11 +143,11 @@ export default function VehiculeDetailPage() {
             </div>
             <p className="text-gray-500 font-mono text-xs sm:text-sm">{vehicule.immatriculation || 'Sans immatriculation'}</p>
             <p className="text-sm sm:text-base font-semibold text-gray-800 mt-1.5 sm:mt-2">{stripVehiculeAssigneesMeta(vehicule.defaut)}</p>
-            {vehicule.notes && (
+            {noteText ? (
               <p className="text-xs sm:text-sm text-gray-500 mt-1 italic line-clamp-2">
-                {stripVehiculeAssigneesMeta(vehicule.notes)}
+                {noteText}
               </p>
-            )}
+            ) : null}
           </div>
 
           {/* Actions - full width on mobile */}
@@ -166,11 +168,11 @@ export default function VehiculeDetailPage() {
         {/* Info grid - 2 columns on mobile */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-gray-100">
           <div>
-            <p className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 flex items-center gap-1"><User className="w-3 h-3" />Technicien{vehicule.technicien_ids && vehicule.technicien_ids.length > 1 ? 's' : ''}</p>
+            <p className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 flex items-center gap-1"><User className="w-3 h-3" />Technicien{assignees.technicien_ids.length > 1 ? 's' : ''}</p>
             <p className="text-xs sm:text-sm font-semibold text-gray-800 leading-snug">{techNames}</p>
           </div>
           <div>
-            <p className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 flex items-center gap-1"><User className="w-3 h-3" />Responsable{vehicule.responsable_ids && vehicule.responsable_ids.length > 1 ? 's' : ''}</p>
+            <p className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 flex items-center gap-1"><User className="w-3 h-3" />Responsable{assignees.responsable_ids.length > 1 ? 's' : ''}</p>
             <p className="text-xs sm:text-sm font-semibold text-gray-800 leading-snug">{respNames}</p>
           </div>
           <div>
