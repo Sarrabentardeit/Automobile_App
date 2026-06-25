@@ -239,9 +239,22 @@ function toVehicule(v: {
   derniere_mise_a_jour: string
   avance_client?: number | null
 }) {
-  const parsed = splitNotesAndAssignees(v.notes)
-  const technicien_ids = parsed.technicien_ids.length ? parsed.technicien_ids : (v.technicien_id != null ? [v.technicien_id] : [])
-  const responsable_ids = parsed.responsable_ids.length ? parsed.responsable_ids : (v.responsable_id != null ? [v.responsable_id] : [])
+  const parsedNotes = splitNotesAndAssignees(v.notes)
+  const parsedDefaut = splitNotesAndAssignees(v.defaut)
+  const technicien_ids = parsedNotes.technicien_ids.length
+    ? parsedNotes.technicien_ids
+    : parsedDefaut.technicien_ids.length
+      ? parsedDefaut.technicien_ids
+      : v.technicien_id != null
+        ? [v.technicien_id]
+        : []
+  const responsable_ids = parsedNotes.responsable_ids.length
+    ? parsedNotes.responsable_ids
+    : parsedDefaut.responsable_ids.length
+      ? parsedDefaut.responsable_ids
+      : v.responsable_id != null
+        ? [v.responsable_id]
+        : []
   return {
     id: v.id,
     immatriculation: v.immatriculation,
@@ -253,11 +266,11 @@ function toVehicule(v: {
     responsable_id: v.responsable_id,
     technicien_ids,
     responsable_ids,
-    defaut: v.defaut,
+    defaut: parsedDefaut.notes,
     client_telephone: v.client_telephone,
     date_entree: v.date_entree,
     date_sortie: v.date_sortie,
-    notes: parsed.notes,
+    notes: parsedNotes.notes,
     derniere_mise_a_jour: v.derniere_mise_a_jour,
     avance_client: v.avance_client ?? 0,
   }
@@ -1034,7 +1047,7 @@ router.post('/', authenticate(), async (req: AuthRequest, res) => {
         service_type: (body.service_type ?? 'autre').trim() || 'autre',
         technicien_id: finalTechnicienId,
         responsable_id: finalResponsableId,
-        defaut: (body.defaut ?? '').trim(),
+        defaut: splitNotesAndAssignees(body.defaut ?? '').notes,
         client_telephone: (body.client_telephone ?? '').trim(),
         date_entree: body.date_entree,
         date_sortie: null,
@@ -1125,7 +1138,7 @@ router.put('/:id', authenticate(), async (req: AuthRequest, res) => {
     if (body.immatriculation != null) data.immatriculation = body.immatriculation
     if (body.modele != null) data.modele = body.modele
     if (body.type != null && TYPES.includes(body.type as (typeof TYPES)[number])) data.type = body.type
-    if (body.defaut != null) data.defaut = body.defaut
+    if (body.defaut != null) data.defaut = splitNotesAndAssignees(body.defaut).notes
     if (body.service_type != null) data.service_type = body.service_type
     if (body.technicien_id !== undefined || body.technicien_ids !== undefined) data.technicien_id = resolvedTechnicienIds[0] ?? null
     if (body.responsable_id !== undefined || body.responsable_ids !== undefined) data.responsable_id = resolvedResponsableIds[0] ?? null

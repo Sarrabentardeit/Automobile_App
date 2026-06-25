@@ -27,6 +27,12 @@ import ChecklistsScreen from './ChecklistsScreen'
 import ChecklistTemplatesScreen from './ChecklistTemplatesScreen'
 import CalendarScreen from './CalendarScreen'
 import DashboardScreen from './DashboardScreen'
+import DemandesDevisScreen from './DemandesDevisScreen'
+import FactureAchatScreen from './FactureAchatScreen'
+import FactureVenteScreen from './FactureVenteScreen'
+import StatistiquesScreen from './StatistiquesScreen'
+import UtilisateursScreen from './UtilisateursScreen'
+import OutilsAhmedScreen from './OutilsAhmedScreen'
 import ReclamationsScreen from './ReclamationsScreen'
 import StockGeneralScreen from './StockGeneralScreen'
 import VehiculesListScreen from './VehiculesListScreen'
@@ -206,6 +212,57 @@ export default function MainApp({ user: rawUser, accessToken, onLogout }: Props)
           <FournisseursScreen
             accessToken={accessToken}
             canViewFinance={!!permissions.canViewFinance}
+            drawerOpen={drawerOpen}
+          />
+        )
+      case 'devis':
+        return (
+          <DemandesDevisScreen
+            accessToken={accessToken}
+            canViewFinance={!!permissions.canViewFinance}
+            drawerOpen={drawerOpen}
+          />
+        )
+      case 'facturation_vente':
+        return (
+          <FactureVenteScreen
+            accessToken={accessToken}
+            canViewFinance={!!permissions.canViewFinance}
+            drawerOpen={drawerOpen}
+          />
+        )
+      case 'facturation_achat':
+        return (
+          <FactureAchatScreen
+            accessToken={accessToken}
+            canViewFinance={!!permissions.canViewFinance}
+            drawerOpen={drawerOpen}
+          />
+        )
+      case 'admin':
+        return (
+          <StatistiquesScreen
+            accessToken={accessToken}
+            canManageUsers={!!permissions.canManageUsers}
+            drawerOpen={drawerOpen}
+            onNavigate={goTo}
+          />
+        )
+      case 'utilisateurs':
+        return (
+          <UtilisateursScreen
+            accessToken={accessToken}
+            canManageUsers={!!permissions.canManageUsers}
+            isAdmin={mapRole(user.role) === 'admin'}
+            currentUserId={user.id}
+            drawerOpen={drawerOpen}
+          />
+        )
+      case 'outils_ahmed':
+        return (
+          <OutilsAhmedScreen
+            accessToken={accessToken}
+            canViewEquipeOutils={!!permissions.canViewEquipeOutils}
             drawerOpen={drawerOpen}
           />
         )

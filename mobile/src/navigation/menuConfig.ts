@@ -53,7 +53,13 @@ export const MENU_STRUCTURE: MenuCategory[] = [
     label: null,
     items: [
       { id: 'dashboard', name: 'Dashboard', icon: 'grid-outline', requiredPermission: 'canViewDashboard', implemented: true },
-      { id: 'admin', name: 'Statistiques', icon: 'shield-outline', requiredPermission: 'canManageUsers' },
+      {
+        id: 'admin',
+        name: 'Statistiques',
+        icon: 'shield-outline',
+        requiredPermission: 'canManageUsers',
+        implemented: true,
+      },
       { id: 'calendar', name: 'Calendrier', icon: 'calendar-outline', implemented: true },
     ],
   },
@@ -110,9 +116,21 @@ export const MENU_STRUCTURE: MenuCategory[] = [
   {
     label: 'FINANCES',
     items: [
-      { id: 'facturation_vente', name: 'Facturation vente', icon: 'document-text-outline', requiredPermission: 'canViewFinance' },
+      {
+        id: 'facturation_vente',
+        name: 'Facturation vente',
+        icon: 'document-text-outline',
+        requiredPermission: 'canViewFinance',
+        implemented: true,
+      },
       { id: 'paiements_vente', name: 'Paiement partiel vente', icon: 'wallet-outline', requiredPermission: 'canViewFinance' },
-      { id: 'facturation_achat', name: 'Facturation achat', icon: 'download-outline', requiredPermission: 'canViewFinance' },
+      {
+        id: 'facturation_achat',
+        name: 'Facturation achat',
+        icon: 'download-outline',
+        requiredPermission: 'canViewFinance',
+        implemented: true,
+      },
       { id: 'paiements_achat', name: 'Paiement partiel achat', icon: 'wallet-outline', requiredPermission: 'canViewFinance' },
       { id: 'caisse', name: 'Suivi Argent Équipe', icon: 'cash-outline', requiredPermission: 'canViewFinance' },
       { id: 'fournisseurs_transactions', name: 'Transactions Fournisseurs', icon: 'receipt-outline', requiredPermission: 'canViewFinance' },
@@ -123,7 +141,13 @@ export const MENU_STRUCTURE: MenuCategory[] = [
         requiredPermission: 'canViewFinance',
         implemented: true,
       },
-      { id: 'devis', name: 'Demandes Devis', icon: 'clipboard-outline', requiredPermission: 'canViewFinance' },
+      {
+        id: 'devis',
+        name: 'Demandes Devis',
+        icon: 'clipboard-outline',
+        requiredPermission: 'canViewFinance',
+        implemented: true,
+      },
       { id: 'money', name: 'Détails Money', icon: 'wallet-outline', requiredPermission: 'canViewFinance' },
       {
         id: 'clients_dettes',
@@ -137,7 +161,13 @@ export const MENU_STRUCTURE: MenuCategory[] = [
   {
     label: 'ÉQUIPE',
     items: [
-      { id: 'utilisateurs', name: 'Utilisateurs', icon: 'people-outline', requiredPermission: 'canManageUsers' },
+      {
+        id: 'utilisateurs',
+        name: 'Utilisateurs',
+        icon: 'people-outline',
+        requiredPermission: 'canManageUsers',
+        implemented: true,
+      },
       {
         id: 'equipe_membres',
         name: 'Membres équipe',
@@ -145,7 +175,13 @@ export const MENU_STRUCTURE: MenuCategory[] = [
         requiredPermission: 'canManageUsers',
         implemented: true,
       },
-      { id: 'outils_ahmed', name: 'Opération Ahmed', icon: 'construct-outline', requiredPermission: 'canViewEquipeOutils' },
+      {
+        id: 'outils_ahmed',
+        name: 'Opération Ahmed',
+        icon: 'construct-outline',
+        requiredPermission: 'canViewEquipeOutils',
+        implemented: true,
+      },
     ],
   },
   {

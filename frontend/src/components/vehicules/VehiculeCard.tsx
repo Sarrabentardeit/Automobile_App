@@ -3,7 +3,7 @@ import { ETAT_CONFIG, type Vehicule } from '@/types'
 import { useUsers } from '@/contexts/UsersContext'
 import EtatBadge from './EtatBadge'
 import { Phone, Calendar, ArrowRightLeft, Eye, Pencil, Clock, Trash2, Wallet, ClipboardList } from 'lucide-react'
-import { daysSince, getUserDisplayNames, formatDuree, formatDate } from '@/lib/utils'
+import { daysSince, getUserDisplayNames, formatDuree, formatDate, stripVehiculeAssigneesMeta } from '@/lib/utils'
 import type { Permissions } from '@/types'
 
 interface Props {
@@ -105,7 +105,7 @@ export default function VehiculeCard({
           </div>
 
           {/* Defaut */}
-          <p className="text-xs sm:text-sm font-medium text-gray-800 mb-2 sm:mb-3 line-clamp-2">{v.defaut}</p>
+          <p className="text-xs sm:text-sm font-medium text-gray-800 mb-2 sm:mb-3 line-clamp-2">{stripVehiculeAssigneesMeta(v.defaut)}</p>
 
           {/* Info grid - compact on mobile */}
           <div className="flex flex-wrap gap-x-3 sm:gap-x-5 gap-y-1 text-[10px] sm:text-xs text-gray-500">

@@ -48,6 +48,7 @@ const QUICK_ACTION_IDS: MenuRouteId[] = [
   'reclamation',
   'stock',
   'clients_dettes',
+  'devis',
   'fournisseurs',
   'clients',
 ]
@@ -59,6 +60,7 @@ const ACTION_STYLE: Partial<Record<MenuRouteId, { color: string; bg: string; sho
   reclamation: { color: '#dc2626', bg: '#fef2f2' },
   stock: { color: '#2563eb', bg: '#eff6ff' },
   clients_dettes: { color: '#7c3aed', bg: '#f5f3ff', short: 'Dettes' },
+  devis: { color: '#ea580c', bg: '#fff7ed', short: 'Devis' },
   fournisseurs: { color: '#0891b2', bg: '#ecfeff' },
   clients: { color: '#4f46e5', bg: '#eef2ff' },
 }

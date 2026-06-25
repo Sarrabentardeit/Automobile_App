@@ -27,7 +27,9 @@ export function computeFactureAchatTotals(
   timbre: number
 ) {
   const totalHT = lignes.reduce((s, l) => s + l.quantite * l.prixUnitaire, 0)
-  return { totalTTC: totalHT + totalHT * 0.19 + timbre }
+  const tva19 = totalHT * 0.19
+  const totalTTC = totalHT + tva19 + timbre
+  return { totalHT, tva19, depenses: 0, totalTTC }
 }
 
 export function totalAchatGlobalFromFactures(factures: FactureAchatKpi[]): number {

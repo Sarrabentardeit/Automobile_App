@@ -69,3 +69,14 @@ export function findUserIdByName(users: { id: number; nom_complet: string }[], m
   const partial = users.find(u => u.nom_complet.toLowerCase().includes(q) || q.includes(u.nom_complet.toLowerCase()))
   return partial?.id ?? null
 }
+
+/** Retire la métadonnée interne [[ASSIGNEES:…]] (techniciens/responsables multiples). */
+export function stripVehiculeAssigneesMeta(text: string | null | undefined): string {
+  const raw = String(text ?? '')
+  const tag = '[[ASSIGNEES:'
+  const start = raw.lastIndexOf(tag)
+  if (start < 0) return raw.trim()
+  const end = raw.indexOf(']]', start)
+  if (end < 0) return raw.trim()
+  return (raw.slice(0, start) + raw.slice(end + 2)).trim()
+}

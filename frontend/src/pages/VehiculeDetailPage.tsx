@@ -16,7 +16,7 @@ import VehiculeForm from '@/components/vehicules/VehiculeForm'
 import VehiculeOrdresReparation from '@/components/vehicules/VehiculeOrdresReparation'
 import VehiculeSuivis from '@/components/vehicules/VehiculeSuivis'
 import { ArrowLeft, ArrowRightLeft, Pencil, Phone, Calendar, User, Clock, Car, Bike, Image as ImageIcon, Trash2 } from 'lucide-react'
-import { daysSince, getUserDisplayNames, formatDuree, formatDate } from '@/lib/utils'
+import { daysSince, getUserDisplayNames, formatDuree, formatDate, stripVehiculeAssigneesMeta } from '@/lib/utils'
 
 export default function VehiculeDetailPage() {
   const { id } = useParams()
@@ -140,8 +140,12 @@ export default function VehiculeDetailPage() {
               <EtatBadge etat={vehicule.etat_actuel} size="lg" />
             </div>
             <p className="text-gray-500 font-mono text-xs sm:text-sm">{vehicule.immatriculation || 'Sans immatriculation'}</p>
-            <p className="text-sm sm:text-base font-semibold text-gray-800 mt-1.5 sm:mt-2">{vehicule.defaut}</p>
-            {vehicule.notes && <p className="text-xs sm:text-sm text-gray-500 mt-1 italic line-clamp-2">{vehicule.notes}</p>}
+            <p className="text-sm sm:text-base font-semibold text-gray-800 mt-1.5 sm:mt-2">{stripVehiculeAssigneesMeta(vehicule.defaut)}</p>
+            {vehicule.notes && (
+              <p className="text-xs sm:text-sm text-gray-500 mt-1 italic line-clamp-2">
+                {stripVehiculeAssigneesMeta(vehicule.notes)}
+              </p>
+            )}
           </div>
 
           {/* Actions - full width on mobile */}
