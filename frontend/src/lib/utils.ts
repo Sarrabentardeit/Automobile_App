@@ -46,6 +46,20 @@ export function getUserDisplayName(userId: number | null, users: { id: number; n
   return users.find(u => u.id === userId)?.nom_complet ?? '-'
 }
 
+/** Liste complète des noms (techniciens / responsables multiples). */
+export function getUserDisplayNames(
+  userIds: number[] | undefined,
+  fallbackId: number | null,
+  users: { id: number; nom_complet: string }[]
+): string {
+  const list = userIds?.length ? userIds : fallbackId != null ? [fallbackId] : []
+  if (list.length === 0) return '-'
+  const names = list
+    .map(id => users.find(u => u.id === id)?.nom_complet)
+    .filter((name): name is string => Boolean(name))
+  return names.length ? names.join(', ') : '-'
+}
+
 /** Trouve l'id utilisateur par nom (ex. membre équipe → utilisateur) */
 export function findUserIdByName(users: { id: number; nom_complet: string }[], memberName: string): number | null {
   const q = memberName.trim().toLowerCase()

@@ -16,7 +16,7 @@ import VehiculeForm from '@/components/vehicules/VehiculeForm'
 import VehiculeOrdresReparation from '@/components/vehicules/VehiculeOrdresReparation'
 import VehiculeSuivis from '@/components/vehicules/VehiculeSuivis'
 import { ArrowLeft, ArrowRightLeft, Pencil, Phone, Calendar, User, Clock, Car, Bike, Image as ImageIcon, Trash2 } from 'lucide-react'
-import { daysSince, getUserDisplayName, formatDuree, formatDate } from '@/lib/utils'
+import { daysSince, getUserDisplayNames, formatDuree, formatDate } from '@/lib/utils'
 
 export default function VehiculeDetailPage() {
   const { id } = useParams()
@@ -94,14 +94,16 @@ export default function VehiculeDetailPage() {
 
   const cfg = ETAT_CONFIG[vehicule.etat_actuel]
   const jours = daysSince(vehicule.date_entree)
-  const techName = getUserDisplayName(vehicule.technicien_id, users)
-  const respName = getUserDisplayName(vehicule.responsable_id, users)
+  const techNames = getUserDisplayNames(vehicule.technicien_ids, vehicule.technicien_id, users)
+  const respNames = getUserDisplayNames(vehicule.responsable_ids, vehicule.responsable_id, users)
 
   const canChangeEtat = permissions.canChangeEtat && vehicule.etat_actuel !== 'vert'
     && (
       permissions.vehiculeVisibility === 'all' ||
       vehicule.technicien_id === user.id ||
-      (vehicule.technicien_ids?.includes(user.id) ?? false)
+      vehicule.responsable_id === user.id ||
+      (vehicule.technicien_ids?.includes(user.id) ?? false) ||
+      (vehicule.responsable_ids?.includes(user.id) ?? false)
     )
 
   const notifyAssignedUsers = (
@@ -160,12 +162,12 @@ export default function VehiculeDetailPage() {
         {/* Info grid - 2 columns on mobile */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-gray-100">
           <div>
-            <p className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 flex items-center gap-1"><User className="w-3 h-3" />Technicien</p>
-            <p className="text-xs sm:text-sm font-semibold text-gray-800 truncate">{techName}</p>
+            <p className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 flex items-center gap-1"><User className="w-3 h-3" />Technicien{vehicule.technicien_ids && vehicule.technicien_ids.length > 1 ? 's' : ''}</p>
+            <p className="text-xs sm:text-sm font-semibold text-gray-800 leading-snug">{techNames}</p>
           </div>
           <div>
-            <p className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 flex items-center gap-1"><User className="w-3 h-3" />Responsable</p>
-            <p className="text-xs sm:text-sm font-semibold text-gray-800 truncate">{respName}</p>
+            <p className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 flex items-center gap-1"><User className="w-3 h-3" />Responsable{vehicule.responsable_ids && vehicule.responsable_ids.length > 1 ? 's' : ''}</p>
+            <p className="text-xs sm:text-sm font-semibold text-gray-800 leading-snug">{respNames}</p>
           </div>
           <div>
             <p className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 flex items-center gap-1"><Phone className="w-3 h-3" />Tél. client</p>

@@ -118,6 +118,33 @@ function parseDataUrl(dataUrl) {
         return null;
     }
 }
+async function notifyAssignedTechnicians(opts) {
+    try {
+        if (typeof db.notification === 'undefined')
+            return;
+        const recipientIds = Array.from(new Set([...opts.technicienIds, ...opts.responsableIds])).filter(id => id !== opts.actorId);
+        if (!recipientIds.length)
+            return;
+        const label = `${opts.modele} (${(opts.immatriculation ?? '').trim() || 'sans immat.'})`;
+        const message = opts.isNew
+            ? `Nouveau véhicule affecté : ${label}`
+            : `Vous avez été affecté au véhicule ${label}`;
+        for (const userId of recipientIds) {
+            await db.notification.create({
+                data: {
+                    userId,
+                    type: 'vehicule_assigned',
+                    title: 'Véhicule',
+                    message,
+                    vehiculeId: opts.vehiculeId,
+                },
+            });
+        }
+    }
+    catch (e) {
+        console.error('[vehicules] notifyAssignedTechnicians:', e);
+    }
+}
 const ASSIGNEES_TAG = '[[ASSIGNEES:';
 function normalizeIds(input) {
     if (!Array.isArray(input))
@@ -150,6 +177,25 @@ function mergeNotesWithAssignees(notesRaw, technicien_ids, responsable_ids) {
     const base = splitNotesAndAssignees(notesRaw).notes;
     const meta = `${ASSIGNEES_TAG}${JSON.stringify({ technicien_ids, responsable_ids })}]]`;
     return base ? `${base}\n\n${meta}` : meta;
+}
+/** Filtre Prisma : utilisateur assigné (colonne principale ou tag [[ASSIGNEES:…]] dans notes). */
+function whereUserAssignedToVehicule(userId) {
+    const id = String(userId);
+    const notesMatch = [
+        { notes: { contains: `"technicien_ids":[${id},` } },
+        { notes: { contains: `"technicien_ids":[${id}]` } },
+        { notes: { contains: `"technicien_ids": [${id},` } },
+        { notes: { contains: `"technicien_ids": [${id}]` } },
+        { notes: { contains: `"responsable_ids":[${id},` } },
+        { notes: { contains: `"responsable_ids":[${id}]` } },
+        { notes: { contains: `"responsable_ids": [${id},` } },
+        { notes: { contains: `"responsable_ids": [${id}]` } },
+        { notes: { contains: `,${id},` } },
+        { notes: { contains: `,${id}]` } },
+    ];
+    return {
+        OR: [{ technicien_id: userId }, { responsable_id: userId }, ...notesMatch],
+    };
 }
 function toVehicule(v) {
     const parsed = splitNotesAndAssignees(v.notes);
@@ -209,31 +255,49 @@ function buildVehiculesWhere(query, includeEtat) {
     else if (query.exclude_etat && ETATS.includes(query.exclude_etat)) {
         where.etat_actuel = { not: query.exclude_etat };
     }
-    if (query.technicien_id) {
-        const tid = parseInt(query.technicien_id, 10);
-        if (!isNaN(tid)) {
-            where.OR = [
-                { technicien_id: tid },
-                { responsable_id: tid }
-            ];
-        }
-    }
     if (query.type && TYPES.includes(query.type)) {
         where.type = query.type;
     }
+    const andClauses = [];
+    if (query.technicien_id) {
+        const tid = parseInt(query.technicien_id, 10);
+        if (!isNaN(tid)) {
+            andClauses.push(whereUserAssignedToVehicule(tid));
+        }
+    }
     if (query.date_debut || query.date_fin) {
-        where.date_entree = {};
+        const range = {};
         if (query.date_debut)
-            where.date_entree.gte = query.date_debut;
+            range.gte = query.date_debut;
         if (query.date_fin)
-            where.date_entree.lte = query.date_fin;
+            range.lte = query.date_fin;
+        // Archives (validés) : filtrer sur la date de sortie / validation, pas l'entrée atelier
+        if (query.etat === 'vert') {
+            andClauses.push({
+                OR: [
+                    { date_sortie: range },
+                    { date_sortie: null, date_entree: range },
+                ],
+            });
+        }
+        else {
+            andClauses.push({ date_entree: range });
+        }
     }
     if (query.q) {
-        where.OR = [
-            { modele: { contains: query.q, mode: 'insensitive' } },
-            { immatriculation: { contains: query.q, mode: 'insensitive' } },
-            { defaut: { contains: query.q, mode: 'insensitive' } },
-        ];
+        andClauses.push({
+            OR: [
+                { modele: { contains: query.q, mode: 'insensitive' } },
+                { immatriculation: { contains: query.q, mode: 'insensitive' } },
+                { defaut: { contains: query.q, mode: 'insensitive' } },
+            ],
+        });
+    }
+    if (andClauses.length === 1) {
+        Object.assign(where, andClauses[0]);
+    }
+    else if (andClauses.length > 1) {
+        where.AND = andClauses;
     }
     return where;
 }
@@ -283,7 +347,7 @@ router.get('/dashboard-summary', (0, auth_1.authenticate)(), async (req, res) =>
         const seuil = new Date(today);
         seuil.setDate(seuil.getDate() - 7);
         const seuilStr = `${seuil.getFullYear()}-${String(seuil.getMonth() + 1).padStart(2, '0')}-${String(seuil.getDate()).padStart(2, '0')}`;
-        const techWhere = scoped ? { technicien_id: techId } : {};
+        const techWhere = scoped ? whereUserAssignedToVehicule(techId) : {};
         const [urgents, anciens, recentRaw, teamGrouped] = await Promise.all([
             db.vehicule.findMany({
                 where: { etat_actuel: 'rouge', ...techWhere },
@@ -298,7 +362,7 @@ router.get('/dashboard-summary', (0, auth_1.authenticate)(), async (req, res) =>
                 orderBy: { date_entree: 'asc' },
             }),
             db.vehiculeHistorique.findMany({
-                where: scoped ? { vehicule: { technicien_id: techId } } : undefined,
+                where: scoped ? { vehicule: whereUserAssignedToVehicule(techId) } : undefined,
                 orderBy: [{ date_changement: 'desc' }, { id: 'desc' }],
                 take: 12,
             }),
@@ -890,6 +954,15 @@ router.post('/', (0, auth_1.authenticate)(), async (req, res) => {
                     pieces_utilisees: '',
                 },
             });
+            await notifyAssignedTechnicians({
+                actorId: user.sub,
+                vehiculeId: v.id,
+                modele: v.modele,
+                immatriculation: v.immatriculation,
+                technicienIds,
+                responsableIds,
+                isNew: true,
+            });
         }
         return res.status(201).json(toVehicule(v));
     }
@@ -908,6 +981,16 @@ router.put('/:id', (0, auth_1.authenticate)(), async (req, res) => {
         if (!existing)
             return res.status(404).json({ error: 'Véhicule introuvable' });
         const existingMeta = splitNotesAndAssignees(existing.notes);
+        const prevTechnicienIds = existingMeta.technicien_ids.length
+            ? existingMeta.technicien_ids
+            : existing.technicien_id != null
+                ? [existing.technicien_id]
+                : [];
+        const prevResponsableIds = existingMeta.responsable_ids.length
+            ? existingMeta.responsable_ids
+            : existing.responsable_id != null
+                ? [existing.responsable_id]
+                : [];
         const technicienIds = normalizeIds(body.technicien_ids);
         const responsableIds = normalizeIds(body.responsable_ids);
         const resolvedTechnicienIds = technicienIds.length
@@ -957,6 +1040,20 @@ router.put('/:id', (0, auth_1.authenticate)(), async (req, res) => {
                 title: 'Véhicule modifié',
                 message: `${v.modele} (${(v.immatriculation ?? '').trim() || 'sans immat.'}) — fiche modifiée par ${who}.`,
             });
+            const prevIds = new Set([...prevTechnicienIds, ...prevResponsableIds]);
+            const newTechnicienIds = resolvedTechnicienIds.filter(uid => !prevIds.has(uid));
+            const newResponsableIds = resolvedResponsableIds.filter(uid => !prevIds.has(uid));
+            if (newTechnicienIds.length || newResponsableIds.length) {
+                await notifyAssignedTechnicians({
+                    actorId: actor.sub,
+                    vehiculeId: id,
+                    modele: v.modele,
+                    immatriculation: v.immatriculation,
+                    technicienIds: newTechnicienIds,
+                    responsableIds: newResponsableIds,
+                    isNew: false,
+                });
+            }
         }
         return res.json(toVehicule(v));
     }
