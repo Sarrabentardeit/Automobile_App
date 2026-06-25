@@ -172,35 +172,6 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
       reader.readAsDataURL(file)
     })
 
-  const inferImageMime = (file: File): string => {
-    const t = (file.type || '').toLowerCase()
-    if (t === 'image/jpg') return 'image/jpeg'
-    if (t.startsWith('image/')) return t
-    const n = (file.name || '').toLowerCase()
-    if (n.endsWith('.png')) return 'image/png'
-    if (n.endsWith('.webp')) return 'image/webp'
-    if (n.endsWith('.heic') || n.endsWith('.heif')) return 'image/heic'
-    return 'image/jpeg'
-  }
-
-  const normalizeImageDataUrl = (dataUrl: string, mime: string): string => {
-    const m = dataUrl.match(/^data:([^;]*);base64,(.+)$/i)
-    if (!m) return dataUrl
-    const cur = (m[1] || '').toLowerCase()
-    if (!cur || cur === 'application/octet-stream' || !cur.startsWith('image/')) {
-      return `data:${mime};base64,${m[2]}`
-    }
-    if (cur === 'image/jpg') return `data:image/jpeg;base64,${m[2]}`
-    return dataUrl
-  }
-
-  const isImageFile = (file: File): boolean => {
-    const t = (file.type || '').toLowerCase()
-    if (t.startsWith('image/')) return true
-    if (!t || t === 'application/octet-stream') return true
-    return /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name || '')
-  }
-
   const handlePickFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return
     const availableSlots = Math.max(0, MAX_IMAGES - pendingImages.length)
@@ -212,21 +183,19 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
     const selected = Array.from(files).slice(0, availableSlots)
     const accepted: PendingImage[] = []
     for (const file of selected) {
-      if (!isImageFile(file)) continue
+      if (!file.type.startsWith('image/')) continue
       if (file.size > MAX_IMAGE_SIZE_BYTES) {
         setErrors(prev => ({ ...prev, images: `Une image dépasse 8 MB (${file.name})` }))
         continue
       }
       try {
-        const mime = inferImageMime(file)
-        const raw = await readFileAsDataUrl(file)
-        const dataUrl = normalizeImageDataUrl(raw, mime)
+        const dataUrl = await readFileAsDataUrl(file)
         accepted.push({
           id: `${Date.now()}-${Math.random()}`,
           previewUrl: URL.createObjectURL(file),
           payload: {
             dataUrl,
-            fileName: file.name || `photo.${mime === 'image/png' ? 'png' : 'jpg'}`,
+            fileName: file.name,
             category: imageCategory,
             note: imageNote.trim(),
           },

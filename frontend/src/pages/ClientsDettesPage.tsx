@@ -7,7 +7,7 @@ import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
-import { CreditCard, Plus, ChevronRight, Banknote } from 'lucide-react'
+import { CreditCard, Plus, ChevronRight, Banknote, Trash2 } from 'lucide-react'
 
 function formatMontant(n: number): string {
   return n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -15,12 +15,13 @@ function formatMontant(n: number): string {
 
 export default function ClientsDettesPage() {
   const { user, permissions } = useAuth()
-  const { clients, loading, addClient, updateClient } = useClientsDettes()
+  const { clients, loading, addClient, updateClient, removeClient } = useClientsDettes()
   const toast = useToast()
   const [search, setSearch] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [showAdd, setShowAdd] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<ClientAvecDette | null>(null)
   const [form, setForm] = useState<Omit<ClientAvecDette, 'id'>>({
     clientName: '',
     telephoneClient: '',
@@ -96,6 +97,23 @@ export default function ClientsDettesPage() {
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement')
+    }
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      const ok = await removeClient(deleteTarget.id)
+      if (ok) {
+        toast.success('Client avec dette supprimé')
+        setDeleteTarget(null)
+        setEditingId(null)
+        setShowAdd(false)
+      } else {
+        toast.error('Impossible de supprimer')
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur')
     }
   }
 
@@ -194,7 +212,7 @@ export default function ClientsDettesPage() {
                     <th className="px-4 py-3 text-left font-bold text-gray-900">Désignation</th>
                     <th className="px-4 py-3 text-right font-bold text-gray-900">Reste</th>
                     <th className="px-4 py-3 text-left font-bold text-gray-900">Notes</th>
-                    <th className="w-10" />
+                    <th className="w-20" />
                   </tr>
                 </thead>
                 <tbody>
@@ -210,7 +228,20 @@ export default function ClientsDettesPage() {
                       <td className="px-4 py-3 text-right font-semibold text-rose-600 tabular-nums">{formatMontant(c.reste)}</td>
                       <td className="px-4 py-3 text-gray-500 max-w-[160px] truncate">{c.notes || '—'}</td>
                       <td className="px-2 py-3">
-                        <ChevronRight className="w-4 h-4 text-gray-400" />
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setDeleteTarget(c)
+                            }}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                            title="Supprimer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                          <ChevronRight className="w-4 h-4 text-gray-400" />
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -290,6 +321,21 @@ export default function ClientsDettesPage() {
               className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-rose-500 focus:border-rose-500 resize-none"
             />
           </div>
+          {editingId ? (
+            <Button
+              variant="outline"
+              className="w-full text-red-600 border-red-200 hover:bg-red-50"
+              onClick={() => {
+                const c = clients.find(x => x.id === editingId)
+                if (c) {
+                  setDeleteTarget(c)
+                  setEditingId(null)
+                }
+              }}
+            >
+              Supprimer
+            </Button>
+          ) : null}
           <div className="flex gap-3 pt-2">
             <Button variant="outline" onClick={() => { setShowAdd(false); setEditingId(null) }} className="flex-1">
               Annuler
@@ -298,6 +344,27 @@ export default function ClientsDettesPage() {
               Enregistrer
             </Button>
           </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Supprimer ce client avec dette ?"
+        subtitle={
+          deleteTarget
+            ? `« ${deleteTarget.clientName} » sera définitivement supprimé.`
+            : undefined
+        }
+        maxWidth="sm"
+      >
+        <div className="flex gap-3 pt-2">
+          <Button variant="outline" onClick={() => setDeleteTarget(null)} className="flex-1">
+            Annuler
+          </Button>
+          <Button variant="danger" onClick={confirmDelete} className="flex-1">
+            Supprimer
+          </Button>
         </div>
       </Modal>
     </div>

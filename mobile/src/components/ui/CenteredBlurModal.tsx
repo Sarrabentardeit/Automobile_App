@@ -7,6 +7,7 @@ import {
   View,
 } from 'react-native'
 import ModalBlurBackdrop from './ModalBlurBackdrop'
+import { getSheetBottomInset } from '../../lib/safeArea'
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window')
 
@@ -29,9 +30,13 @@ export default function CenteredBlurModal({
 }: Props) {
   if (!visible) return null
 
+  const bottomExtend = Platform.OS === 'android' ? getSheetBottomInset() : 0
+
   return (
     <View style={styles.portal} pointerEvents="box-none">
-      <ModalBlurBackdrop onPress={onClose} />
+      <View style={[styles.backdropLayer, bottomExtend > 0 && { bottom: -bottomExtend }]}>
+        <ModalBlurBackdrop onPress={onClose} />
+      </View>
       <KeyboardAvoidingView
         style={[
           styles.dialog,
@@ -54,7 +59,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 20,
+    paddingVertical: 24,
+  },
+  backdropLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
   },
   dialog: {
     backgroundColor: 'transparent',

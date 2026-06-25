@@ -59,6 +59,7 @@ type Props = {
   user: StoredUser
   refreshKey?: number
   archives?: boolean
+  initialFiltreEtat?: EtatVehicule
   onOpenVehicule: (id: number, options?: VehiculeOpenOptions) => void
   onAddVehicule?: () => void
   onListChanged?: () => void
@@ -254,6 +255,7 @@ export default function VehiculesListScreen({
   user,
   refreshKey = 0,
   archives = false,
+  initialFiltreEtat,
   onOpenVehicule,
   onAddVehicule,
   onListChanged,
@@ -279,7 +281,13 @@ export default function VehiculesListScreen({
   const [search, setSearch] = useState('')
   const [searchDebounced, setSearchDebounced] = useState('')
   const [tab, setTab] = useState<VehiculeType>('voiture')
-  const [filtreEtat, setFiltreEtat] = useState<EtatVehicule | 'tous'>('tous')
+  const [filtreEtat, setFiltreEtat] = useState<EtatVehicule | 'tous'>(
+    initialFiltreEtat ?? 'tous'
+  )
+
+  useEffect(() => {
+    if (initialFiltreEtat) setFiltreEtat(initialFiltreEtat)
+  }, [initialFiltreEtat])
   const [technicienId, setTechnicienId] = useState<number | undefined>()
   const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>('toutes')
   const [dateFilter, setDateFilter] = useState('')

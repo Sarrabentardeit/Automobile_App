@@ -52,9 +52,9 @@ export const MENU_STRUCTURE: MenuCategory[] = [
   {
     label: null,
     items: [
-      { id: 'dashboard', name: 'Dashboard', icon: 'grid-outline', requiredPermission: 'canViewDashboard' },
+      { id: 'dashboard', name: 'Dashboard', icon: 'grid-outline', requiredPermission: 'canViewDashboard', implemented: true },
       { id: 'admin', name: 'Statistiques', icon: 'shield-outline', requiredPermission: 'canManageUsers' },
-      { id: 'calendar', name: 'Calendrier', icon: 'calendar-outline', implemented: false },
+      { id: 'calendar', name: 'Calendrier', icon: 'calendar-outline', implemented: true },
     ],
   },
   {
@@ -116,10 +116,22 @@ export const MENU_STRUCTURE: MenuCategory[] = [
       { id: 'paiements_achat', name: 'Paiement partiel achat', icon: 'wallet-outline', requiredPermission: 'canViewFinance' },
       { id: 'caisse', name: 'Suivi Argent Équipe', icon: 'cash-outline', requiredPermission: 'canViewFinance' },
       { id: 'fournisseurs_transactions', name: 'Transactions Fournisseurs', icon: 'receipt-outline', requiredPermission: 'canViewFinance' },
-      { id: 'fournisseurs', name: 'Fournisseurs', icon: 'bus-outline', requiredPermission: 'canViewFinance' },
+      {
+        id: 'fournisseurs',
+        name: 'Fournisseurs',
+        icon: 'storefront-outline',
+        requiredPermission: 'canViewFinance',
+        implemented: true,
+      },
       { id: 'devis', name: 'Demandes Devis', icon: 'clipboard-outline', requiredPermission: 'canViewFinance' },
       { id: 'money', name: 'Détails Money', icon: 'wallet-outline', requiredPermission: 'canViewFinance' },
-      { id: 'clients_dettes', name: 'Clients avec Dettes', icon: 'card-outline', requiredPermission: 'canViewFinance' },
+      {
+        id: 'clients_dettes',
+        name: 'Clients avec Dettes',
+        icon: 'card-outline',
+        requiredPermission: 'canViewFinance',
+        implemented: true,
+      },
     ],
   },
   {
@@ -139,8 +151,14 @@ export const MENU_STRUCTURE: MenuCategory[] = [
   {
     label: 'AUTRES',
     items: [
-      { id: 'checklists', name: 'Checklists', icon: 'checkbox-outline' },
-      { id: 'checklists_modeles', name: 'Modèles checklists', icon: 'options-outline', requireAdmin: true },
+      { id: 'checklists', name: 'Checklists', icon: 'checkbox-outline', implemented: true },
+      {
+        id: 'checklists_modeles',
+        name: 'Modèles checklists',
+        icon: 'options-outline',
+        requireAdmin: true,
+        implemented: true,
+      },
       { id: 'documents', name: 'Documents', icon: 'folder-open-outline' },
       { id: 'contacts', name: 'Contacts Importants', icon: 'call-outline', implemented: true },
     ],
@@ -167,8 +185,8 @@ export function getMenuTitle(route: MenuRouteId): string {
 }
 
 export function getDefaultRoute(permissions: Permissions, _role: Role): MenuRouteId {
-  if (permissions.vehiculeVisibility !== 'none') return 'vehicules'
   if (permissions.canViewDashboard) return 'dashboard'
+  if (permissions.vehiculeVisibility !== 'none') return 'vehicules'
   if (permissions.canViewFinance) return 'caisse'
   return 'vehicules'
 }

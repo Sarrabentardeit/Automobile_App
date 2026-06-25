@@ -21,6 +21,7 @@ model User {
   refreshTokens RefreshToken[]
   notifications Notification[]
   reclamationTechniciens ReclamationTechnicien[]
+  vehiculeAssignees VehiculeAssignee[]
   ownedChecklists DailyChecklist[] @relation("ChecklistOwner")
   validatedChecklists DailyChecklist[] @relation("ChecklistValidator")
 }
@@ -72,6 +73,22 @@ model Vehicule {
   depenses             VehiculeDepense[]
   ordresReparation     OrdreReparation[]
   fichesSuivi          VehiculeSuivi[]
+  assignees            VehiculeAssignee[]
+}
+
+/// Assignation véhicule ↔ utilisateur (technicien ou responsable, plusieurs par véhicule)
+model VehiculeAssignee {
+  id         Int      @id @default(autoincrement())
+  vehiculeId Int
+  vehicule   Vehicule @relation(fields: [vehiculeId], references: [id], onDelete: Cascade)
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       String   // technicien | responsable
+  createdAt  DateTime @default(now())
+
+  @@unique([vehiculeId, userId, role])
+  @@index([userId])
+  @@index([vehiculeId])
 }
 
 /// Fiche de suivi atelier (travaux effectués / prochains / produits utilisés)

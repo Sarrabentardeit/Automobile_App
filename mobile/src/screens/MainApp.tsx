@@ -16,10 +16,17 @@ import VehiculeFormModal from '../components/VehiculeFormModal'
 import PlaceholderScreen from './PlaceholderScreen'
 import VehiculeDetailScreen from './VehiculeDetailScreen'
 import type { VehiculeOpenOptions } from '../navigation/vehiculeNav'
+import type { EtatVehicule } from '../types/vehicule'
 import ClientsListScreen from './ClientsListScreen'
 import ContactsImportantsScreen from './ContactsImportantsScreen'
 import EquipeMembresScreen from './EquipeMembresScreen'
 import ProduitsListScreen from './ProduitsListScreen'
+import ClientsDettesScreen from './ClientsDettesScreen'
+import FournisseursScreen from './FournisseursScreen'
+import ChecklistsScreen from './ChecklistsScreen'
+import ChecklistTemplatesScreen from './ChecklistTemplatesScreen'
+import CalendarScreen from './CalendarScreen'
+import DashboardScreen from './DashboardScreen'
 import ReclamationsScreen from './ReclamationsScreen'
 import StockGeneralScreen from './StockGeneralScreen'
 import VehiculesListScreen from './VehiculesListScreen'
@@ -31,7 +38,7 @@ type Props = {
 }
 
 type NavState =
-  | { type: 'menu'; route: MenuRouteId }
+  | { type: 'menu'; route: MenuRouteId; vehiculesEtat?: EtatVehicule }
   | {
       type: 'vehicule_detail'
       route: MenuRouteId
@@ -59,6 +66,10 @@ export default function MainApp({ user: rawUser, accessToken, onLogout }: Props)
     setNav({ type: 'menu', route })
   }
 
+  const goToVehiculesEtat = (etat: EtatVehicule) => {
+    setNav({ type: 'menu', route: 'vehicules', vehiculesEtat: etat })
+  }
+
   const showShell = nav.type === 'menu'
   const statusBarInset = getStatusBarInset()
 
@@ -84,6 +95,21 @@ export default function MainApp({ user: rawUser, accessToken, onLogout }: Props)
     }
 
     switch (nav.route) {
+      case 'dashboard':
+        return (
+          <DashboardScreen
+            accessToken={accessToken}
+            userId={user.id}
+            userName={user.fullName}
+            userRole={user.role}
+            permissions={permissions}
+            onNavigate={goTo}
+            onOpenVehicule={(id) =>
+              setNav({ type: 'vehicule_detail', route: 'vehicules', vehiculeId: id })
+            }
+            onOpenVehiculesEtat={goToVehiculesEtat}
+          />
+        )
       case 'vehicules':
         return (
           <VehiculesListScreen
@@ -91,6 +117,7 @@ export default function MainApp({ user: rawUser, accessToken, onLogout }: Props)
             user={user}
             refreshKey={listRefreshKey}
             archives={false}
+            initialFiltreEtat={nav.type === 'menu' ? nav.vehiculesEtat : undefined}
             onOpenVehicule={(id, opts) =>
               setNav({
                 type: 'vehicule_detail',
@@ -165,6 +192,42 @@ export default function MainApp({ user: rawUser, accessToken, onLogout }: Props)
             canViewInventory={!!permissions.canViewInventory}
             drawerOpen={drawerOpen}
           />
+        )
+      case 'clients_dettes':
+        return (
+          <ClientsDettesScreen
+            accessToken={accessToken}
+            canViewFinance={!!permissions.canViewFinance}
+            drawerOpen={drawerOpen}
+          />
+        )
+      case 'fournisseurs':
+        return (
+          <FournisseursScreen
+            accessToken={accessToken}
+            canViewFinance={!!permissions.canViewFinance}
+            drawerOpen={drawerOpen}
+          />
+        )
+      case 'calendar':
+        return (
+          <CalendarScreen
+            accessToken={accessToken}
+            userRole={user.role}
+            drawerOpen={drawerOpen}
+          />
+        )
+      case 'checklists':
+        return (
+          <ChecklistsScreen
+            accessToken={accessToken}
+            userRole={user.role}
+            drawerOpen={drawerOpen}
+          />
+        )
+      case 'checklists_modeles':
+        return (
+          <ChecklistTemplatesScreen accessToken={accessToken} userRole={user.role} />
         )
       default:
         return <PlaceholderScreen title={title} />
