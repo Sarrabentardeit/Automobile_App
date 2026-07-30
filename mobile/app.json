@@ -7,9 +7,22 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.elmecano.garage",
+      "infoPlist": {
+        "NSCameraUsageDescription": "EL MECANO a besoin de la caméra pour photographier les véhicules.",
+        "NSPhotoLibraryUsageDescription": "EL MECANO a besoin d'accéder à vos photos pour les documents véhicule.",
+        "NSPhotoLibraryAddUsageDescription": "EL MECANO peut enregistrer des photos liées aux véhicules."
+      }
     },
     "android": {
+      "package": "com.elmecano.garage",
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -24,7 +37,20 @@
     "plugins": [
       "expo-secure-store",
       "expo-asset",
-      "expo-font"
-    ]
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "EL MECANO a besoin d'accéder à vos photos pour les documents véhicule.",
+          "cameraPermission": "EL MECANO a besoin de la caméra pour photographier les véhicules."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "c6974152-5ed9-4dcf-8b4f-dce96ec12867"
+      }
+    },
+    "owner": "elmecano"
   }
 }

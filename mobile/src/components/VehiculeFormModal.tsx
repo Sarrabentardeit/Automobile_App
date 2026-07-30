@@ -14,8 +14,8 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import CenteredBlurModal from './ui/CenteredBlurModal'
 import ModalBlurBackdrop from './ui/ModalBlurBackdrop'
-import * as ImagePicker from 'expo-image-picker'
 import { BRAND_OPTIONS, parseMarqueModele } from '../constants/brands'
+import { pickVehiculeImages } from '../lib/imageUpload'
 import { getStatusBarInset } from '../lib/safeArea'
 import { notifyAssignedUsers } from '../lib/notifications'
 import {
@@ -158,38 +158,28 @@ export default function VehiculeFormModal({
   }
 
   const pickImages = async (useCamera: boolean) => {
-    const perm = useCamera
-      ? await ImagePicker.requestCameraPermissionsAsync()
-      : await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!perm.granted) {
-      Alert.alert('Permission', 'Autorisez l’accès à la caméra ou aux photos.')
-      return
-    }
-    const result = useCamera
-      ? await ImagePicker.launchCameraAsync({ quality: 0.75, base64: true })
-      : await ImagePicker.launchImageLibraryAsync({
-          quality: 0.75,
-          base64: true,
-          allowsMultipleSelection: true,
-          selectionLimit: Math.max(1, MAX_IMAGES - pendingImages.length),
-        })
-    if (result.canceled || !result.assets?.length) return
-    const accepted: PendingImage[] = []
-    for (const asset of result.assets) {
-      if (!asset?.base64) continue
-      const mime = asset.mimeType ?? 'image/jpeg'
-      accepted.push({
-        id: `${Date.now()}-${Math.random()}`,
-        uri: asset.uri,
-        payload: {
-          dataUrl: `data:${mime};base64,${asset.base64}`,
-          fileName: asset.fileName ?? `photo-${Date.now()}.jpg`,
-          category: imageCategory,
-          note: imageNote.trim(),
-        },
+    try {
+      const prepared = await pickVehiculeImages({
+        useCamera,
+        category: imageCategory,
+        note: imageNote,
+        selectionLimit: useCamera ? 1 : Math.max(1, MAX_IMAGES - pendingImages.length),
       })
+      if (!prepared.length) {
+        if (useCamera) {
+          Alert.alert('Photos', 'Impossible de lire la photo caméra. Réessayez ou choisissez depuis la galerie.')
+        }
+        return
+      }
+      const accepted: PendingImage[] = prepared.map((p) => ({
+        id: `${Date.now()}-${Math.random()}`,
+        uri: p.uri,
+        payload: p.payload,
+      }))
+      setPendingImages((prev) => [...prev, ...accepted].slice(0, MAX_IMAGES))
+    } catch (e) {
+      Alert.alert('Permission', e instanceof Error ? e.message : 'Accès caméra/photos refusé.')
     }
-    if (accepted.length) setPendingImages((prev) => [...prev, ...accepted].slice(0, MAX_IMAGES))
   }
 
   const validate = () => {

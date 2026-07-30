@@ -1,6 +1,6 @@
 import type { EtatVehicule, VehiculeType } from '../types/vehicule'
 
-export type DateFilterMode = 'toutes' | 'aujourdhui' | 'hier' | 'semaine' | 'date'
+export type DateFilterMode = 'toutes' | 'aujourdhui' | 'hier' | 'semaine' | 'mois' | 'date'
 
 export type VehiculeFilteredCounts = {
   total: number
@@ -74,6 +74,11 @@ export function getDateRange(
     const weekEnd = new Date(weekStart)
     weekEnd.setDate(weekStart.getDate() + 6)
     return { date_debut: fmt(weekStart), date_fin: fmt(weekEnd) }
+  }
+  if (mode === 'mois') {
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+    return { date_debut: fmt(monthStart), date_fin: fmt(monthEnd) }
   }
   if (mode === 'date') {
     const iso = normalizeDateInput(dateFilter)

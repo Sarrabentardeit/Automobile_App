@@ -30,6 +30,12 @@ import DashboardScreen from './DashboardScreen'
 import DemandesDevisScreen from './DemandesDevisScreen'
 import FactureAchatScreen from './FactureAchatScreen'
 import FactureVenteScreen from './FactureVenteScreen'
+import PaiementsAchatScreen from './PaiementsAchatScreen'
+import PaiementsVenteScreen from './PaiementsVenteScreen'
+import CaisseScreen from './CaisseScreen'
+import TransactionsFournisseursScreen from './TransactionsFournisseursScreen'
+import MoneyScreen from './MoneyScreen'
+import DocumentsScreen from './DocumentsScreen'
 import StatistiquesScreen from './StatistiquesScreen'
 import UtilisateursScreen from './UtilisateursScreen'
 import OutilsAhmedScreen from './OutilsAhmedScreen'
@@ -231,11 +237,58 @@ export default function MainApp({ user: rawUser, accessToken, onLogout }: Props)
             drawerOpen={drawerOpen}
           />
         )
+      case 'paiements_vente':
+        return (
+          <PaiementsVenteScreen
+            accessToken={accessToken}
+            canViewFinance={!!permissions.canViewFinance}
+            drawerOpen={drawerOpen}
+          />
+        )
       case 'facturation_achat':
         return (
           <FactureAchatScreen
             accessToken={accessToken}
             canViewFinance={!!permissions.canViewFinance}
+            drawerOpen={drawerOpen}
+          />
+        )
+      case 'paiements_achat':
+        return (
+          <PaiementsAchatScreen
+            accessToken={accessToken}
+            canViewFinance={!!permissions.canViewFinance}
+            drawerOpen={drawerOpen}
+          />
+        )
+      case 'caisse':
+        return (
+          <CaisseScreen
+            accessToken={accessToken}
+            canViewFinance={!!permissions.canViewFinance}
+            drawerOpen={drawerOpen}
+          />
+        )
+      case 'fournisseurs_transactions':
+        return (
+          <TransactionsFournisseursScreen
+            accessToken={accessToken}
+            canViewFinance={!!permissions.canViewFinance}
+            drawerOpen={drawerOpen}
+          />
+        )
+      case 'money':
+        return (
+          <MoneyScreen
+            accessToken={accessToken}
+            canViewFinance={!!permissions.canViewFinance}
+            drawerOpen={drawerOpen}
+          />
+        )
+      case 'documents':
+        return (
+          <DocumentsScreen
+            accessToken={accessToken}
             drawerOpen={drawerOpen}
           />
         )

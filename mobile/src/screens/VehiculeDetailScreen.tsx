@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import * as ImagePicker from 'expo-image-picker'
+import { pickVehiculeImages } from '../lib/imageUpload'
 import { StatusBar } from 'expo-status-bar'
 import ChangeEtatModal from '../components/ChangeEtatModal'
 import ModalBlurBackdrop from '../components/ui/ModalBlurBackdrop'
@@ -201,27 +201,21 @@ export default function VehiculeDetailScreen({
   const techDefaut = userName(users, vehicule?.technicien_id ?? null)
 
   const pickAndUploadPhoto = async (useCamera: boolean) => {
-    const perm = useCamera
-      ? await ImagePicker.requestCameraPermissionsAsync()
-      : await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!perm.granted) {
-      Alert.alert('Permission', 'Autorisez l’accès aux photos.')
-      return
-    }
-    const result = useCamera
-      ? await ImagePicker.launchCameraAsync({ quality: 0.75, base64: true })
-      : await ImagePicker.launchImageLibraryAsync({ quality: 0.75, base64: true })
-    if (result.canceled || !result.assets?.[0]?.base64) return
-    const asset = result.assets[0]
-    setUploadingPhoto(true)
     try {
-      const mime = asset.mimeType ?? 'image/jpeg'
-      await uploadVehiculeImage(accessToken, vehiculeId, {
-        dataUrl: `data:${mime};base64,${asset.base64}`,
-        fileName: asset.fileName ?? `photo-${Date.now()}.jpg`,
+      const prepared = await pickVehiculeImages({
+        useCamera,
         category: imageCategory,
-        note: imageNote.trim(),
+        note: imageNote,
+        selectionLimit: 1,
       })
+      if (!prepared.length) {
+        if (useCamera) {
+          Alert.alert('Photos', 'Impossible de lire la photo caméra. Réessayez ou choisissez depuis la galerie.')
+        }
+        return
+      }
+      setUploadingPhoto(true)
+      await uploadVehiculeImage(accessToken, vehiculeId, prepared[0].payload)
       setImageNote('')
       const img = await fetchImages(accessToken, vehiculeId)
       setImages(img)

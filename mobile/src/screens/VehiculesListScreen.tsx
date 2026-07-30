@@ -52,6 +52,7 @@ const DATE_MODES: { mode: DateFilterMode; label: string }[] = [
   { mode: 'aujourdhui', label: "Aujourd'hui" },
   { mode: 'hier', label: 'Hier' },
   { mode: 'semaine', label: 'Cette semaine' },
+  { mode: 'mois', label: 'Ce mois' },
 ]
 
 type Props = {

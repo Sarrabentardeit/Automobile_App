@@ -39,6 +39,11 @@ function getDateRange(mode: string, dateFilter: string): { date_debut?: string; 
     weekEnd.setDate(weekStart.getDate() + 6)
     return { date_debut: fmt(weekStart), date_fin: fmt(weekEnd) }
   }
+  if (mode === 'mois') {
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+    return { date_debut: fmt(monthStart), date_fin: fmt(monthEnd) }
+  }
   if (mode === 'date' && dateFilter) return { date_debut: dateFilter, date_fin: dateFilter }
   return {}
 }
@@ -110,7 +115,7 @@ export default function VehiculesPage() {
   const [recherche, setRecherche] = useState('')
   const [rechercheDebounced, setRechercheDebounced] = useState('')
   const [technicienId, setTechnicienId] = useState<number | undefined>()
-  const [dateFilterMode, setDateFilterMode] = useState<'toutes' | 'aujourdhui' | 'hier' | 'semaine' | 'date'>('toutes')
+  const [dateFilterMode, setDateFilterMode] = useState<'toutes' | 'aujourdhui' | 'hier' | 'semaine' | 'mois' | 'date'>('toutes')
   const [dateFilter, setDateFilter] = useState('')
   const [vehiclePage, setVehiclePage] = useState(1)
   const [folderPage, setFolderPage] = useState(1)
@@ -400,6 +405,7 @@ export default function VehiculesPage() {
               ['aujourdhui', "Aujourd'hui"],
               ['hier', 'Hier'],
               ['semaine', 'Cette semaine'],
+              ['mois', 'Ce mois'],
             ].map(([mode, label]) => (
               <button
                 key={mode}

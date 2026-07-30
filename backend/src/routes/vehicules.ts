@@ -124,7 +124,9 @@ function parseDataUrl(dataUrl?: string): { mimeType: string; buffer: Buffer } | 
   if (!dataUrl) return null
   const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/)
   if (!match) return null
-  const mimeType = match[1].toLowerCase()
+  let mimeType = match[1].toLowerCase()
+  if (mimeType === 'image/jpg' || mimeType === 'image/pjpeg') mimeType = 'image/jpeg'
+  if (mimeType === 'image/heif') mimeType = 'image/heic'
   if (!ALLOWED_IMAGE_MIME_TYPES.includes(mimeType as (typeof ALLOWED_IMAGE_MIME_TYPES)[number])) return null
   try {
     const buffer = Buffer.from(match[2], 'base64')
