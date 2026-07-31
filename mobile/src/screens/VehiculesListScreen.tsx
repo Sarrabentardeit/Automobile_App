@@ -37,7 +37,9 @@ import {
 import type { VehiculeOpenOptions } from '../navigation/vehiculeNav'
 import {
   ETAT_CONFIG,
+  SERVICE_OPTIONS,
   type EtatVehicule,
+  type ServiceType,
   type Vehicule,
   type VehiculeType,
 } from '../types/vehicule'
@@ -290,10 +292,12 @@ export default function VehiculesListScreen({
     if (initialFiltreEtat) setFiltreEtat(initialFiltreEtat)
   }, [initialFiltreEtat])
   const [technicienId, setTechnicienId] = useState<number | undefined>()
+  const [serviceType, setServiceType] = useState<ServiceType | undefined>()
   const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>('toutes')
   const [dateFilter, setDateFilter] = useState('')
   const [dateFilterDebounced, setDateFilterDebounced] = useState('')
   const [showTechnicienPicker, setShowTechnicienPicker] = useState(false)
+  const [showServicePicker, setShowServicePicker] = useState(false)
   const [selectedBrand, setSelectedBrand] = useState<BrandFolder | null>(null)
   const [brands, setBrands] = useState<BrandFolder[]>([])
   const [totalVehiclesBrands, setTotalVehiclesBrands] = useState(0)
@@ -304,7 +308,11 @@ export default function VehiculesListScreen({
   const showVehicleList = selectedBrand !== null
 
   const techniciens = useMemo(
-    () => users.filter((u) => u.role === 'technicien' && u.statut === 'actif'),
+    () =>
+      users
+        .filter((u) => (u.statut ?? 'actif') === 'actif')
+        .slice()
+        .sort((a, b) => a.nom_complet.localeCompare(b.nom_complet, 'fr', { sensitivity: 'base' })),
     [users]
   )
 
@@ -316,6 +324,7 @@ export default function VehiculesListScreen({
       dateFilterMode,
       dateFilter: dateFilterDebounced,
       search: searchDebounced,
+      serviceType,
       userId: user.id,
       visibility,
       archives,
@@ -327,6 +336,7 @@ export default function VehiculesListScreen({
       dateFilterMode,
       dateFilterDebounced,
       searchDebounced,
+      serviceType,
       user.id,
       visibility,
       archives,
@@ -344,7 +354,7 @@ export default function VehiculesListScreen({
   useEffect(() => {
     setSelectedBrand(null)
     setFolderPage(1)
-  }, [tab, filtreEtat, technicienId, dateFilterMode, dateFilterDebounced, searchDebounced, archives])
+  }, [tab, filtreEtat, technicienId, serviceType, dateFilterMode, dateFilterDebounced, searchDebounced, archives])
 
   const folderTotalPages = Math.max(1, Math.ceil(brands.length / BRAND_FOLDER_PAGE_SIZE))
 
@@ -548,6 +558,11 @@ export default function VehiculesListScreen({
       ? 'Tous techniciens'
       : techniciens.find((t) => t.id === technicienId)?.nom_complet ?? 'Technicien'
 
+  const selectedServiceName =
+    serviceType == null
+      ? 'Tous services'
+      : SERVICE_OPTIONS.find((s) => s.value === serviceType)?.label ?? 'Service'
+
   const filtersHeader = (
     <View style={styles.filtersBlock}>
       <View style={styles.pageTitleRow}>
@@ -731,7 +746,10 @@ export default function VehiculesListScreen({
       {visibility === 'all' && techniciens.length > 0 ? (
         <Pressable
           style={styles.techSelect}
-          onPress={() => setShowTechnicienPicker(!showTechnicienPicker)}
+          onPress={() => {
+            setShowTechnicienPicker(!showTechnicienPicker)
+            setShowServicePicker(false)
+          }}
         >
           <Ionicons name="person-outline" size={18} color="#6b7280" />
           <Text style={styles.techSelectText} numberOfLines={1}>
@@ -766,6 +784,50 @@ export default function VehiculesListScreen({
               }}
             >
               <Text style={styles.techItemText}>{t.nom_complet}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+
+      <Pressable
+        style={styles.techSelect}
+        onPress={() => {
+          setShowServicePicker(!showServicePicker)
+          setShowTechnicienPicker(false)
+        }}
+      >
+        <Ionicons name="construct-outline" size={18} color="#6b7280" />
+        <Text style={styles.techSelectText} numberOfLines={1}>
+          {selectedServiceName}
+        </Text>
+        <Ionicons
+          name={showServicePicker ? 'chevron-up' : 'chevron-down'}
+          size={18}
+          color="#6b7280"
+        />
+      </Pressable>
+
+      {showServicePicker ? (
+        <View style={styles.techList}>
+          <Pressable
+            style={[styles.techItem, serviceType == null && styles.techItemActive]}
+            onPress={() => {
+              setServiceType(undefined)
+              setShowServicePicker(false)
+            }}
+          >
+            <Text style={styles.techItemText}>Tous services</Text>
+          </Pressable>
+          {SERVICE_OPTIONS.map((s) => (
+            <Pressable
+              key={s.value}
+              style={[styles.techItem, serviceType === s.value && styles.techItemActive]}
+              onPress={() => {
+                setServiceType(s.value)
+                setShowServicePicker(false)
+              }}
+            >
+              <Text style={styles.techItemText}>{s.label}</Text>
             </Pressable>
           ))}
         </View>

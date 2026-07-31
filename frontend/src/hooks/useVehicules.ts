@@ -21,6 +21,7 @@ export interface VehiculesFilters {
   date_debut?: string
   date_fin?: string
   q?: string
+  service_type?: string
   /** Brand folder slug (e.g. volkswagen, autres) — list vehicles for one brand only */
   marque?: string
   page?: number
@@ -45,6 +46,10 @@ export interface DashboardSummary {
   anciens: Vehicule[]
   recentActivity: Array<HistoriqueEtat & { vehicleModel?: string }>
   teamLoadByTechnicien: Record<string, number>
+  teamLoadDetailByTechnicien?: Record<
+    string,
+    { total: number; byEtat: Record<string, number>; urgents: number }
+  >
 }
 
 export function useVehicules() {
@@ -82,6 +87,7 @@ export function useVehicules() {
         if (filters?.date_debut) params.date_debut = filters.date_debut
         if (filters?.date_fin) params.date_fin = filters.date_fin
         if (filters?.q) params.q = filters.q
+        if (filters?.service_type) params.service_type = filters.service_type
         if (filters?.marque) params.marque = filters.marque
 
         const res = await apiFetch<{ data: Vehicule[]; total: number; page: number; limit: number }>('/vehicules', {
@@ -147,6 +153,7 @@ export function useVehicules() {
         if (filters?.date_debut) params.date_debut = filters.date_debut
         if (filters?.date_fin) params.date_fin = filters.date_fin
         if (filters?.q) params.q = filters.q
+        if (filters?.service_type) params.service_type = filters.service_type
         const data = await apiFetch<VehiculeFilteredCounts>('/vehicules/counts', { token, params })
         setFilteredCounts(data)
       } catch {

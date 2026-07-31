@@ -33,13 +33,24 @@ async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   }
 }
 
-export function fetchStatsTrends(
+export type TechTempsEnCours = {
+  technicienId: number
+  nom: string
+  vehiculesCount: number
+  totalMinutes: number
+  moyenneMinutes: number
+  moyenneHeures: number
+  totalHeures: number
+}
+
+export function fetchTempsEnCoursTechniciens(
   token: string,
-  params: { year: number; groupBy: StatsTrendGroupBy }
-): Promise<StatsTrendPoint[]> {
-  return apiFetch<TrendsResponse>('/stats/trends', { token, params }).then((r) =>
-    Array.isArray(r.data) ? r.data : []
-  )
+  params: { year: number; month: number }
+): Promise<TechTempsEnCours[]> {
+  return apiFetch<{ data: TechTempsEnCours[] }>('/stats/temps-en-cours-techniciens', {
+    token,
+    params,
+  }).then((r) => (Array.isArray(r.data) ? r.data : []))
 }
 
 async function fetchMoneyIns(token: string): Promise<MoneyInRow[]> {

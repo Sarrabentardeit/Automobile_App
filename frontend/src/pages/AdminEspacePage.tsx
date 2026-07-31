@@ -45,6 +45,7 @@ import {
   Wallet,
   ArrowUpRight,
   ArrowDownRight,
+  Clock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ClientAvecDette } from '@/types'
@@ -66,6 +67,24 @@ type StatsTrendPoint = {
   reclamations: number
   achats: number
   paiementsFournisseurs: number
+}
+
+type TechTempsEnCours = {
+  technicienId: number
+  nom: string
+  vehiculesCount: number
+  totalMinutes: number
+  moyenneMinutes: number
+  moyenneHeures: number
+  totalHeures: number
+}
+
+function formatDureeHeures(minutes: number): string {
+  const h = Math.floor(minutes / 60)
+  const m = Math.round(minutes % 60)
+  if (h <= 0) return `${m} min`
+  if (m === 0) return `${h} h`
+  return `${h} h ${m} min`
 }
 
 export default function AdminEspacePage() {
@@ -93,6 +112,8 @@ export default function AdminEspacePage() {
   const [trendGroupBy, setTrendGroupBy] = useState<'month' | 'quarter'>('month')
   const [trendData, setTrendData] = useState<StatsTrendPoint[]>([])
   const [trendLoading, setTrendLoading] = useState(false)
+  const [techTemps, setTechTemps] = useState<TechTempsEnCours[]>([])
+  const [techTempsLoading, setTechTempsLoading] = useState(false)
   const [corrections, setCorrections] = useState<AdminCorrectionItem[]>([])
   const [correctionsLoaded, setCorrectionsLoaded] = useState(false)
   const [newCorrectionText, setNewCorrectionText] = useState('')
@@ -189,6 +210,28 @@ export default function AdminEspacePage() {
       }
     })()
   }, [getAccessToken, statsYear, trendGroupBy])
+
+  useEffect(() => {
+    const token = getAccessToken()
+    if (!token) {
+      setTechTemps([])
+      return
+    }
+    void (async () => {
+      setTechTempsLoading(true)
+      try {
+        const res = await apiFetch<{ data: TechTempsEnCours[] }>('/stats/temps-en-cours-techniciens', {
+          token,
+          params: { year: statsYear, month: statsMonth },
+        })
+        setTechTemps(Array.isArray(res.data) ? res.data : [])
+      } catch {
+        setTechTemps([])
+      } finally {
+        setTechTempsLoading(false)
+      }
+    })()
+  }, [getAccessToken, statsYear, statsMonth])
 
   const stats = [
     { label: 'Véhicules', value: vehiculeStats?.total ?? (vehicules ?? []).length, icon: Car, href: '/vehicules', color: 'bg-blue-50 text-blue-700' },
@@ -528,7 +571,7 @@ export default function AdminEspacePage() {
                 <div className="mt-4 pt-4 border-t border-rose-100">
                   <p className="text-xs font-semibold text-gray-600 mb-2">Top 5 — plus gros restes à recouvrer</p>
                   <ul className="space-y-1.5">
-                    {topDettes.map((c, i) => (
+                    {topDettes.map((c) => (
                       <li key={c.id} className="flex justify-between items-center text-sm">
                         <span className="text-gray-700 truncate max-w-[180px]">{c.clientName || c.telephoneClient || `Client #${c.id}`}</span>
                         <span className="font-semibold text-rose-800 tabular-nums">{c.reste?.toFixed(2) ?? 0} DT</span>
@@ -538,6 +581,57 @@ export default function AdminEspacePage() {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Temps moyen EN COURS par technicien */}
+          <div>
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-orange-500" />
+                  Temps moyen EN COURS par technicien
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Pour {moisLabel} : total des heures passées en statut EN COURS ÷ nombre de véhicules du technicien
+                </p>
+              </div>
+            </div>
+            {techTempsLoading ? (
+              <p className="text-xs text-gray-500">Chargement…</p>
+            ) : techTemps.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/50 p-4 text-sm text-gray-500">
+                Aucune donnée EN COURS pour ce mois (changements d&apos;état enregistrés).
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-gray-200">
+                <table className="w-full text-sm">
+                  <thead className="bg-orange-50/80 text-left text-xs uppercase tracking-wide text-orange-800">
+                    <tr>
+                      <th className="px-3 py-2.5 font-semibold">Technicien</th>
+                      <th className="px-3 py-2.5 font-semibold text-right">Véhicules</th>
+                      <th className="px-3 py-2.5 font-semibold text-right">Total heures</th>
+                      <th className="px-3 py-2.5 font-semibold text-right">Moyenne / véhicule</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 bg-white">
+                    {techTemps.map(row => (
+                      <tr key={row.technicienId} className="hover:bg-orange-50/30">
+                        <td className="px-3 py-2.5 font-medium text-gray-900">{row.nom}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{row.vehiculesCount}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">
+                          {formatDureeHeures(row.totalMinutes)}
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <span className="inline-flex items-center rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-bold text-orange-800 tabular-nums">
+                            {formatDureeHeures(row.moyenneMinutes)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       </Card>

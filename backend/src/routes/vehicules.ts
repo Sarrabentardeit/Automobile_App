@@ -14,6 +14,14 @@ const db = prisma as any
 
 const ETATS = ['orange', 'mauve', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'vert', 'retour'] as const
 const TYPES = ['voiture', 'moto'] as const
+const SERVICE_TYPES = [
+  'diagnostic',
+  'diagnostic_approfondi',
+  'service_rapide',
+  'reprogrammation',
+  'mecanique',
+  'autre',
+] as const
 const IMAGE_CATEGORIES = ['etat_exterieur', 'etat_interieur', 'compteur', 'plaque', 'dommage', 'intervention'] as const
 const ALLOWED_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'] as const
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024
@@ -386,6 +394,7 @@ function buildVehiculesWhere(query: {
   date_debut?: string
   date_fin?: string
   q?: string
+  service_type?: string
 }, includeEtat: boolean): Record<string, unknown> {
   const where: Record<string, unknown> = {}
   if (includeEtat && query.etat && ETATS.includes(query.etat as (typeof ETATS)[number])) {
@@ -396,6 +405,13 @@ function buildVehiculesWhere(query: {
 
   if (query.type && TYPES.includes(query.type as (typeof TYPES)[number])) {
     where.type = query.type
+  }
+
+  if (
+    query.service_type &&
+    SERVICE_TYPES.includes(query.service_type as (typeof SERVICE_TYPES)[number])
+  ) {
+    where.service_type = query.service_type
   }
 
   const andClauses: Record<string, unknown>[] = []
@@ -494,7 +510,7 @@ router.get('/dashboard-summary', authenticate(), async (req: AuthRequest, res) =
 
     const techWhere = scoped ? whereUserAssignedToVehicule(techId) : {}
 
-    const [urgents, anciens, recentRaw, teamGrouped] = await Promise.all([
+    const [urgents, anciens, recentRaw] = await Promise.all([
       db.vehicule.findMany({
         where: { etat_actuel: 'rouge', ...techWhere },
         orderBy: { id: 'desc' },
@@ -512,16 +528,6 @@ router.get('/dashboard-summary', authenticate(), async (req: AuthRequest, res) =
         orderBy: [{ date_changement: 'desc' }, { id: 'desc' }],
         take: 12,
       }),
-      scoped
-        ? Promise.resolve([])
-        : db.vehicule.groupBy({
-            by: ['technicien_id'],
-            where: {
-              technicien_id: { not: null },
-              etat_actuel: { not: 'vert' },
-            },
-            _count: { id: true },
-          }),
     ])
 
     const vehicleIds = Array.from(new Set((recentRaw as any[]).map(r => Number(r.vehiculeId)).filter((v: number) => !Number.isNaN(v))))
@@ -533,11 +539,58 @@ router.get('/dashboard-summary', authenticate(), async (req: AuthRequest, res) =
       : []
     const modelByVehiculeId = new Map<number, string>((recentVehicles as Array<{ id: number; modele: string }>).map(v => [v.id, v.modele]))
 
+    /** Charge réelle par technicien : technicien_id + ASSIGNEES, hors véhicules validés (vert). */
     const teamLoadByTechnicien: Record<string, number> = {}
+    const teamLoadDetailByTechnicien: Record<
+      string,
+      { total: number; byEtat: Record<string, number>; urgents: number }
+    > = {}
+
     if (!scoped) {
-      for (const row of teamGrouped as Array<{ technicien_id: number | null; _count: { id: number } }>) {
-        if (row.technicien_id == null) continue
-        teamLoadByTechnicien[String(row.technicien_id)] = row._count.id
+      const activeVehicles = await db.vehicule.findMany({
+        where: { etat_actuel: { not: 'vert' } },
+        select: {
+          id: true,
+          immatriculation: true,
+          modele: true,
+          type: true,
+          etat_actuel: true,
+          service_type: true,
+          technicien_id: true,
+          responsable_id: true,
+          defaut: true,
+          client_telephone: true,
+          date_entree: true,
+          date_sortie: true,
+          notes: true,
+          derniere_mise_a_jour: true,
+        },
+      })
+
+      for (const raw of activeVehicles as Array<{
+        technicien_id: number | null
+        notes: string
+        defaut: string
+        etat_actuel: string
+      }>) {
+        const mapped = toVehicule(raw as any)
+        const techIds = mapped.technicien_ids?.length
+          ? mapped.technicien_ids
+          : mapped.technicien_id != null
+            ? [mapped.technicien_id]
+            : []
+        const etat = mapped.etat_actuel
+        for (const tid of techIds) {
+          const key = String(tid)
+          teamLoadByTechnicien[key] = (teamLoadByTechnicien[key] ?? 0) + 1
+          if (!teamLoadDetailByTechnicien[key]) {
+            teamLoadDetailByTechnicien[key] = { total: 0, byEtat: {}, urgents: 0 }
+          }
+          const detail = teamLoadDetailByTechnicien[key]
+          detail.total += 1
+          detail.byEtat[etat] = (detail.byEtat[etat] ?? 0) + 1
+          if (etat === 'rouge') detail.urgents += 1
+        }
       }
     }
 
@@ -550,6 +603,7 @@ router.get('/dashboard-summary', authenticate(), async (req: AuthRequest, res) =
         vehicleModel: modelByVehiculeId.get(Number(h.vehiculeId)) ?? '',
       })),
       teamLoadByTechnicien,
+      teamLoadDetailByTechnicien,
     })
   } catch (err) {
     console.error(err)
@@ -566,11 +620,15 @@ router.get('/', authenticate(), async (req, res) => {
     const date_debut = req.query.date_debut as string | undefined
     const date_fin = req.query.date_fin as string | undefined
     const q = (req.query.q as string)?.trim()
+    const service_type = (req.query.service_type as string)?.trim()
     const marque = (req.query.marque as string)?.trim().toLowerCase()
     const page = Math.max(1, parseInt(req.query.page as string, 10) || 1)
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string, 10) || 20))
 
-    const baseWhere = buildVehiculesWhere({ etat, exclude_etat, technicien_id, type, date_debut, date_fin, q }, true)
+    const baseWhere = buildVehiculesWhere(
+      { etat, exclude_etat, technicien_id, type, date_debut, date_fin, q, service_type },
+      true
+    )
 
     if (marque === 'autres') {
       const all = await db.vehicule.findMany({
@@ -622,9 +680,10 @@ router.get('/brands', authenticate(), async (req, res) => {
     const date_debut = req.query.date_debut as string | undefined
     const date_fin = req.query.date_fin as string | undefined
     const q = (req.query.q as string)?.trim()
+    const service_type = (req.query.service_type as string)?.trim()
 
     const where = buildVehiculesWhere(
-      { etat, exclude_etat, technicien_id, type, date_debut, date_fin, q },
+      { etat, exclude_etat, technicien_id, type, date_debut, date_fin, q, service_type },
       true
     )
 
@@ -651,9 +710,13 @@ router.get('/counts', authenticate(), async (req, res) => {
     const date_debut = req.query.date_debut as string | undefined
     const date_fin = req.query.date_fin as string | undefined
     const q = (req.query.q as string)?.trim()
+    const service_type = (req.query.service_type as string)?.trim()
     const includeEtat = String(req.query.includeEtat ?? 'false').toLowerCase() === 'true'
 
-    const where = buildVehiculesWhere({ etat, exclude_etat, technicien_id, type, date_debut, date_fin, q }, includeEtat)
+    const where = buildVehiculesWhere(
+      { etat, exclude_etat, technicien_id, type, date_debut, date_fin, q, service_type },
+      includeEtat
+    )
 
     const [total, grouped] = await Promise.all([
       db.vehicule.count({ where: Object.keys(where).length ? where : undefined }),

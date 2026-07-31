@@ -99,6 +99,7 @@ export async function fetchVehicules(
     date_debut?: string
     date_fin?: string
     marque?: string
+    service_type?: string
   }
 ): Promise<VehiculesListResponse> {
   return apiFetch<VehiculesListResponse>('/vehicules', { token, params })
@@ -114,6 +115,7 @@ export async function fetchVehiculeBrands(
     date_debut?: string
     date_fin?: string
     q?: string
+    service_type?: string
   }
 ): Promise<BrandFoldersResponse> {
   return apiFetch<BrandFoldersResponse>('/vehicules/brands', { token, params })
@@ -129,6 +131,7 @@ export async function fetchVehiculeCounts(
     date_debut?: string
     date_fin?: string
     q?: string
+    service_type?: string
     includeEtat?: boolean
   }
 ): Promise<VehiculeFilteredCounts> {

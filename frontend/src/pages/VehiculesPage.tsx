@@ -5,7 +5,7 @@ import { useVehiculesContext } from '@/contexts/VehiculesContext'
 import { useUsers } from '@/contexts/UsersContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useNotifications } from '@/contexts/NotificationsContext'
-import { ETAT_CONFIG, type EtatVehicule, type VehiculeType, type Vehicule } from '@/types'
+import { ETAT_CONFIG, SERVICE_OPTIONS, type EtatVehicule, type VehiculeType, type Vehicule, type ServiceType } from '@/types'
 import type { VehiculesFilters } from '@/hooks/useVehicules'
 import { apiFetch } from '@/lib/api'
 import { BRAND_FOLDER_PAGE_SIZE, type BrandFolder } from '@/lib/vehiculeBrands'
@@ -14,7 +14,7 @@ import VehiculeForm from '@/components/vehicules/VehiculeForm'
 import VehiculeFicheFinanciereModal from '@/components/vehicules/VehiculeFicheFinanciereModal'
 import ChangeEtatModal from '@/components/vehicules/ChangeEtatModal'
 import { Car, Bike, Search, Plus, Filter, Trash2, ChevronLeft, ChevronRight, Folder, ArrowLeft } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, getActiveEquipeUsers } from '@/lib/utils'
 
 const VEHICLE_PAGE_SIZE = 20
 
@@ -55,6 +55,7 @@ function buildListFilters(opts: {
   dateFilterMode: string
   dateFilter: string
   rechercheDebounced: string
+  serviceType?: ServiceType
   userId: number
   visibility: string
   marque?: string
@@ -70,6 +71,7 @@ function buildListFilters(opts: {
     date_debut,
     date_fin,
     q: opts.rechercheDebounced || undefined,
+    service_type: opts.serviceType,
     marque: opts.marque,
     page: opts.page,
     limit: opts.limit,
@@ -115,6 +117,7 @@ export default function VehiculesPage() {
   const [recherche, setRecherche] = useState('')
   const [rechercheDebounced, setRechercheDebounced] = useState('')
   const [technicienId, setTechnicienId] = useState<number | undefined>()
+  const [serviceType, setServiceType] = useState<ServiceType | undefined>()
   const [dateFilterMode, setDateFilterMode] = useState<'toutes' | 'aujourdhui' | 'hier' | 'semaine' | 'mois' | 'date'>('toutes')
   const [dateFilter, setDateFilter] = useState('')
   const [vehiclePage, setVehiclePage] = useState(1)
@@ -135,10 +138,11 @@ export default function VehiculesPage() {
       dateFilterMode,
       dateFilter,
       rechercheDebounced,
+      serviceType,
       userId: user?.id ?? 0,
       visibility: permissions?.vehiculeVisibility ?? 'own',
     }),
-    [tab, filtreEtat, technicienId, dateFilterMode, dateFilter, rechercheDebounced, user?.id, permissions?.vehiculeVisibility]
+    [tab, filtreEtat, technicienId, dateFilterMode, dateFilter, rechercheDebounced, serviceType, user?.id, permissions?.vehiculeVisibility]
   )
 
   useEffect(() => {
@@ -174,6 +178,7 @@ export default function VehiculesPage() {
       if (date_debut) params.date_debut = date_debut
       if (date_fin) params.date_fin = date_fin
       if (rechercheDebounced) params.q = rechercheDebounced
+      if (serviceType) params.service_type = serviceType
 
       const res = await apiFetch<{ brands: BrandFolder[]; totalVehicles: number }>('/vehicules/brands', {
         token,
@@ -193,6 +198,7 @@ export default function VehiculesPage() {
     dateFilterMode,
     dateFilter,
     rechercheDebounced,
+    serviceType,
     permissions?.vehiculeVisibility,
     user?.id,
   ])
@@ -227,12 +233,12 @@ export default function VehiculesPage() {
   useEffect(() => {
     setVehiclePage(1)
     setFolderPage(1)
-  }, [tab, filtreEtat, technicienId, dateFilterMode, dateFilter, rechercheDebounced, brandParam])
+  }, [tab, filtreEtat, technicienId, dateFilterMode, dateFilter, rechercheDebounced, serviceType, brandParam])
 
   if (!user || !permissions) return null
 
   const canEditFicheFinanciere = permissions.canEditVehicule || permissions.canViewFinance
-  const techniciens = (users ?? []).filter(u => u.role === 'technicien')
+  const techniciens = getActiveEquipeUsers(users ?? [])
 
   const myVehicules = permissions.vehiculeVisibility === 'all'
     ? vehicules
@@ -440,6 +446,22 @@ export default function VehiculesPage() {
                 ))}
               </select>
             )}
+            <select
+              value={serviceType ?? ''}
+              onChange={e => {
+                setServiceType((e.target.value || undefined) as ServiceType | undefined)
+                setVehiclePage(1)
+                setFolderPage(1)
+              }}
+              className="px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px] sm:text-xs text-gray-700 bg-white focus:ring-2 focus:ring-orange-500"
+            >
+              <option value="">Tous services</option>
+              {SERVICE_OPTIONS.map(s => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
             <span className="text-[11px] sm:text-xs text-gray-500 whitespace-nowrap">Jour précis</span>
             <input
               type="date"

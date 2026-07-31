@@ -158,4 +158,146 @@ router.get('/trends', authenticate(), async (req, res) => {
   }
 })
 
+/**
+ * Moyenne du temps passé en statut EN COURS (orange) par technicien.
+ * Pour chaque technicien : somme des minutes EN COURS sur ses véhicules / nombre de véhicules.
+ * Filtre optionnel mois/année = date de sortie du statut EN COURS (changement d'état).
+ */
+router.get('/temps-en-cours-techniciens', authenticate(), async (req, res) => {
+  try {
+    const now = new Date()
+    const year = Math.max(2000, Math.min(2100, Number(req.query.year) || now.getFullYear()))
+    const monthRaw = req.query.month != null && req.query.month !== '' ? Number(req.query.month) : null
+    const month =
+      monthRaw != null && Number.isFinite(monthRaw) && monthRaw >= 1 && monthRaw <= 12 ? monthRaw : null
+
+    const [histRows, users] = await Promise.all([
+      db.vehiculeHistorique.findMany({
+        where: {
+          etat_precedent: 'orange',
+          duree_etat_precedent_min: { not: null, gt: 0 },
+        },
+        select: {
+          vehiculeId: true,
+          date_changement: true,
+          duree_etat_precedent_min: true,
+          vehicule: {
+            select: {
+              id: true,
+              technicien_id: true,
+              notes: true,
+              modele: true,
+              immatriculation: true,
+            },
+          },
+        },
+      }),
+      db.user.findMany({
+        select: { id: true, fullName: true, email: true, role: true, statut: true },
+      }),
+    ])
+
+    const nameById = new Map<number, string>()
+    for (const u of users as Array<{ id: number; fullName: string | null; email: string }>) {
+      nameById.set(u.id, (u.fullName || u.email || `User #${u.id}`).trim())
+    }
+
+    // techId -> vehiculeId -> total minutes EN COURS
+    const byTech = new Map<number, Map<number, number>>()
+
+    const addMinutes = (techId: number, vehiculeId: number, minutes: number) => {
+      if (!techId || !Number.isFinite(techId) || techId <= 0 || minutes <= 0) return
+      let vehicles = byTech.get(techId)
+      if (!vehicles) {
+        vehicles = new Map()
+        byTech.set(techId, vehicles)
+      }
+      vehicles.set(vehiculeId, (vehicles.get(vehiculeId) ?? 0) + minutes)
+    }
+
+    const techIdsForVehicle = (v: {
+      technicien_id: number | null
+      notes: string | null
+    }): number[] => {
+      const ids = new Set<number>()
+      if (v.technicien_id != null && Number(v.technicien_id) > 0) ids.add(Number(v.technicien_id))
+      const notes = String(v.notes ?? '')
+      const tag = '[[ASSIGNEES:'
+      const start = notes.lastIndexOf(tag)
+      if (start >= 0) {
+        const end = notes.indexOf(']]', start)
+        if (end > start) {
+          try {
+            const parsed = JSON.parse(notes.slice(start + tag.length, end)) as {
+              technicien_ids?: unknown
+              technician_ids?: unknown
+            }
+            const raw = parsed.technicien_ids ?? parsed.technician_ids
+            if (Array.isArray(raw)) {
+              for (const x of raw) {
+                const n = Number(x)
+                if (Number.isInteger(n) && n > 0) ids.add(n)
+              }
+            }
+          } catch {
+            // ignore malformed tag
+          }
+        }
+      }
+      return Array.from(ids)
+    }
+
+    const inPeriod = (iso: string) => {
+      const [y, m] = String(iso).slice(0, 10).split('-').map(Number)
+      if (!Number.isFinite(y) || y !== year) return false
+      if (month == null) return true
+      return m === month
+    }
+
+    for (const h of histRows as Array<{
+      vehiculeId: number
+      date_changement: string
+      duree_etat_precedent_min: number | null
+      vehicule: { technicien_id: number | null; notes: string | null } | null
+    }>) {
+      if (!h.vehicule || !inPeriod(h.date_changement)) continue
+      const minutes = Number(h.duree_etat_precedent_min) || 0
+      if (minutes <= 0) continue
+      for (const tid of techIdsForVehicle(h.vehicule)) {
+        addMinutes(tid, h.vehiculeId, minutes)
+      }
+    }
+
+    const rows = Array.from(byTech.entries())
+      .map(([technicienId, vehicles]) => {
+        const vehiculesCount = vehicles.size
+        let totalMinutes = 0
+        for (const m of vehicles.values()) totalMinutes += m
+        const moyenneMinutes = vehiculesCount > 0 ? totalMinutes / vehiculesCount : 0
+        return {
+          technicienId,
+          nom: nameById.get(technicienId) ?? `Technicien #${technicienId}`,
+          vehiculesCount,
+          totalMinutes: Math.round(totalMinutes),
+          moyenneMinutes: Math.round(moyenneMinutes),
+          moyenneHeures: Math.round((moyenneMinutes / 60) * 10) / 10,
+          totalHeures: Math.round((totalMinutes / 60) * 10) / 10,
+        }
+      })
+      .filter(r => r.vehiculesCount > 0)
+      .sort((a, b) => b.moyenneMinutes - a.moyenneMinutes)
+
+    return res.json({
+      year,
+      month,
+      etat: 'orange',
+      etatLabel: 'EN COURS',
+      data: rows,
+    })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
 export default router

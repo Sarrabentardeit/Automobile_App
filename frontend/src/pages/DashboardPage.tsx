@@ -188,31 +188,139 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Team */}
+      {/* Team — charge réelle par technicien (affectation + états actifs) */}
       {permissions.canManageUsers && (
-        <Card>
+        <Card padding="none" className="overflow-hidden">
           <div
-            className="flex items-center justify-between mb-3 cursor-pointer select-none hover:text-violet-600"
+            className="px-4 sm:px-5 py-3.5 border-b border-violet-100 bg-gradient-to-r from-violet-50 via-white to-fuchsia-50/40 flex items-center justify-between cursor-pointer select-none hover:from-violet-100/80 transition-colors"
             onClick={() => navigate('/equipe/membres')}
           >
-            <h2 className="text-sm sm:text-base font-bold">Équipe</h2>
-            <Users className="w-4 h-4 text-gray-400" />
+            <div>
+              <h2 className="text-sm sm:text-base font-bold text-gray-900 flex items-center gap-2">
+                <Users className="w-4 h-4 text-violet-600" />
+                Équipe atelier
+              </h2>
+              <p className="text-[11px] sm:text-xs text-gray-500 mt-0.5">
+                Véhicules actifs (hors validés) · mis à jour selon affectation et état
+              </p>
+            </div>
+            <ArrowRight className="w-4 h-4 text-violet-400" />
           </div>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 sm:gap-3">
-            {users.filter(u => u.statut === 'actif' && u.role === 'technicien').map(tech => {
-              const assignedCount = isGlobalView
-                ? (dashboardSummary?.teamLoadByTechnicien?.[String(tech.id)] ?? 0)
-                : myVehicules.filter(v => v.technicien_id === tech.id && v.etat_actuel !== 'vert').length
-              return (
-                <div key={tech.id} className="bg-gray-50 rounded-xl p-2.5 sm:p-3 text-center">
-                  <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-1.5 text-xs sm:text-sm font-bold text-gray-600">
-                    {tech.nom_complet.charAt(0)}
-                  </div>
-                  <p className="text-xs sm:text-sm font-semibold text-gray-800 truncate">{tech.nom_complet}</p>
-                  <p className="text-[10px] sm:text-xs text-gray-500">{assignedCount} véh.</p>
-                </div>
+          <div className="p-3 sm:p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-3">
+            {(() => {
+              const techs = users.filter(u => u.statut === 'actif' && u.role === 'technicien')
+              const maxLoad = Math.max(
+                1,
+                ...techs.map(t =>
+                  isGlobalView
+                    ? (dashboardSummary?.teamLoadByTechnicien?.[String(t.id)] ?? 0)
+                    : myVehicules.filter(
+                        v =>
+                          v.etat_actuel !== 'vert' &&
+                          (v.technicien_id === t.id ||
+                            (v.technicien_ids ?? []).includes(t.id))
+                      ).length
+                )
               )
-            })}
+              return techs
+                .map(tech => {
+                  const detail = dashboardSummary?.teamLoadDetailByTechnicien?.[String(tech.id)]
+                  const assignedCount = isGlobalView
+                    ? (dashboardSummary?.teamLoadByTechnicien?.[String(tech.id)] ?? detail?.total ?? 0)
+                    : myVehicules.filter(
+                        v =>
+                          v.etat_actuel !== 'vert' &&
+                          (v.technicien_id === tech.id ||
+                            (v.technicien_ids ?? []).includes(tech.id))
+                      ).length
+                  const urgentsCount = isGlobalView
+                    ? (detail?.urgents ?? 0)
+                    : myVehicules.filter(
+                        v =>
+                          v.etat_actuel === 'rouge' &&
+                          (v.technicien_id === tech.id ||
+                            (v.technicien_ids ?? []).includes(tech.id))
+                      ).length
+                  const enCoursCount = isGlobalView
+                    ? (detail?.byEtat?.orange ?? 0)
+                    : myVehicules.filter(
+                        v =>
+                          v.etat_actuel === 'orange' &&
+                          (v.technicien_id === tech.id ||
+                            (v.technicien_ids ?? []).includes(tech.id))
+                      ).length
+                  const loadRatio = assignedCount / maxLoad
+                  const tone =
+                    assignedCount === 0
+                      ? { ring: 'ring-gray-200', bar: 'bg-gray-300', badge: 'bg-gray-100 text-gray-600', avatar: 'from-gray-200 to-gray-300 text-gray-600' }
+                      : urgentsCount > 0
+                        ? { ring: 'ring-red-200', bar: 'bg-red-500', badge: 'bg-red-100 text-red-700', avatar: 'from-red-400 to-rose-500 text-white' }
+                        : assignedCount >= 5
+                          ? { ring: 'ring-orange-200', bar: 'bg-orange-500', badge: 'bg-orange-100 text-orange-800', avatar: 'from-orange-400 to-amber-500 text-white' }
+                          : { ring: 'ring-emerald-200', bar: 'bg-emerald-500', badge: 'bg-emerald-100 text-emerald-800', avatar: 'from-violet-500 to-fuchsia-500 text-white' }
+
+                  return { tech, assignedCount, urgentsCount, enCoursCount, loadRatio, tone }
+                })
+                .sort((a, b) => b.assignedCount - a.assignedCount)
+                .map(({ tech, assignedCount, urgentsCount, enCoursCount, loadRatio, tone }) => (
+                  <button
+                    key={tech.id}
+                    type="button"
+                    onClick={() => navigate('/vehicules')}
+                    className={`text-left rounded-2xl border border-gray-100 bg-white p-3 shadow-sm hover:shadow-md hover:border-violet-200 transition-all ring-1 ${tone.ring}`}
+                  >
+                    <div className="flex items-center gap-2.5 mb-2.5">
+                      <div
+                        className={`w-9 h-9 rounded-xl bg-gradient-to-br ${tone.avatar} flex items-center justify-center text-sm font-bold shadow-sm flex-shrink-0`}
+                      >
+                        {tech.nom_complet.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs sm:text-sm font-bold text-gray-900 truncate leading-tight">
+                          {tech.nom_complet}
+                        </p>
+                        <p className="text-[10px] text-gray-400 truncate">Technicien</p>
+                      </div>
+                    </div>
+                    <div className="flex items-end justify-between gap-2 mb-2">
+                      <div>
+                        <p className="text-2xl font-black text-gray-900 tabular-nums leading-none">
+                          {assignedCount}
+                        </p>
+                        <p className="text-[10px] font-semibold text-gray-500 mt-0.5 uppercase tracking-wide">
+                          véhicule{assignedCount !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${tone.badge}`}>
+                        {assignedCount === 0 ? 'Libre' : urgentsCount > 0 ? `${urgentsCount} urgent` : 'Actif'}
+                      </span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden mb-2">
+                      <div
+                        className={`h-full rounded-full transition-all ${tone.bar}`}
+                        style={{ width: `${Math.max(assignedCount === 0 ? 0 : 8, loadRatio * 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {enCoursCount > 0 && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-100">
+                          {enCoursCount} EN COURS
+                        </span>
+                      )}
+                      {urgentsCount > 0 && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-100">
+                          {urgentsCount} À RÉSOUDRE
+                        </span>
+                      )}
+                      {assignedCount > 0 && enCoursCount === 0 && urgentsCount === 0 && (
+                        <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-gray-50 text-gray-500 border border-gray-100">
+                          Autres états
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                ))
+            })()}
           </div>
         </Card>
       )}

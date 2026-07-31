@@ -13,4 +13,8 @@ export type DashboardSummary = {
   anciens: Vehicule[]
   recentActivity: Array<HistoriqueEtat & { vehicleModel?: string }>
   teamLoadByTechnicien: Record<string, number>
+  teamLoadDetailByTechnicien?: Record<
+    string,
+    { total: number; byEtat: Record<string, number>; urgents: number }
+  >
 }

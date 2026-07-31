@@ -60,6 +60,14 @@ export function getUserDisplayNames(
   return names.length ? names.join(', ') : '-'
 }
 
+/** Membres équipe pour filtres / assignation : tous les utilisateurs actifs (sync à l’ajout). */
+export function getActiveEquipeUsers<T extends { statut?: string; nom_complet: string }>(users: T[]): T[] {
+  return users
+    .filter(u => (u.statut ?? 'actif') === 'actif')
+    .slice()
+    .sort((a, b) => a.nom_complet.localeCompare(b.nom_complet, 'fr', { sensitivity: 'base' }))
+}
+
 /** Trouve l'id utilisateur par nom (ex. membre équipe → utilisateur) */
 export function findUserIdByName(users: { id: number; nom_complet: string }[], memberName: string): number | null {
   const q = memberName.trim().toLowerCase()

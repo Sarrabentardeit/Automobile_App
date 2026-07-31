@@ -14,7 +14,7 @@ import MiniBarChart, { MiniBarChartSummary } from '../components/stats/MiniBarCh
 import StatsSkeleton from '../components/stats/StatsSkeleton'
 import AppToast from '../components/ui/AppToast'
 import { formatMontant } from '../lib/formatMoney'
-import { fetchStatsDashboard, fetchStatsTrends } from '../lib/statsApi'
+import { fetchStatsDashboard, fetchStatsTrends, fetchTempsEnCoursTechniciens, type TechTempsEnCours } from '../lib/statsApi'
 import { isInStatsMonth, MOIS_FR, monthYearLabel, yearOptions } from '../lib/statsHelpers'
 import { MENU_STRUCTURE, type MenuRouteId } from '../navigation/menuConfig'
 import { theme } from '../theme/appTheme'
@@ -131,6 +131,8 @@ export default function StatistiquesScreen({
   const [trendGroupBy, setTrendGroupBy] = useState<StatsTrendGroupBy>('month')
   const [dashboard, setDashboard] = useState<StatsDashboardData | null>(null)
   const [trendData, setTrendData] = useState<Awaited<ReturnType<typeof fetchStatsTrends>>>([])
+  const [techTemps, setTechTemps] = useState<TechTempsEnCours[]>([])
+  const [techTempsLoading, setTechTempsLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [trendLoading, setTrendLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -153,22 +155,37 @@ export default function StatistiquesScreen({
     }
   }, [accessToken, statsYear, trendGroupBy])
 
+  const loadTechTemps = useCallback(async () => {
+    setTechTempsLoading(true)
+    try {
+      const data = await fetchTempsEnCoursTechniciens(accessToken, {
+        year: statsYear,
+        month: statsMonth,
+      })
+      setTechTemps(data)
+    } catch {
+      setTechTemps([])
+    } finally {
+      setTechTempsLoading(false)
+    }
+  }, [accessToken, statsYear, statsMonth])
+
   useEffect(() => {
     if (!canManageUsers) return
     setLoading(true)
-    void Promise.all([loadDashboard(), loadTrends()]).finally(() => setLoading(false))
-  }, [canManageUsers, loadDashboard, loadTrends])
+    void Promise.all([loadDashboard(), loadTrends(), loadTechTemps()]).finally(() => setLoading(false))
+  }, [canManageUsers, loadDashboard, loadTrends, loadTechTemps])
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      await Promise.all([loadDashboard(), loadTrends()])
+      await Promise.all([loadDashboard(), loadTrends(), loadTechTemps()])
     } catch (e) {
       setToast(e instanceof Error ? e.message : 'Erreur de chargement')
     } finally {
       setRefreshing(false)
     }
-  }, [loadDashboard, loadTrends])
+  }, [loadDashboard, loadTrends, loadTechTemps])
 
   const trendWithBilan = useMemo(
     () =>
@@ -216,6 +233,14 @@ export default function StatistiquesScreen({
   const years = yearOptions(statsYear)
   const moisLabel = monthYearLabel(statsMonth, statsYear)
   const fmt = (n: number) => `${formatMontant(n)} DT`
+
+  const formatDuree = (minutes: number) => {
+    const h = Math.floor(minutes / 60)
+    const m = Math.round(minutes % 60)
+    if (h <= 0) return `${m} min`
+    if (m === 0) return `${h} h`
+    return `${h} h ${m} min`
+  }
 
   if (!canManageUsers) {
     return (
@@ -467,6 +492,40 @@ export default function StatistiquesScreen({
           ) : null}
         </SectionCard>
 
+        <SectionCard
+          title="Temps moyen EN COURS"
+          subtitle={`Par technicien — ${moisLabel}`}
+          icon="timer-outline"
+        >
+          {techTempsLoading ? (
+            <Text style={styles.emptyHint}>Chargement…</Text>
+          ) : techTemps.length === 0 ? (
+            <Text style={styles.emptyHint}>
+              Aucune donnée EN COURS pour ce mois (changements d&apos;état enregistrés).
+            </Text>
+          ) : (
+            <View style={styles.techTempsList}>
+              {techTemps.map((row) => (
+                <View key={row.technicienId} style={styles.techTempsRow}>
+                  <View style={styles.techTempsLeft}>
+                    <Text style={styles.techTempsName} numberOfLines={1}>
+                      {row.nom}
+                    </Text>
+                    <Text style={styles.techTempsMeta}>
+                      {row.vehiculesCount} véhicule{row.vehiculesCount !== 1 ? 's' : ''} · total{' '}
+                      {formatDuree(row.totalMinutes)}
+                    </Text>
+                  </View>
+                  <View style={styles.techTempsBadge}>
+                    <Text style={styles.techTempsAvg}>{formatDuree(row.moyenneMinutes)}</Text>
+                    <Text style={styles.techTempsAvgLabel}>moy. / véhicule</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+        </SectionCard>
+
         <View style={styles.footerSpacer} />
       </ScrollView>
 
@@ -689,4 +748,23 @@ const styles = StyleSheet.create({
   },
   detteCtaText: { fontSize: 14, fontWeight: '700', color: theme.primary },
   footerSpacer: { height: 8 },
+  emptyHint: { fontSize: 13, color: theme.textMuted, lineHeight: 18 },
+  techTempsList: { gap: 8 },
+  techTempsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    padding: 12,
+    borderRadius: theme.radius.md,
+    backgroundColor: '#fff7ed',
+    borderWidth: 1,
+    borderColor: '#fed7aa',
+  },
+  techTempsLeft: { flex: 1, minWidth: 0 },
+  techTempsName: { fontSize: 14, fontWeight: '700', color: theme.text },
+  techTempsMeta: { fontSize: 11, color: theme.textMuted, marginTop: 2 },
+  techTempsBadge: { alignItems: 'flex-end' },
+  techTempsAvg: { fontSize: 14, fontWeight: '800', color: '#c2410c' },
+  techTempsAvgLabel: { fontSize: 10, color: '#ea580c', marginTop: 2, fontWeight: '600' },
 })

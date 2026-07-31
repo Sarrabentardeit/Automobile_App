@@ -6,14 +6,15 @@ import { useUsers } from '@/contexts/UsersContext'
 import { useToast } from '@/contexts/ToastContext'
 import { apiFetch } from '@/lib/api'
 import { downloadVehiculesCsv } from '@/lib/exportVehiculesCsv'
-import type { VehiculeType, Vehicule } from '@/types'
+import type { VehiculeType, Vehicule, ServiceType } from '@/types'
+import { SERVICE_OPTIONS } from '@/types'
 import type { VehiculesFilters } from '@/hooks/useVehicules'
 import VehiculeCard from '@/components/vehicules/VehiculeCard'
 import VehiculeForm from '@/components/vehicules/VehiculeForm'
 import VehiculeFicheFinanciereModal from '@/components/vehicules/VehiculeFicheFinanciereModal'
 import ChangeEtatModal from '@/components/vehicules/ChangeEtatModal'
 import { Car, Bike, Search, Filter, ChevronLeft, ChevronRight, Archive, Trash2, Download, Folder, ArrowLeft } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, getActiveEquipeUsers } from '@/lib/utils'
 import { BRAND_FOLDER_PAGE_SIZE, type BrandFolder } from '@/lib/vehiculeBrands'
 
 const VEHICLE_PAGE_SIZE = 20
@@ -78,6 +79,7 @@ export default function VehiculesArchivesPage() {
   const [recherche, setRecherche] = useState('')
   const [rechercheDebounced, setRechercheDebounced] = useState('')
   const [technicienId, setTechnicienId] = useState<number | undefined>()
+  const [serviceType, setServiceType] = useState<ServiceType | undefined>()
   const [dateFilterMode, setDateFilterMode] = useState<'toutes' | 'aujourdhui' | 'hier' | 'semaine' | 'mois' | 'date'>('toutes')
   const [dateFilter, setDateFilter] = useState('')
   const [vehiclePage, setVehiclePage] = useState(1)
@@ -92,7 +94,7 @@ export default function VehiculesArchivesPage() {
   const [ficheVehicule, setFicheVehicule] = useState<Vehicule | null>(null)
   const [exporting, setExporting] = useState(false)
 
-  const techniciens = (users ?? []).filter(u => u.role === 'technicien')
+  const techniciens = getActiveEquipeUsers(users ?? [])
 
   useEffect(() => {
     const t = setTimeout(() => setRechercheDebounced(recherche), 300)
@@ -118,6 +120,7 @@ export default function VehiculesArchivesPage() {
       if (date_debut) params.date_debut = date_debut
       if (date_fin) params.date_fin = date_fin
       if (rechercheDebounced) params.q = rechercheDebounced
+      if (serviceType) params.service_type = serviceType
       const res = await apiFetch<{ brands: BrandFolder[]; totalVehicles: number }>('/vehicules/brands', {
         token,
         params,
@@ -135,6 +138,7 @@ export default function VehiculesArchivesPage() {
     dateFilterMode,
     dateFilter,
     rechercheDebounced,
+    serviceType,
     permissions?.vehiculeVisibility,
     user?.id,
   ])
@@ -149,6 +153,7 @@ export default function VehiculesArchivesPage() {
       date_debut,
       date_fin,
       q: rechercheDebounced || undefined,
+      service_type: serviceType,
       marque: brandParam,
       page: vehiclePage,
       limit: VEHICLE_PAGE_SIZE,
@@ -160,6 +165,7 @@ export default function VehiculesArchivesPage() {
     dateFilterMode,
     dateFilter,
     rechercheDebounced,
+    serviceType,
     vehiclePage,
     permissions?.vehiculeVisibility,
     user?.id,
@@ -367,6 +373,22 @@ export default function VehiculesArchivesPage() {
                 ))}
               </select>
             )}
+            <select
+              value={serviceType ?? ''}
+              onChange={e => {
+                setServiceType((e.target.value || undefined) as ServiceType | undefined)
+                setVehiclePage(1)
+                setFolderPage(1)
+              }}
+              className="px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px] sm:text-xs text-gray-700 bg-white focus:ring-2 focus:ring-orange-500"
+            >
+              <option value="">Tous services</option>
+              {SERVICE_OPTIONS.map(s => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
             <span className="text-[11px] sm:text-xs text-gray-500 whitespace-nowrap">Date validation</span>
             <input
               type="date"

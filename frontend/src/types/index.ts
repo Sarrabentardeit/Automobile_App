@@ -193,13 +193,30 @@ export const TRANSITIONS_AUTORISEES: Record<EtatVehicule, EtatVehicule[]> = {
 }
 
 // ==================== VEHICULES ====================
+export type ServiceType =
+  | 'diagnostic'
+  | 'diagnostic_approfondi'
+  | 'service_rapide'
+  | 'reprogrammation'
+  | 'mecanique'
+  | 'autre'
+
+export const SERVICE_OPTIONS: { value: ServiceType; label: string }[] = [
+  { value: 'diagnostic', label: 'Diagnostic' },
+  { value: 'diagnostic_approfondi', label: 'Diagnostic approfondi' },
+  { value: 'service_rapide', label: 'Service rapide' },
+  { value: 'reprogrammation', label: 'Reprogrammation' },
+  { value: 'mecanique', label: 'Mécanique' },
+  { value: 'autre', label: 'Autre' },
+]
+
 export interface Vehicule {
   id: number
   immatriculation: string
   modele: string
   type: VehiculeType
   etat_actuel: EtatVehicule
-  service_type?: 'diagnostic' | 'diagnostic_approfondi' | 'service_rapide' | 'reprogrammation' | 'mecanique' | 'autre'
+  service_type?: ServiceType
   technicien_id: number | null
   responsable_id: number | null
   technicien_ids?: number[]
@@ -359,7 +376,7 @@ export interface VehiculeFormData {
   responsable_ids: number[]
   client_telephone: string
   notes: string
-  service_type?: 'diagnostic' | 'diagnostic_approfondi' | 'service_rapide' | 'reprogrammation' | 'mecanique' | 'autre'
+  service_type?: ServiceType
 }
 
 export interface VehiculeImageUploadInput {

@@ -94,6 +94,7 @@ type FilterOpts = {
   dateFilterMode: DateFilterMode
   dateFilter: string
   search: string
+  serviceType?: string
   userId: number
   visibility: 'all' | 'own' | 'none'
   archives?: boolean
@@ -109,6 +110,7 @@ export function buildFilterQuery(opts: FilterOpts) {
     date_debut: p.date_debut,
     date_fin: p.date_fin,
     q: p.q,
+    service_type: p.service_type,
     marque: p.marque,
   }
 }
@@ -126,6 +128,7 @@ export function buildListParams(opts: FilterOpts & { page: number; limit: number
     technicien_id,
     date_debut,
     date_fin,
+    service_type: opts.serviceType || undefined,
     ...(opts.archives
       ? { etat: 'vert' as const }
       : opts.filtreEtat !== 'tous'

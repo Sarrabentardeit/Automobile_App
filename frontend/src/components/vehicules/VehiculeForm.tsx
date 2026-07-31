@@ -14,7 +14,7 @@ import Input from '@/components/ui/Input'
 import Textarea from '@/components/ui/Textarea'
 import Button from '@/components/ui/Button'
 import { Save, Car, Bike, Camera, ImagePlus, X } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, getActiveEquipeUsers } from '@/lib/utils'
 
 interface Props {
   vehicule: Vehicule | null
@@ -121,9 +121,7 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
   const [imageCategory, setImageCategory] = useState<VehiculeImageCategory>('etat_exterieur')
   const [imageNote, setImageNote] = useState('')
 
-  const responsables = users.filter(
-    u => u.statut === 'actif' && (u.role === 'admin' || u.role === 'responsable' || u.role === 'technicien')
-  )
+  const responsables = getActiveEquipeUsers(users)
   const techniciens = responsables
 
   const toggleAssignee = (field: 'technicien_ids' | 'responsable_ids', userId: number) => {

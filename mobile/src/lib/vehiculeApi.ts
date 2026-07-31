@@ -201,11 +201,10 @@ export function fetchUsers(token: string): Promise<AppUser[]> {
 
 export function fetchAssignableUsers(token: string): Promise<AppUser[]> {
   return fetchUsers(token).then((list) =>
-    list.filter(
-      (u) =>
-        u.statut === 'actif' &&
-        (u.role === 'admin' || u.role === 'responsable' || u.role === 'technicien')
-    )
+    list
+      .filter((u) => (u.statut ?? 'actif') === 'actif')
+      .slice()
+      .sort((a, b) => a.nom_complet.localeCompare(b.nom_complet, 'fr', { sensitivity: 'base' }))
   )
 }
 

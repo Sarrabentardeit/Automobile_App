@@ -406,36 +406,115 @@ export default function DashboardScreen({
               </View>
             ) : null}
 
-            {/* Équipe */}
+            {/* Équipe — charge réelle */}
             {permissions.canManageUsers && isGlobalView && techniciens.length > 0 ? (
               <View style={styles.section}>
                 <Pressable
                   style={styles.sectionHeadInline}
                   onPress={() => onNavigate('equipe_membres')}
                 >
-                  <Text style={styles.sectionTitle}>Équipe</Text>
+                  <View>
+                    <Text style={styles.sectionTitle}>Équipe atelier</Text>
+                    <Text style={styles.sectionSub}>
+                      Véhicules actifs · MAJ auto (affectation et état)
+                    </Text>
+                  </View>
                   <Ionicons name="people-outline" size={18} color={theme.textMuted} />
                 </Pressable>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.teamStrip}
-                >
-                  {techniciens.map((tech) => {
-                    const load = summary?.teamLoadByTechnicien?.[String(tech.id)] ?? 0
-                    return (
-                      <View key={tech.id} style={styles.teamCard}>
-                        <View style={styles.teamAvatar}>
-                          <Text style={styles.teamAvatarText}>{memberInitial(tech.nom_complet)}</Text>
-                        </View>
-                        <Text style={styles.teamName} numberOfLines={1}>
-                          {tech.nom_complet.split(' ')[0]}
-                        </Text>
-                        <Text style={styles.teamLoad}>{load} véh.</Text>
-                      </View>
+                {(() => {
+                  const maxLoad = Math.max(
+                    1,
+                    ...techniciens.map(
+                      (t) => summary?.teamLoadByTechnicien?.[String(t.id)] ?? 0
                     )
-                  })}
-                </ScrollView>
+                  )
+                  const rows = [...techniciens]
+                    .map((tech) => {
+                      const detail = summary?.teamLoadDetailByTechnicien?.[String(tech.id)]
+                      const load =
+                        summary?.teamLoadByTechnicien?.[String(tech.id)] ?? detail?.total ?? 0
+                      const urgents = detail?.urgents ?? 0
+                      const enCours = detail?.byEtat?.orange ?? 0
+                      return { tech, load, urgents, enCours, ratio: load / maxLoad }
+                    })
+                    .sort((a, b) => b.load - a.load)
+
+                  return (
+                    <View style={styles.teamGrid}>
+                      {rows.map(({ tech, load, urgents, enCours, ratio }) => {
+                        const tone =
+                          load === 0
+                            ? { bg: '#f9fafb', border: '#e5e7eb', accent: '#9ca3af', bar: '#d1d5db' }
+                            : urgents > 0
+                              ? { bg: '#fef2f2', border: '#fecaca', accent: '#dc2626', bar: '#ef4444' }
+                              : load >= 5
+                                ? { bg: '#fff7ed', border: '#fed7aa', accent: '#ea580c', bar: '#f97316' }
+                                : { bg: '#f5f3ff', border: '#ddd6fe', accent: '#7c3aed', bar: '#8b5cf6' }
+
+                        return (
+                          <Pressable
+                            key={tech.id}
+                            style={[
+                              styles.teamCardModern,
+                              { backgroundColor: tone.bg, borderColor: tone.border },
+                            ]}
+                            onPress={() => onNavigate('vehicules')}
+                          >
+                            <View style={styles.teamCardTop}>
+                              <View
+                                style={[
+                                  styles.teamAvatarModern,
+                                  { backgroundColor: tone.accent },
+                                ]}
+                              >
+                                <Text style={styles.teamAvatarTextModern}>
+                                  {memberInitial(tech.nom_complet)}
+                                </Text>
+                              </View>
+                              <View style={styles.teamCardInfo}>
+                                <Text style={styles.teamNameModern} numberOfLines={1}>
+                                  {tech.nom_complet}
+                                </Text>
+                                <Text style={[styles.teamStatus, { color: tone.accent }]}>
+                                  {load === 0 ? 'Libre' : urgents > 0 ? `${urgents} urgent` : 'Actif'}
+                                </Text>
+                              </View>
+                            </View>
+                            <View style={styles.teamCountRow}>
+                              <Text style={[styles.teamCountBig, { color: tone.accent }]}>
+                                {load}
+                              </Text>
+                              <Text style={styles.teamCountLabel}>
+                                véhicule{load !== 1 ? 's' : ''}
+                              </Text>
+                            </View>
+                            <View style={styles.teamBarTrack}>
+                              <View
+                                style={[
+                                  styles.teamBarFill,
+                                  {
+                                    backgroundColor: tone.bar,
+                                    width: `${Math.max(load === 0 ? 0 : 8, ratio * 100)}%`,
+                                  },
+                                ]}
+                              />
+                            </View>
+                            {(enCours > 0 || urgents > 0) && (
+                              <View style={styles.teamChips}>
+                                {enCours > 0 ? (
+                                  <Text style={styles.teamChipOrange}>{enCours} EN COURS</Text>
+                                ) : null}
+                                {urgents > 0 ? (
+                                  <Text style={styles.teamChipRed}>{urgents} À RÉSOUDRE</Text>
+                                ) : null}
+                              </View>
+                            )}
+                          </Pressable>
+                        )
+                      })}
+                    </View>
+                  )
+                })()}
               </View>
             ) : null}
           </>
@@ -614,6 +693,60 @@ const styles = StyleSheet.create({
   teamAvatarText: { fontSize: 14, fontWeight: '800', color: theme.textSecondary },
   teamName: { fontSize: 11, fontWeight: '700', color: theme.text },
   teamLoad: { fontSize: 10, color: theme.textMuted, marginTop: 2 },
+  sectionSub: { fontSize: 11, color: theme.textMuted, marginTop: 2 },
+  teamGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  teamCardModern: {
+    width: '47%',
+    flexGrow: 1,
+    minWidth: 148,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 12,
+  },
+  teamCardTop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  teamAvatarModern: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  teamAvatarTextModern: { fontSize: 14, fontWeight: '800', color: '#fff' },
+  teamCardInfo: { flex: 1, minWidth: 0 },
+  teamNameModern: { fontSize: 13, fontWeight: '800', color: theme.text },
+  teamStatus: { fontSize: 10, fontWeight: '700', marginTop: 2 },
+  teamCountRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, marginBottom: 8 },
+  teamCountBig: { fontSize: 26, fontWeight: '900', lineHeight: 28 },
+  teamCountLabel: { fontSize: 11, color: theme.textMuted, fontWeight: '600', marginBottom: 2 },
+  teamBarTrack: {
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  teamBarFill: { height: '100%', borderRadius: 999 },
+  teamChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
+  teamChipOrange: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#c2410c',
+    backgroundColor: '#ffedd5',
+    overflow: 'hidden',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  teamChipRed: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#b91c1c',
+    backgroundColor: '#fee2e2',
+    overflow: 'hidden',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
   pressed: { opacity: 0.9, transform: [{ scale: 0.98 }] },
   footerSpacer: { height: 16 },
 })
