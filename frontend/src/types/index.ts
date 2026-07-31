@@ -532,17 +532,58 @@ export interface Notification {
   title?: string
 }
 
-// ==================== CALENDRIER / AFFECTATIONS ====================
-/** Affectation travail : qui (membre équipe) fait quoi (véhicule + description) à quelle date */
+// ==================== CALENDRIER / AFFECTATIONS / RDV ====================
+/** Statut rendez-vous / affectation */
+export type CalendarRdvStatut = 'prevu' | 'honore' | 'annule' | 'non_honore'
+
+export const CALENDAR_RDV_STATUTS: CalendarRdvStatut[] = ['prevu', 'honore', 'annule', 'non_honore']
+
+export const CALENDAR_RDV_STATUT_CONFIG: Record<
+  CalendarRdvStatut,
+  { label: string; color: string; bg: string; border: string; text: string }
+> = {
+  prevu: {
+    label: 'Prévu',
+    color: '#64748b',
+    bg: 'bg-slate-100',
+    border: 'border-slate-200',
+    text: 'text-slate-700',
+  },
+  honore: {
+    label: 'Honoré',
+    color: '#16a34a',
+    bg: 'bg-green-100',
+    border: 'border-green-200',
+    text: 'text-green-800',
+  },
+  annule: {
+    label: 'Annulé',
+    color: '#dc2626',
+    bg: 'bg-red-100',
+    border: 'border-red-200',
+    text: 'text-red-800',
+  },
+  non_honore: {
+    label: 'Non honoré',
+    color: '#2563eb',
+    bg: 'bg-blue-100',
+    border: 'border-blue-200',
+    text: 'text-blue-800',
+  },
+}
+
+/** Affectation / RDV : qui (membre) · véhicule · description · statut */
 export interface CalendarAssignment {
   id: number
   date: string // YYYY-MM-DD
-  memberName: string // nom du technicien / membre équipe
-  vehicleId: number | null // lien vers Vehicule si connu
-  vehicleLabel: string // modele ou immat ou "Véhicule client"
-  description: string // travail à faire (ex. JOINT CULASSE, DIAG, 4 AMORTISSEURS)
-  clientName?: string // nom client (enregistré automatiquement dans la page Clients)
+  memberName: string
+  vehicleId: number | null
+  vehicleLabel: string
+  description: string
+  clientName?: string
   clientTelephone?: string
+  /** prevu (blanc/gris) | honore (vert) | annule (rouge) | non_honore (bleu) */
+  statut?: CalendarRdvStatut
 }
 
 // ==================== RÉCLAMATIONS ====================

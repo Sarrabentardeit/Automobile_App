@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import { BRAND_OPTIONS, buildModeleLabel } from '../../lib/vehiculeBrands'
 import { theme } from '../../theme/appTheme'
 import { ETAT_CONFIG, type Vehicule } from '../../types/vehicule'
 
@@ -8,6 +9,8 @@ export type VehiclePickerValue = {
   vehicleId: number | null
   vehicleLabel: string
   isOther: boolean
+  vehicleMarque: string
+  vehicleModele: string
 }
 
 type Props = {
@@ -41,13 +44,17 @@ export default function CalendarVehiclePicker({ vehicules, value, onChange }: Pr
   }, [vehicules, search])
 
   const collapsedTitle = value.isOther
-    ? value.vehicleLabel.trim() || 'Autre véhicule'
+    ? buildModeleLabel(value.vehicleMarque, value.vehicleModele) !== 'Véhicule'
+      ? buildModeleLabel(value.vehicleMarque, value.vehicleModele)
+      : 'Autre véhicule'
     : selected
       ? selected.modele
       : value.vehicleLabel.trim() || 'Choisir un véhicule'
 
   const collapsedMeta = value.isOther
-    ? 'Saisie libre'
+    ? value.vehicleMarque
+      ? 'Nouveau — classé par marque'
+      : 'Choisir marque + modèle'
     : selected
       ? selected.immatriculation
       : vehicules.length > 0
@@ -59,6 +66,8 @@ export default function CalendarVehiclePicker({ vehicules, value, onChange }: Pr
       vehicleId: v.id,
       vehicleLabel: vehicleLabel(v),
       isOther: false,
+      vehicleMarque: '',
+      vehicleModele: '',
     })
     setOpen(false)
     setSearch('')
@@ -67,8 +76,24 @@ export default function CalendarVehiclePicker({ vehicules, value, onChange }: Pr
   const pickOther = () => {
     onChange({
       vehicleId: null,
-      vehicleLabel: value.isOther ? value.vehicleLabel : '',
+      vehicleLabel: value.isOther
+        ? buildModeleLabel(value.vehicleMarque, value.vehicleModele)
+        : '',
       isOther: true,
+      vehicleMarque: value.isOther ? value.vehicleMarque : '',
+      vehicleModele: value.isOther ? value.vehicleModele : '',
+    })
+  }
+
+  const updateOther = (patch: { vehicleMarque?: string; vehicleModele?: string }) => {
+    const vehicleMarque = patch.vehicleMarque ?? value.vehicleMarque
+    const vehicleModele = patch.vehicleModele ?? value.vehicleModele
+    onChange({
+      vehicleId: null,
+      isOther: true,
+      vehicleMarque,
+      vehicleModele,
+      vehicleLabel: buildModeleLabel(vehicleMarque, vehicleModele),
     })
   }
 
@@ -135,7 +160,7 @@ export default function CalendarVehiclePicker({ vehicules, value, onChange }: Pr
                 Autre véhicule
               </Text>
               <Text style={[styles.rowSub, value.isOther && styles.rowSubOn]}>
-                Modèle ou immatriculation non listée
+                Marque + modèle (dossier auto)
               </Text>
             </View>
             <View style={[styles.radio, value.isOther && styles.radioOn]}>
@@ -144,16 +169,35 @@ export default function CalendarVehiclePicker({ vehicules, value, onChange }: Pr
           </Pressable>
 
           {value.isOther ? (
-            <TextInput
-              style={styles.otherInput}
-              value={value.vehicleLabel}
-              onChangeText={(vehicleLabel) =>
-                onChange({ ...value, vehicleLabel, isOther: true, vehicleId: null })
-              }
-              placeholder="Ex. Peugeot 308 — 12345-A-6"
-              placeholderTextColor={theme.textSubtle}
-              autoFocus
-            />
+            <View style={styles.otherFields}>
+              <Text style={styles.fieldLabel}>Marque</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.brandRow}
+              >
+                {BRAND_OPTIONS.map((b) => {
+                  const on = value.vehicleMarque === b
+                  return (
+                    <Pressable
+                      key={b}
+                      onPress={() => updateOther({ vehicleMarque: b })}
+                      style={[styles.brandChip, on && styles.brandChipOn]}
+                    >
+                      <Text style={[styles.brandChipText, on && styles.brandChipTextOn]}>{b}</Text>
+                    </Pressable>
+                  )
+                })}
+              </ScrollView>
+              <Text style={styles.fieldLabel}>Modèle</Text>
+              <TextInput
+                style={styles.otherInput}
+                value={value.vehicleModele}
+                onChangeText={(vehicleModele) => updateOther({ vehicleModele })}
+                placeholder="Ex. Prado, Clio 4…"
+                placeholderTextColor={theme.textSubtle}
+              />
+            </View>
           ) : null}
 
           <ScrollView
@@ -209,15 +253,35 @@ export default function CalendarVehiclePicker({ vehicules, value, onChange }: Pr
       ) : null}
 
       {!open && value.isOther ? (
-        <TextInput
-          style={styles.collapsedOtherInput}
-          value={value.vehicleLabel}
-          onChangeText={(vehicleLabel) =>
-            onChange({ ...value, vehicleLabel, isOther: true, vehicleId: null })
-          }
-          placeholder="Modèle ou immatriculation"
-          placeholderTextColor={theme.textSubtle}
-        />
+        <View style={styles.collapsedOther}>
+          <Text style={styles.fieldLabel}>Marque</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.brandRow}
+          >
+            {BRAND_OPTIONS.map((b) => {
+              const on = value.vehicleMarque === b
+              return (
+                <Pressable
+                  key={b}
+                  onPress={() => updateOther({ vehicleMarque: b })}
+                  style={[styles.brandChip, on && styles.brandChipOn]}
+                >
+                  <Text style={[styles.brandChipText, on && styles.brandChipTextOn]}>{b}</Text>
+                </Pressable>
+              )
+            })}
+          </ScrollView>
+          <Text style={styles.fieldLabel}>Modèle</Text>
+          <TextInput
+            style={styles.collapsedOtherInput}
+            value={value.vehicleModele}
+            onChangeText={(vehicleModele) => updateOther({ vehicleModele })}
+            placeholder="Ex. Prado, Clio 4…"
+            placeholderTextColor={theme.textSubtle}
+          />
+        </View>
       ) : null}
     </View>
   )
@@ -317,6 +381,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   otherIconOn: { backgroundColor: theme.primary },
+  otherFields: { marginBottom: 8, gap: 6 },
+  collapsedOther: { marginTop: 8, gap: 6 },
+  fieldLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: theme.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+    marginTop: 2,
+  },
+  brandRow: { gap: 6, paddingVertical: 2 },
+  brandChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.surface,
+  },
+  brandChipOn: {
+    borderColor: theme.primary,
+    backgroundColor: theme.primary,
+  },
+  brandChipText: { fontSize: 12, fontWeight: '700', color: theme.textSecondary },
+  brandChipTextOn: { color: '#fff' },
   otherInput: {
     borderWidth: 1,
     borderColor: theme.primary,
@@ -326,10 +415,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: theme.text,
     backgroundColor: theme.surface,
-    marginBottom: 8,
   },
   collapsedOtherInput: {
-    marginTop: 8,
     borderWidth: 1,
     borderColor: theme.border,
     borderRadius: theme.radius.sm,

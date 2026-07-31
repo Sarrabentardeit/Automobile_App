@@ -18,6 +18,7 @@ import AppToast from '../components/ui/AppToast'
 import {
   deleteCalendarAssignment,
   fetchCalendarAssignments,
+  updateCalendarAssignment,
 } from '../lib/calendarApi'
 import {
   formatDateFr,
@@ -186,6 +187,27 @@ export default function CalendarScreen({
     ])
   }
 
+  const changeStatut = (a: CalendarAssignment, statut: import('../types/calendarAssignment').CalendarRdvStatut) => {
+    void updateCalendarAssignment(accessToken, a.id, { statut })
+      .then((updated) => {
+        setDetailAssignment(updated)
+        setAssignments((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))
+        if (statut === 'honore') {
+          showMsg('RDV honoré — véhicule créé automatiquement')
+          void fetchVehicules(accessToken, { page: 1, limit: 300 }).then((vehRes) => {
+            setVehicules(vehRes.data ?? [])
+          })
+        } else if (statut === 'annule') {
+          showMsg('RDV annulé (conservé pour les stats)')
+        } else if (statut === 'non_honore') {
+          showMsg('Marqué non honoré')
+        } else {
+          showMsg('Statut mis à jour')
+        }
+      })
+      .catch((e) => showMsg(e instanceof Error ? e.message : 'Erreur statut', true))
+  }
+
   const selectedDayRel = relativeDayLabel(selectedDate)
 
   const monthTotal = assignments.filter((a) => {
@@ -317,6 +339,7 @@ export default function CalendarScreen({
         onClose={() => setDetailAssignment(null)}
         onEdit={() => detailAssignment && openEdit(detailAssignment)}
         onDelete={() => detailAssignment && confirmDelete(detailAssignment)}
+        onChangeStatut={(statut) => detailAssignment && changeStatut(detailAssignment, statut)}
       />
 
       <CalendarAssignmentFormModal

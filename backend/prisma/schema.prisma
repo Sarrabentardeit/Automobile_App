@@ -419,6 +419,8 @@ model CalendarAssignment {
   description      String   @default("")
   client_name      String?  @default("")
   client_telephone String?  @default("")
+  // prevu | honore | annule | non_honore
+  statut           String   @default("prevu")
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 }

@@ -26,7 +26,7 @@ export async function createCalendarAssignment(
 export async function updateCalendarAssignment(
   token: string,
   id: number,
-  data: CalendarAssignmentInput
+  data: Partial<CalendarAssignmentInput>
 ): Promise<CalendarAssignment> {
   return apiFetch<CalendarAssignment>(`/calendar-assignments/${id}`, {
     method: 'PUT',

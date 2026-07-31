@@ -50,6 +50,7 @@ export function useCalendarApi() {
           description: a.description,
           clientName: a.clientName,
           clientTelephone: a.clientTelephone,
+          statut: a.statut ?? 'prevu',
         }),
       })
       setAssignments(prev => [...prev, created])
@@ -73,6 +74,7 @@ export function useCalendarApi() {
           description: patch.description,
           clientName: patch.clientName,
           clientTelephone: patch.clientTelephone,
+          statut: patch.statut,
         }),
       })
       setAssignments(prev => prev.map(x => (x.id === id ? updated : x)))

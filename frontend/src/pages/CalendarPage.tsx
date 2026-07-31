@@ -3,11 +3,13 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useNotifications } from '@/contexts/NotificationsContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useVehiculesContext } from '@/contexts/VehiculesContext'
-import type { CalendarAssignment } from '@/types'
+import type { CalendarAssignment, CalendarRdvStatut } from '@/types'
+import { CALENDAR_RDV_STATUT_CONFIG, CALENDAR_RDV_STATUTS } from '@/types'
 import { useCalendar } from '@/contexts/CalendarContext'
 import { useClients } from '@/contexts/ClientsContext'
 import { useUsers } from '@/contexts/UsersContext'
-import { formatDate } from '@/lib/utils'
+import { cn, formatDate } from '@/lib/utils'
+import { BRAND_OPTIONS, buildModeleLabel, parseMarqueModele } from '@/lib/vehiculeBrands'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
@@ -20,9 +22,7 @@ import {
   User,
   Car,
   Briefcase,
-  X,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
 
 const WEEKDAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
 const MONTH_NAMES = [
@@ -78,10 +78,10 @@ function getCalendarGrid(year: number, month: number): DayCell[] {
 export default function CalendarPage() {
   const { user } = useAuth()
   const { users } = useUsers()
-  const { vehicules } = useVehiculesContext()
+  const { vehicules, fetchVehicules } = useVehiculesContext()
   const today = new Date()
   const [viewDate, setViewDate] = useState({ year: today.getFullYear(), month: today.getMonth() + 1 })
-  const { assignments, addAssignment, updateAssignment, removeAssignment } = useCalendar()
+  const { assignments, addAssignment, updateAssignment } = useCalendar()
   const { addNotification } = useNotifications()
   const { clients, addClient } = useClients()
   const toast = useToast()
@@ -93,12 +93,21 @@ export default function CalendarPage() {
     memberName: '',
     vehicleId: null as number | null,
     vehicleLabel: '',
+    vehicleMarque: '',
+    vehicleModele: '',
     description: '',
     clientName: '',
     clientTelephone: '',
     members: [] as string[],
+    statut: 'prevu' as CalendarRdvStatut,
   })
   const canManageCalendar = user?.role !== 'technicien'
+
+  const rdvChipClass = (statut?: CalendarRdvStatut) => {
+    const s = statut && CALENDAR_RDV_STATUT_CONFIG[statut] ? statut : 'prevu'
+    const cfg = CALENDAR_RDV_STATUT_CONFIG[s]
+    return cn('w-full text-left text-[10px] sm:text-xs truncate px-1 py-0.5 rounded font-medium border', cfg.bg, cfg.text, cfg.border)
+  }
 
   const memberNames = useMemo(
     () =>
@@ -150,12 +159,15 @@ export default function CalendarPage() {
     setNewAssign({
       date,
       memberName: memberNames[0] ?? '',
-      vehicleId: vehicules[0]?.id ?? null,
-      vehicleLabel: vehicules[0] ? `${vehicules[0].modele} (${vehicules[0].immatriculation})` : '',
+      vehicleId: null,
+      vehicleLabel: '',
+      vehicleMarque: '',
+      vehicleModele: '',
       description: '',
       clientName: '',
       clientTelephone: '',
       members: [],
+      statut: 'prevu',
     })
     setShowAddModal(true)
   }
@@ -163,17 +175,39 @@ export default function CalendarPage() {
   const openEditAssignment = (a: CalendarAssignment) => {
     setSelectedDate(a.date)
     setEditingId(a.id)
+    const parsed = a.vehicleId == null ? parseMarqueModele(a.vehicleLabel) : { marque: '', modele: '' }
     setNewAssign({
       date: a.date,
       memberName: a.memberName,
       vehicleId: a.vehicleId,
       vehicleLabel: a.vehicleLabel,
+      vehicleMarque: parsed.marque,
+      vehicleModele: parsed.modele,
       description: a.description,
       clientName: a.clientName ?? '',
       clientTelephone: a.clientTelephone ?? '',
       members: [],
+      statut: a.statut ?? 'prevu',
     })
     setShowAddModal(true)
+  }
+
+  const setAssignmentStatut = async (a: CalendarAssignment, statut: CalendarRdvStatut) => {
+    try {
+      await updateAssignment(a.id, { statut })
+      if (statut === 'honore') {
+        toast.success('RDV honoré — véhicule ajouté automatiquement')
+        void fetchVehicules()
+      } else if (statut === 'annule') {
+        toast.success('RDV annulé (conservé pour les stats)')
+      } else if (statut === 'non_honore') {
+        toast.success('Marqué non honoré (pas d’appel / absent)')
+      } else {
+        toast.success('Statut mis à jour')
+      }
+    } catch {
+      toast.error('Impossible de changer le statut')
+    }
   }
 
   const handleAddAssignment = async () => {
@@ -182,20 +216,14 @@ export default function CalendarPage() {
     const clientName = newAssign.clientName?.trim()
     const clientTelephone = newAssign.clientTelephone?.trim()
 
-    if (clientName && clientTelephone) {
-      const exists = clients.some(c => c.telephone === clientTelephone || c.nom.toLowerCase() === clientName.toLowerCase())
-      if (!exists) {
-        try {
-          await addClient({ nom: clientName, telephone: clientTelephone })
-          toast.success('Client enregistré dans la liste et affectation ajoutée')
-        } catch {
-          toast.error('Erreur lors de l\'ajout du client')
-        }
-      } else {
-        toast.success('Affectation ajoutée (client déjà dans la liste)')
-      }
-    } else {
-      toast.success('Affectation ajoutée avec succès')
+    const resolvedVehicleLabel =
+      newAssign.vehicleId != null
+        ? (newAssign.vehicleLabel.trim() || 'Véhicule')
+        : buildModeleLabel(newAssign.vehicleMarque, newAssign.vehicleModele)
+
+    if (newAssign.vehicleId == null && !newAssign.vehicleMarque.trim()) {
+      toast.error('Sélectionnez la marque du véhicule')
+      return
     }
 
     const allMembers = [
@@ -209,36 +237,65 @@ export default function CalendarPage() {
       allMembers.find(n => n.toLowerCase() === lower)!
     )
 
+    if (clientName && clientTelephone) {
+      const exists = clients.some(c => c.telephone === clientTelephone || c.nom.toLowerCase() === clientName.toLowerCase())
+      if (!exists) {
+        try {
+          await addClient({ nom: clientName, telephone: clientTelephone })
+          toast.success('Client enregistré et affectation ajoutée')
+        } catch {
+          toast.error('Erreur lors de l\'ajout du client')
+        }
+      } else {
+        toast.success('Affectation ajoutée (client déjà dans la liste)')
+      }
+    } else if (clientName) {
+      toast.success('Affectation ajoutée — client enregistré')
+    } else {
+      toast.success('Affectation ajoutée avec succès')
+    }
+
     if (editingId) {
       // mode édition : on met à jour uniquement cette affectation
+      const prev = assignments.find(x => x.id === editingId)
       await updateAssignment(editingId, {
         date: newAssign.date,
         memberName,
         vehicleId: newAssign.vehicleId ?? null,
-        vehicleLabel: newAssign.vehicleLabel.trim() || 'Véhicule',
+        vehicleLabel: resolvedVehicleLabel,
         description: newAssign.description.trim(),
         clientName: clientName || undefined,
         clientTelephone: clientTelephone || undefined,
+        statut: newAssign.statut,
       })
+      if (newAssign.statut === 'honore' && prev?.statut !== 'honore') {
+        toast.success('RDV honoré — véhicule créé automatiquement')
+        void fetchVehicules()
+      }
     } else {
       // mode création : une affectation par membre sélectionné
       for (const name of uniqueMembers) {
-        await addAssignment({
+        const created = await addAssignment({
           date: newAssign.date,
           memberName: name,
           vehicleId: newAssign.vehicleId ?? null,
-          vehicleLabel: newAssign.vehicleLabel.trim() || 'Véhicule',
+          vehicleLabel: resolvedVehicleLabel,
           description: newAssign.description.trim(),
           clientName: clientName || undefined,
           clientTelephone: clientTelephone || undefined,
+          statut: newAssign.statut,
         })
+
+        if (created.statut === 'honore') {
+          void fetchVehicules()
+        }
 
         const tech = users.find(u => u.nom_complet.toLowerCase() === name.toLowerCase())
         if (tech) {
           addNotification(
             tech.id,
             `Vous avez été assigné au calendrier le ${new Date(newAssign.date).toLocaleDateString('fr-FR')} : ${
-              newAssign.vehicleLabel.trim() || 'Véhicule'
+              resolvedVehicleLabel
             } - ${newAssign.description.trim() || 'Travail'}`
           )
         }
@@ -252,12 +309,40 @@ export default function CalendarPage() {
   const handleVehicleSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value
     if (val === '' || val === '_autre') {
-      setNewAssign(prev => ({ ...prev, vehicleId: null, vehicleLabel: val === '_autre' ? prev.vehicleLabel : '' }))
+      setNewAssign(prev => ({
+        ...prev,
+        vehicleId: null,
+        vehicleLabel: '',
+        vehicleMarque: '',
+        vehicleModele: '',
+      }))
       return
     }
     const id = Number(val)
     const v = vehicules.find(v => v.id === id)
-    if (v) setNewAssign(prev => ({ ...prev, vehicleId: id, vehicleLabel: `${v.modele} (${v.immatriculation})` }))
+    if (v) {
+      setNewAssign(prev => ({
+        ...prev,
+        vehicleId: id,
+        vehicleLabel: `${v.modele} (${v.immatriculation})`,
+        vehicleMarque: '',
+        vehicleModele: '',
+      }))
+    }
+  }
+
+  const updateFreeVehicle = (patch: { vehicleMarque?: string; vehicleModele?: string }) => {
+    setNewAssign(prev => {
+      const vehicleMarque = patch.vehicleMarque ?? prev.vehicleMarque
+      const vehicleModele = patch.vehicleModele ?? prev.vehicleModele
+      return {
+        ...prev,
+        vehicleId: null,
+        vehicleMarque,
+        vehicleModele,
+        vehicleLabel: buildModeleLabel(vehicleMarque, vehicleModele),
+      }
+    })
   }
 
   if (!user) return null
@@ -342,8 +427,8 @@ export default function CalendarPage() {
                             if (canManageCalendar) openEditAssignment(a)
                             else openDay(cell.date)
                           }}
-                          className="w-full text-left text-[10px] sm:text-xs truncate px-1 py-0.5 rounded bg-indigo-50 text-indigo-800 font-medium hover:bg-indigo-100"
-                          title={`${a.memberName} · ${a.vehicleLabel} · ${a.description}`}
+                          className={rdvChipClass(a.statut)}
+                          title={`${a.memberName} · ${a.vehicleLabel} · ${CALENDAR_RDV_STATUT_CONFIG[a.statut ?? 'prevu'].label}`}
                         >
                           {a.memberName} – {a.vehicleLabel}
                         </button>
@@ -401,36 +486,55 @@ export default function CalendarPage() {
                   <p className="text-sm text-gray-500 py-4">Aucune affectation ce jour.</p>
                 ) : (
                   <ul className="space-y-3">
-                    {selectedDayAssignments.map(a => (
+                    {selectedDayAssignments.map(a => {
+                      const statut = a.statut ?? 'prevu'
+                      const cfg = CALENDAR_RDV_STATUT_CONFIG[statut]
+                      return (
                       <li
                         key={a.id}
-                        role={canManageCalendar ? 'button' : undefined}
-                        tabIndex={canManageCalendar ? 0 : undefined}
-                        onClick={() => {
-                          if (canManageCalendar) openEditAssignment(a)
-                        }}
-                        onKeyDown={e => {
-                          if (!canManageCalendar) return
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            openEditAssignment(a)
-                          }
-                        }}
                         className={cn(
-                          'flex gap-2 p-3 rounded-xl bg-gray-50 border border-gray-100 group text-left w-full',
-                          canManageCalendar &&
-                            'cursor-pointer hover:bg-indigo-50/90 hover:border-indigo-200 transition-colors'
+                          'flex flex-col gap-2 p-3 rounded-xl border group text-left w-full',
+                          cfg.bg,
+                          cfg.border
                         )}
                       >
+                        <div
+                          role={canManageCalendar ? 'button' : undefined}
+                          tabIndex={canManageCalendar ? 0 : undefined}
+                          onClick={() => {
+                            if (canManageCalendar) openEditAssignment(a)
+                          }}
+                          onKeyDown={e => {
+                            if (!canManageCalendar) return
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              openEditAssignment(a)
+                            }
+                          }}
+                          className={cn(
+                            'flex gap-2 w-full',
+                            canManageCalendar && 'cursor-pointer'
+                          )}
+                        >
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-gray-900 text-sm flex items-center gap-1.5">
-                            <User className="w-3.5 h-3.5 text-indigo-500" />
-                            {a.memberName}
-                          </p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className={cn('font-semibold text-sm flex items-center gap-1.5', cfg.text)}>
+                              <User className="w-3.5 h-3.5" />
+                              {a.memberName}
+                            </p>
+                            <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full', cfg.bg, cfg.text, 'border', cfg.border)}>
+                              {cfg.label}
+                            </span>
+                          </div>
                           <p className="text-xs text-gray-600 mt-0.5 flex items-center gap-1">
                             <Car className="w-3 h-3" />
                             {a.vehicleLabel}
                           </p>
+                          {(a.clientName || a.clientTelephone) && (
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {[a.clientName, a.clientTelephone].filter(Boolean).join(' · ')}
+                            </p>
+                          )}
                           {a.description && (
                             <p className="text-xs text-gray-500 mt-1 flex items-start gap-1">
                               <Briefcase className="w-3 h-3 flex-shrink-0 mt-0.25" />
@@ -438,23 +542,41 @@ export default function CalendarPage() {
                             </p>
                           )}
                         </div>
+                        </div>
                         {canManageCalendar && (
-                          <button
-                            type="button"
-                            onClick={async e => {
-                              e.stopPropagation()
-                              const ok = await removeAssignment(a.id)
-                              if (ok) toast.success('Affectation supprimée')
-                              else toast.error('Erreur lors de la suppression')
-                            }}
-                            className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                            title="Supprimer"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
+                          <div className="flex flex-wrap gap-1 pt-1 border-t border-black/5">
+                            {CALENDAR_RDV_STATUTS.map(s => (
+                              <button
+                                key={s}
+                                type="button"
+                                onClick={e => {
+                                  e.stopPropagation()
+                                  void setAssignmentStatut(a, s)
+                                }}
+                                className={cn(
+                                  'text-[10px] font-bold px-2 py-1 rounded-lg border transition-colors',
+                                  statut === s
+                                    ? cn(CALENDAR_RDV_STATUT_CONFIG[s].bg, CALENDAR_RDV_STATUT_CONFIG[s].text, CALENDAR_RDV_STATUT_CONFIG[s].border)
+                                    : 'bg-white/70 text-gray-600 border-gray-200 hover:bg-white'
+                                )}
+                                title={
+                                  s === 'honore'
+                                    ? 'Honoré → crée le véhicule automatiquement'
+                                    : s === 'annule'
+                                      ? 'Annulé (gardé pour les stats)'
+                                      : s === 'non_honore'
+                                        ? 'Absent / pas d’appel'
+                                        : 'Prévu'
+                                }
+                              >
+                                {CALENDAR_RDV_STATUT_CONFIG[s].label}
+                              </button>
+                            ))}
+                          </div>
                         )}
                       </li>
-                    ))}
+                      )
+                    })}
                   </ul>
                 )}
               </>
@@ -549,12 +671,29 @@ export default function CalendarPage() {
               <option value="_autre">Autre (saisir ci-dessous)</option>
             </select>
             {newAssign.vehicleId === null && (
-              <Input
-                className="mt-2"
-                placeholder="Modèle ou immat (ex. MEGANE 3, SKODA)"
-                value={newAssign.vehicleLabel}
-                onChange={e => setNewAssign(prev => ({ ...prev, vehicleLabel: e.target.value }))}
-              />
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Marque</label>
+                  <select
+                    value={newAssign.vehicleMarque}
+                    onChange={e => updateFreeVehicle({ vehicleMarque: e.target.value })}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                  >
+                    <option value="">Sélectionner une marque</option>
+                    {BRAND_OPTIONS.map(b => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Modèle</label>
+                  <Input
+                    placeholder="Ex. Prado, Clio 4…"
+                    value={newAssign.vehicleModele}
+                    onChange={e => updateFreeVehicle({ vehicleModele: e.target.value })}
+                  />
+                </div>
+              </div>
             )}
           </div>
           <div>
@@ -567,9 +706,39 @@ export default function CalendarPage() {
               className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none"
             />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Statut du rendez-vous</label>
+            <div className="flex flex-wrap gap-2">
+              {CALENDAR_RDV_STATUTS.map(s => {
+                const cfg = CALENDAR_RDV_STATUT_CONFIG[s]
+                const selected = newAssign.statut === s
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setNewAssign(prev => ({ ...prev, statut: s }))}
+                    className={cn(
+                      'px-3 py-1.5 rounded-full text-xs font-bold border transition-colors',
+                      selected ? cn(cfg.bg, cfg.text, cfg.border, 'ring-2 ring-offset-1') : 'bg-white text-gray-600 border-gray-200'
+                    )}
+                    style={selected ? { ['--tw-ring-color' as string]: cfg.color } : undefined}
+                    title={
+                      s === 'honore'
+                        ? 'Crée automatiquement le véhicule atelier'
+                        : s === 'annule'
+                          ? 'Conservé pour les statistiques'
+                          : undefined
+                    }
+                  >
+                    {cfg.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
           <div className="flex gap-3 pt-2">
             <Button variant="outline" onClick={() => setShowAddModal(false)} className="flex-1">
-              Annuler
+              Fermer
             </Button>
             <Button onClick={handleAddAssignment} className="flex-1" disabled={!newAssign.memberName.trim()}>
               {editingId ? 'Mettre à jour' : 'Enregistrer'}

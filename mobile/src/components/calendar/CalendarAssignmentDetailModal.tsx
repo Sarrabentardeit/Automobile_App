@@ -4,7 +4,8 @@ import { Ionicons } from '@expo/vector-icons'
 import CenteredBlurModal from '../ui/CenteredBlurModal'
 import { formatDateFr, relativeDayLabel } from '../../lib/calendarGrid'
 import { theme } from '../../theme/appTheme'
-import type { CalendarAssignment } from '../../types/calendarAssignment'
+import type { CalendarAssignment, CalendarRdvStatut } from '../../types/calendarAssignment'
+import { CALENDAR_RDV_STATUTS, CALENDAR_RDV_STATUT_CONFIG } from '../../types/calendarAssignment'
 
 const GRADIENTS: [string, string][] = [
   ['#f97316', '#fb923c'],
@@ -68,6 +69,7 @@ type Props = {
   onClose: () => void
   onEdit: () => void
   onDelete: () => void
+  onChangeStatut?: (statut: CalendarRdvStatut) => void
 }
 
 export default function CalendarAssignmentDetailModal({
@@ -77,22 +79,25 @@ export default function CalendarAssignmentDetailModal({
   onClose,
   onEdit,
   onDelete,
+  onChangeStatut,
 }: Props) {
   if (!assignment) return null
 
   const [c1, c2] = avatarGradient(assignment.memberName)
-  const dialogHeight = Math.min(Dimensions.get('window').height * 0.88, 560)
+  const dialogHeight = Math.min(Dimensions.get('window').height * 0.88, 620)
   const rel = relativeDayLabel(assignment.date)
   const tel = assignment.clientTelephone?.replace(/\s/g, '') ?? ''
+  const statut = assignment.statut ?? 'prevu'
+  const cfg = CALENDAR_RDV_STATUT_CONFIG[statut]
 
   return (
     <CenteredBlurModal visible={visible} onClose={onClose}>
       <View style={[styles.card, { maxHeight: dialogHeight }]}>
-        <View style={styles.accent} />
+        <View style={[styles.accent, { backgroundColor: cfg.color }]} />
 
         <View style={styles.header}>
           <View style={styles.headerText}>
-            <Text style={styles.title}>Affectation</Text>
+            <Text style={styles.title}>Rendez-vous</Text>
             <Text style={styles.subtitle}>
               {rel ? `${rel} · ` : ''}
               {formatDateFr(assignment.date)}
@@ -113,7 +118,9 @@ export default function CalendarAssignmentDetailModal({
               <Text style={styles.avatarLgText}>{memberInitials(assignment.memberName)}</Text>
             </LinearGradient>
             <Text style={styles.name}>{assignment.memberName}</Text>
-            <Text style={styles.rolePill}>Membre affecté</Text>
+            <View style={[styles.statutPill, { backgroundColor: cfg.bg, borderColor: cfg.color }]}>
+              <Text style={[styles.statutPillText, { color: cfg.color }]}>{cfg.label}</Text>
+            </View>
           </View>
 
           <View style={styles.section}>
@@ -147,6 +154,38 @@ export default function CalendarAssignmentDetailModal({
               ) : null}
             </View>
           </View>
+
+          {canManage && onChangeStatut ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Statut RDV</Text>
+              <View style={styles.statutGrid}>
+                {CALENDAR_RDV_STATUTS.map((s) => {
+                  const sc = CALENDAR_RDV_STATUT_CONFIG[s]
+                  const active = statut === s
+                  return (
+                    <Pressable
+                      key={s}
+                      onPress={() => onChangeStatut(s)}
+                      style={[
+                        styles.statutBtn,
+                        {
+                          backgroundColor: active ? sc.bg : '#fff',
+                          borderColor: active ? sc.color : theme.border,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.statutBtnText, { color: active ? sc.color : theme.textMuted }]}>
+                        {sc.label}
+                      </Text>
+                    </Pressable>
+                  )
+                })}
+              </View>
+              <Text style={styles.statutHint}>
+                Honoré → crée le véhicule automatiquement · Annulé = gardé pour les stats
+              </Text>
+            </View>
+          ) : null}
 
           {tel ? (
             <Pressable
@@ -237,6 +276,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#fed7aa',
   },
+  statutPill: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  statutPillText: { fontSize: 12, fontWeight: '800' },
+  statutGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  statutBtn: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  statutBtnText: { fontSize: 12, fontWeight: '800' },
+  statutHint: { marginTop: 8, fontSize: 11, color: theme.textMuted, lineHeight: 15 },
   section: { marginBottom: 12 },
   sectionTitle: {
     fontSize: 11,

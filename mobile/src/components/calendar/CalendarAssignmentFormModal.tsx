@@ -20,6 +20,7 @@ import {
 } from '../../lib/calendarApi'
 import { formatDateFr } from '../../lib/calendarGrid'
 import { createNotification } from '../../lib/notifications'
+import { buildModeleLabel, parseMarqueModele } from '../../lib/vehiculeBrands'
 import type { AppUser } from '../../lib/vehiculeApi'
 import { theme } from '../../theme/appTheme'
 import type { CalendarAssignment, CalendarAssignmentInput } from '../../types/calendarAssignment'
@@ -79,6 +80,8 @@ export default function CalendarAssignmentFormModal({
     vehicleId: null,
     vehicleLabel: '',
     isOther: false,
+    vehicleMarque: '',
+    vehicleModele: '',
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -88,6 +91,10 @@ export default function CalendarAssignmentFormModal({
     if (!visible) return
     setError(null)
     if (editing) {
+      const parsed =
+        editing.vehicleId == null
+          ? parseMarqueModele(editing.vehicleLabel)
+          : { marque: '', modele: '' }
       setForm({
         date: editing.date,
         memberName: editing.memberName,
@@ -102,6 +109,8 @@ export default function CalendarAssignmentFormModal({
         vehicleId: editing.vehicleId,
         vehicleLabel: editing.vehicleLabel,
         isOther: editing.vehicleId == null,
+        vehicleMarque: parsed.marque,
+        vehicleModele: parsed.modele,
       })
     } else {
       const firstV = vehicules[0]
@@ -115,6 +124,8 @@ export default function CalendarAssignmentFormModal({
         vehicleId: firstV?.id ?? null,
         vehicleLabel: label,
         isOther: !firstV,
+        vehicleMarque: '',
+        vehicleModele: '',
       })
     }
   }, [visible, editing, initialDate, memberNames, vehicules])
@@ -153,18 +164,28 @@ export default function CalendarAssignmentFormModal({
     }))
   }
 
-  const buildPayload = (memberName: string): CalendarAssignmentInput => ({
-    date: form.date.trim(),
-    memberName: memberName.trim(),
-    vehicleId: vehiclePicker.isOther ? null : vehiclePicker.vehicleId,
-    vehicleLabel: vehiclePicker.vehicleLabel.trim() || 'Véhicule',
-    description: form.description.trim(),
-    clientName: form.clientName.trim() || undefined,
-    clientTelephone: form.clientTelephone.trim() || undefined,
-  })
+  const buildPayload = (memberName: string): CalendarAssignmentInput => {
+    const vehicleLabel = vehiclePicker.isOther
+      ? buildModeleLabel(vehiclePicker.vehicleMarque, vehiclePicker.vehicleModele)
+      : vehiclePicker.vehicleLabel.trim() || 'Véhicule'
+    return {
+      date: form.date.trim(),
+      memberName: memberName.trim(),
+      vehicleId: vehiclePicker.isOther ? null : vehiclePicker.vehicleId,
+      vehicleLabel,
+      description: form.description.trim(),
+      clientName: form.clientName.trim() || undefined,
+      clientTelephone: form.clientTelephone.trim() || undefined,
+      statut: editing?.statut ?? 'prevu',
+    }
+  }
 
   const submit = async () => {
     if (!canSave) return
+    if (vehiclePicker.isOther && !vehiclePicker.vehicleMarque.trim()) {
+      setError('Sélectionnez la marque du véhicule')
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -182,6 +203,10 @@ export default function CalendarAssignmentFormModal({
         }
       }
 
+      const resolvedLabel = vehiclePicker.isOther
+        ? buildModeleLabel(vehiclePicker.vehicleMarque, vehiclePicker.vehicleModele)
+        : vehiclePicker.vehicleLabel.trim() || 'Véhicule'
+
       if (editing) {
         await updateCalendarAssignment(accessToken, editing.id, buildPayload(form.memberName))
       } else {
@@ -198,7 +223,7 @@ export default function CalendarAssignmentFormModal({
           if (tech) {
             void createNotification(accessToken, {
               userId: tech.id,
-              message: `Affectation le ${formatDateFr(form.date)} : ${form.vehicleLabel || 'Véhicule'} — ${form.description || 'Travail'}`,
+              message: `Affectation le ${formatDateFr(form.date)} : ${resolvedLabel} — ${form.description || 'Travail'}`,
               type: 'calendar_assignment',
               title: 'Calendrier',
             }).catch(() => {})
