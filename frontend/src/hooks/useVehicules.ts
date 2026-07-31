@@ -48,7 +48,17 @@ export interface DashboardSummary {
   teamLoadByTechnicien: Record<string, number>
   teamLoadDetailByTechnicien?: Record<
     string,
-    { total: number; byEtat: Record<string, number>; urgents: number }
+    {
+      total: number
+      byEtat: Record<string, number>
+      urgents: number
+      vehicules?: Array<{
+        id: number
+        immatriculation: string
+        modele: string
+        etat_actuel: string
+      }>
+    }
   >
 }
 

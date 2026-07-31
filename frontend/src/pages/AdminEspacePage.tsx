@@ -20,6 +20,7 @@ import { apiFetch } from '@/lib/api'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
+import Modal from '@/components/ui/Modal'
 import {
   Shield,
   BarChart3,
@@ -46,6 +47,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Clock,
+  RefreshCw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ClientAvecDette } from '@/types'
@@ -69,6 +71,14 @@ type StatsTrendPoint = {
   paiementsFournisseurs: number
 }
 
+type TechTempsVehicule = {
+  vehiculeId: number
+  immatriculation: string
+  modele: string
+  minutes: number
+  lastChange: string
+}
+
 type TechTempsEnCours = {
   technicienId: number
   nom: string
@@ -77,6 +87,7 @@ type TechTempsEnCours = {
   moyenneMinutes: number
   moyenneHeures: number
   totalHeures: number
+  vehicules?: TechTempsVehicule[]
 }
 
 function formatDureeHeures(minutes: number): string {
@@ -109,11 +120,16 @@ export default function AdminEspacePage() {
   const now = new Date()
   const [statsMonth, setStatsMonth] = useState(now.getMonth() + 1)
   const [statsYear, setStatsYear] = useState(now.getFullYear())
+  /** Filtre indépendant pour la section Temps moyen EN COURS */
+  const [techTempsMonth, setTechTempsMonth] = useState(now.getMonth() + 1)
+  const [techTempsYear, setTechTempsYear] = useState(now.getFullYear())
   const [trendGroupBy, setTrendGroupBy] = useState<'month' | 'quarter'>('month')
   const [trendData, setTrendData] = useState<StatsTrendPoint[]>([])
   const [trendLoading, setTrendLoading] = useState(false)
   const [techTemps, setTechTemps] = useState<TechTempsEnCours[]>([])
   const [techTempsLoading, setTechTempsLoading] = useState(false)
+  const [techTempsUpdatedAt, setTechTempsUpdatedAt] = useState<Date | null>(null)
+  const [selectedTechTemps, setSelectedTechTemps] = useState<TechTempsEnCours | null>(null)
   const [corrections, setCorrections] = useState<AdminCorrectionItem[]>([])
   const [correctionsLoaded, setCorrectionsLoaded] = useState(false)
   const [newCorrectionText, setNewCorrectionText] = useState('')
@@ -169,27 +185,16 @@ export default function AdminEspacePage() {
     toast.success('Point supprimé')
   }, [toast])
 
-  if (!user || !permissions) return null
-
-  if (!permissions.canManageUsers) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <div className="w-16 h-16 rounded-2xl bg-red-100 flex items-center justify-center mb-4">
-          <Shield className="w-8 h-8 text-red-600" />
-        </div>
-        <h2 className="text-xl font-semibold text-gray-900">Espace réservé</h2>
-        <p className="text-gray-500 mt-1 text-center max-w-sm">
-          Seuls les comptes administrateurs peuvent accéder à cette page.
-        </p>
-      </div>
-    )
-  }
-
   useEffect(() => {
+    if (!permissions?.canManageUsers) return
     fetchStats(statsMonth, statsYear)
-  }, [statsMonth, statsYear, fetchStats])
+  }, [statsMonth, statsYear, fetchStats, permissions?.canManageUsers])
 
   useEffect(() => {
+    if (!permissions?.canManageUsers) {
+      setTrendData([])
+      return
+    }
     const token = getAccessToken()
     if (!token) {
       setTrendData([])
@@ -209,29 +214,82 @@ export default function AdminEspacePage() {
         setTrendLoading(false)
       }
     })()
-  }, [getAccessToken, statsYear, trendGroupBy])
+  }, [getAccessToken, statsYear, trendGroupBy, permissions?.canManageUsers])
 
-  useEffect(() => {
+  const loadTechTemps = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!permissions?.canManageUsers) {
+      setTechTemps([])
+      return
+    }
     const token = getAccessToken()
     if (!token) {
       setTechTemps([])
       return
     }
-    void (async () => {
-      setTechTempsLoading(true)
-      try {
-        const res = await apiFetch<{ data: TechTempsEnCours[] }>('/stats/temps-en-cours-techniciens', {
-          token,
-          params: { year: statsYear, month: statsMonth },
-        })
-        setTechTemps(Array.isArray(res.data) ? res.data : [])
-      } catch {
-        setTechTemps([])
-      } finally {
-        setTechTempsLoading(false)
-      }
-    })()
-  }, [getAccessToken, statsYear, statsMonth])
+    if (!opts?.silent) setTechTempsLoading(true)
+    try {
+      const res = await apiFetch<{ data: TechTempsEnCours[] }>('/stats/temps-en-cours-techniciens', {
+        token,
+        params: { year: techTempsYear, month: techTempsMonth },
+      })
+      setTechTemps(Array.isArray(res.data) ? res.data : [])
+      setTechTempsUpdatedAt(new Date())
+    } catch {
+      setTechTemps([])
+    } finally {
+      if (!opts?.silent) setTechTempsLoading(false)
+    }
+  }, [getAccessToken, techTempsYear, techTempsMonth, permissions?.canManageUsers])
+
+  useEffect(() => {
+    void loadTechTemps()
+  }, [loadTechTemps])
+
+  // Rafraîchissement auto toutes les 60 s
+  useEffect(() => {
+    if (!permissions?.canManageUsers) return
+    const id = window.setInterval(() => {
+      void loadTechTemps({ silent: true })
+    }, 60_000)
+    return () => window.clearInterval(id)
+  }, [loadTechTemps, permissions?.canManageUsers])
+
+  useEffect(() => {
+    if (!selectedTechTemps) return
+    const fresh = techTemps.find(t => t.technicienId === selectedTechTemps.technicienId)
+    setSelectedTechTemps(fresh ?? null)
+  }, [techTemps]) // eslint-disable-line react-hooks/exhaustive-deps -- sync open modal only when list refreshes
+
+  const techTempsInsights = useMemo(() => {
+    if (techTemps.length === 0) return null
+    const plusLent = techTemps[0]
+    const plusRapide = techTemps[techTemps.length - 1]
+    const totalVeh = techTemps.reduce((s, r) => s + r.vehiculesCount, 0)
+    const totalMin = techTemps.reduce((s, r) => s + r.totalMinutes, 0)
+    const moyenneEquipe = totalVeh > 0 ? Math.round(totalMin / totalVeh) : 0
+    return { plusLent, plusRapide, totalVeh, moyenneEquipe, nbTechs: techTemps.length }
+  }, [techTemps])
+
+  const trendDataWithBilan = useMemo(
+    () => trendData.map(point => ({ ...point, bilan: (point.encaissements ?? 0) - (point.achats ?? 0) })),
+    [trendData]
+  )
+
+  if (!user || !permissions) return null
+
+  if (!permissions.canManageUsers) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <div className="w-16 h-16 rounded-2xl bg-red-100 flex items-center justify-center mb-4">
+          <Shield className="w-8 h-8 text-red-600" />
+        </div>
+        <h2 className="text-xl font-semibold text-gray-900">Espace réservé</h2>
+        <p className="text-gray-500 mt-1 text-center max-w-sm">
+          Seuls les comptes administrateurs peuvent accéder à cette page.
+        </p>
+      </div>
+    )
+  }
 
   const stats = [
     { label: 'Véhicules', value: vehiculeStats?.total ?? (vehicules ?? []).length, icon: Car, href: '/vehicules', color: 'bg-blue-50 text-blue-700' },
@@ -270,11 +328,6 @@ export default function AdminEspacePage() {
   const paiementsFournisseursMois = transThisMonth.filter(t => t.type === 'paiement').reduce((s, t) => s + (t.montant ?? 0), 0)
   const bilanMois = totalRevenusMois - achatsFournisseursMois
 
-  const trendDataWithBilan = useMemo(
-    () => trendData.map(point => ({ ...point, bilan: (point.encaissements ?? 0) - (point.achats ?? 0) })),
-    [trendData]
-  )
-
   const totalDettesClients = (clientsDettes ?? []).reduce((s: number, c: ClientAvecDette) => s + (c.reste ?? 0), 0)
   const topDettes = [...(clientsDettes ?? [])].sort((a, b) => (b.reste ?? 0) - (a.reste ?? 0)).slice(0, 5)
 
@@ -282,8 +335,13 @@ export default function AdminEspacePage() {
   const vehiculesEnCours = vehiculeStats?.enCours ?? (vehicules ?? []).filter(v => v.etat_actuel !== 'vert').length
 
   const moisLabel = `${String(statsMonth).padStart(2, '0')}/${statsYear}`
+  const techTempsMoisLabel = `${String(techTempsMonth).padStart(2, '0')}/${techTempsYear}`
   const moisOptions = Array.from({ length: 12 }, (_, i) => i + 1)
   const anneeOptions = Array.from({ length: 5 }, (_, i) => statsYear - 2 + i)
+  const techTempsAnneeOptions = Array.from({ length: 5 }, (_, i) => techTempsYear - 2 + i)
+  const updatedLabel = techTempsUpdatedAt
+    ? techTempsUpdatedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : null
 
   return (
     <div className="space-y-8">
@@ -585,22 +643,86 @@ export default function AdminEspacePage() {
 
           {/* Temps moyen EN COURS par technicien */}
           <div>
-            <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 mb-3">
               <div>
                 <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                   <Clock className="w-4 h-4 text-orange-500" />
                   Temps moyen EN COURS par technicien
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Pour {moisLabel} : total des heures passées en statut EN COURS ÷ nombre de véhicules du technicien
+                  Période {techTempsMoisLabel} : total heures EN COURS ÷ nombre de véhicules. Cliquez un nom pour le détail.
                 </p>
+                {updatedLabel && (
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Mis à jour automatiquement · dernière sync {updatedLabel}
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={techTempsMonth}
+                  onChange={e => setTechTempsMonth(Number(e.target.value))}
+                  className="px-3 py-2 rounded-xl border border-orange-200 text-sm font-medium text-gray-800 bg-white shadow-sm"
+                  aria-label="Mois temps EN COURS"
+                >
+                  {moisOptions.map(m => (
+                    <option key={m} value={m}>
+                      {new Date(2000, m - 1, 1).toLocaleString('fr-FR', { month: 'long' })}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={techTempsYear}
+                  onChange={e => setTechTempsYear(Number(e.target.value))}
+                  className="px-3 py-2 rounded-xl border border-orange-200 text-sm font-medium text-gray-800 bg-white shadow-sm"
+                  aria-label="Année temps EN COURS"
+                >
+                  {techTempsAnneeOptions.map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => void loadTechTemps()}
+                  disabled={techTempsLoading}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                  title="Actualiser maintenant"
+                >
+                  <RefreshCw className={cn('w-3.5 h-3.5', techTempsLoading && 'animate-spin')} />
+                  Actualiser
+                </button>
               </div>
             </div>
-            {techTempsLoading ? (
+
+            {techTempsInsights && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+                <div className="rounded-xl border border-orange-100 bg-orange-50/60 px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-orange-700">Plus long (moy.)</p>
+                  <p className="text-sm font-bold text-gray-900 truncate">{techTempsInsights.plusLent.nom}</p>
+                  <p className="text-xs text-orange-800 tabular-nums">{formatDureeHeures(techTempsInsights.plusLent.moyenneMinutes)}</p>
+                </div>
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Plus rapide (moy.)</p>
+                  <p className="text-sm font-bold text-gray-900 truncate">{techTempsInsights.plusRapide.nom}</p>
+                  <p className="text-xs text-emerald-800 tabular-nums">{formatDureeHeures(techTempsInsights.plusRapide.moyenneMinutes)}</p>
+                </div>
+                <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-700">Équipe — {techTempsMoisLabel}</p>
+                  <p className="text-sm font-bold text-gray-900">
+                    {techTempsInsights.nbTechs} tech · {techTempsInsights.totalVeh} véh.
+                  </p>
+                  <p className="text-xs text-indigo-800 tabular-nums">
+                    Moy. {formatDureeHeures(techTempsInsights.moyenneEquipe)} / véhicule
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {techTempsLoading && techTemps.length === 0 ? (
               <p className="text-xs text-gray-500">Chargement…</p>
             ) : techTemps.length === 0 ? (
               <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/50 p-4 text-sm text-gray-500">
-                Aucune donnée EN COURS pour ce mois (changements d&apos;état enregistrés).
+                Aucune donnée EN COURS pour {techTempsMoisLabel} (changements d&apos;état enregistrés).
               </div>
             ) : (
               <div className="overflow-x-auto rounded-xl border border-gray-200">
@@ -615,8 +737,23 @@ export default function AdminEspacePage() {
                   </thead>
                   <tbody className="divide-y divide-gray-100 bg-white">
                     {techTemps.map(row => (
-                      <tr key={row.technicienId} className="hover:bg-orange-50/30">
-                        <td className="px-3 py-2.5 font-medium text-gray-900">{row.nom}</td>
+                      <tr
+                        key={row.technicienId}
+                        className="hover:bg-orange-50/40 cursor-pointer transition-colors"
+                        onClick={() => setSelectedTechTemps(row)}
+                      >
+                        <td className="px-3 py-2.5">
+                          <button
+                            type="button"
+                            className="font-medium text-orange-700 hover:text-orange-900 hover:underline text-left"
+                            onClick={e => {
+                              e.stopPropagation()
+                              setSelectedTechTemps(row)
+                            }}
+                          >
+                            {row.nom}
+                          </button>
+                        </td>
                         <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{row.vehiculesCount}</td>
                         <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">
                           {formatDureeHeures(row.totalMinutes)}
@@ -635,6 +772,63 @@ export default function AdminEspacePage() {
           </div>
         </div>
       </Card>
+
+      <Modal
+        open={selectedTechTemps != null}
+        onClose={() => setSelectedTechTemps(null)}
+        title={selectedTechTemps?.nom ?? 'Détail technicien'}
+        subtitle={`Temps EN COURS — ${techTempsMoisLabel} · ${selectedTechTemps?.vehiculesCount ?? 0} véhicule(s)`}
+        maxWidth="lg"
+      >
+        {selectedTechTemps && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-xl bg-gray-50 border border-gray-100 px-3 py-2">
+                <p className="text-[10px] uppercase text-gray-500 font-semibold">Véhicules</p>
+                <p className="text-lg font-bold tabular-nums">{selectedTechTemps.vehiculesCount}</p>
+              </div>
+              <div className="rounded-xl bg-gray-50 border border-gray-100 px-3 py-2">
+                <p className="text-[10px] uppercase text-gray-500 font-semibold">Total</p>
+                <p className="text-lg font-bold tabular-nums">{formatDureeHeures(selectedTechTemps.totalMinutes)}</p>
+              </div>
+              <div className="rounded-xl bg-orange-50 border border-orange-100 px-3 py-2">
+                <p className="text-[10px] uppercase text-orange-700 font-semibold">Moyenne</p>
+                <p className="text-lg font-bold text-orange-800 tabular-nums">
+                  {formatDureeHeures(selectedTechTemps.moyenneMinutes)}
+                </p>
+              </div>
+            </div>
+            {(selectedTechTemps.vehicules?.length ?? 0) === 0 ? (
+              <p className="text-sm text-gray-500">Aucun détail véhicule disponible.</p>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-gray-200">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-left text-xs uppercase text-gray-600">
+                    <tr>
+                      <th className="px-3 py-2 font-semibold">Immatriculation</th>
+                      <th className="px-3 py-2 font-semibold">Modèle</th>
+                      <th className="px-3 py-2 font-semibold text-right">Temps EN COURS</th>
+                      <th className="px-3 py-2 font-semibold text-right">Dernier changement</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {selectedTechTemps.vehicules!.map(v => (
+                      <tr key={v.vehiculeId} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 font-medium text-gray-900">{v.immatriculation}</td>
+                        <td className="px-3 py-2 text-gray-600">{v.modele}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-orange-800">
+                          {formatDureeHeures(v.minutes)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-gray-500">{v.lastChange}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
 
      
     </div>

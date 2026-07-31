@@ -202,17 +202,42 @@ router.get('/temps-en-cours-techniciens', authenticate(), async (req, res) => {
       nameById.set(u.id, (u.fullName || u.email || `User #${u.id}`).trim())
     }
 
-    // techId -> vehiculeId -> total minutes EN COURS
-    const byTech = new Map<number, Map<number, number>>()
+    type VehicleAgg = {
+      vehiculeId: number
+      immatriculation: string
+      modele: string
+      minutes: number
+      lastChange: string
+    }
 
-    const addMinutes = (techId: number, vehiculeId: number, minutes: number) => {
+    // techId -> vehiculeId -> agg
+    const byTech = new Map<number, Map<number, VehicleAgg>>()
+
+    const addMinutes = (
+      techId: number,
+      vehicule: { id: number; immatriculation: string | null; modele: string | null },
+      minutes: number,
+      dateChange: string
+    ) => {
       if (!techId || !Number.isFinite(techId) || techId <= 0 || minutes <= 0) return
       let vehicles = byTech.get(techId)
       if (!vehicles) {
         vehicles = new Map()
         byTech.set(techId, vehicles)
       }
-      vehicles.set(vehiculeId, (vehicles.get(vehiculeId) ?? 0) + minutes)
+      const existing = vehicles.get(vehicule.id)
+      if (existing) {
+        existing.minutes += minutes
+        if (dateChange > existing.lastChange) existing.lastChange = dateChange
+      } else {
+        vehicles.set(vehicule.id, {
+          vehiculeId: vehicule.id,
+          immatriculation: (vehicule.immatriculation || '').trim() || `Véhicule #${vehicule.id}`,
+          modele: (vehicule.modele || '').trim() || '—',
+          minutes,
+          lastChange: dateChange,
+        })
+      }
     }
 
     const techIdsForVehicle = (v: {
@@ -258,21 +283,35 @@ router.get('/temps-en-cours-techniciens', authenticate(), async (req, res) => {
       vehiculeId: number
       date_changement: string
       duree_etat_precedent_min: number | null
-      vehicule: { technicien_id: number | null; notes: string | null } | null
+      vehicule: {
+        id: number
+        technicien_id: number | null
+        notes: string | null
+        immatriculation: string | null
+        modele: string | null
+      } | null
     }>) {
       if (!h.vehicule || !inPeriod(h.date_changement)) continue
       const minutes = Number(h.duree_etat_precedent_min) || 0
       if (minutes <= 0) continue
       for (const tid of techIdsForVehicle(h.vehicule)) {
-        addMinutes(tid, h.vehiculeId, minutes)
+        addMinutes(tid, h.vehicule, minutes, String(h.date_changement))
       }
     }
 
     const rows = Array.from(byTech.entries())
       .map(([technicienId, vehicles]) => {
-        const vehiculesCount = vehicles.size
-        let totalMinutes = 0
-        for (const m of vehicles.values()) totalMinutes += m
+        const vehiculesList = Array.from(vehicles.values())
+          .map(v => ({
+            vehiculeId: v.vehiculeId,
+            immatriculation: v.immatriculation,
+            modele: v.modele,
+            minutes: Math.round(v.minutes),
+            lastChange: v.lastChange.slice(0, 10),
+          }))
+          .sort((a, b) => b.minutes - a.minutes)
+        const vehiculesCount = vehiculesList.length
+        const totalMinutes = vehiculesList.reduce((s, v) => s + v.minutes, 0)
         const moyenneMinutes = vehiculesCount > 0 ? totalMinutes / vehiculesCount : 0
         return {
           technicienId,
@@ -282,6 +321,7 @@ router.get('/temps-en-cours-techniciens', authenticate(), async (req, res) => {
           moyenneMinutes: Math.round(moyenneMinutes),
           moyenneHeures: Math.round((moyenneMinutes / 60) * 10) / 10,
           totalHeures: Math.round((totalMinutes / 60) * 10) / 10,
+          vehicules: vehiculesList,
         }
       })
       .filter(r => r.vehiculesCount > 0)

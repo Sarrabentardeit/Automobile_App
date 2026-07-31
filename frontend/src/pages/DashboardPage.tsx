@@ -1,25 +1,153 @@
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useVehiculesContext } from '@/contexts/VehiculesContext'
 import { useUsers } from '@/contexts/UsersContext'
-import { ETAT_CONFIG, type EtatVehicule } from '@/types'
+import { ETAT_CONFIG, type EtatVehicule, type Vehicule } from '@/types'
 import Card from '@/components/ui/Card'
+import Modal from '@/components/ui/Modal'
 import { Car, AlertTriangle, Clock, CheckCircle, Users, ArrowRight } from 'lucide-react'
-import { daysSince } from '@/lib/utils'
+import { daysSince, getActiveEquipeUsers, cn, stripVehiculeAssigneesMeta } from '@/lib/utils'
+import { apiFetch } from '@/lib/api'
+
+const ETATS_ACTIFS: EtatVehicule[] = [
+  'orange',
+  'mauve',
+  'attente_client',
+  'bleu',
+  'rouge',
+  'remise_cle',
+  'retour',
+]
+
+type TeamMemberDetail = {
+  id: number
+  nom: string
+  role: string
+  total: number
+  byEtat: Record<string, number>
+  urgents: number
+}
+
+function isAssignedTo(v: {
+  technicien_id: number | null
+  responsable_id?: number | null
+  technicien_ids?: number[]
+  responsable_ids?: number[]
+}, userId: number) {
+  return (
+    v.technicien_id === userId ||
+    v.responsable_id === userId ||
+    (v.technicien_ids ?? []).includes(userId) ||
+    (v.responsable_ids ?? []).includes(userId)
+  )
+}
 
 export default function DashboardPage() {
-  const { user, permissions } = useAuth()
-  const { vehicules, stats, dashboardSummary } = useVehiculesContext()
+  const { user, permissions, getAccessToken } = useAuth()
+  const { vehicules, stats, dashboardSummary, fetchDashboardSummary } = useVehiculesContext()
   const { users } = useUsers()
   const navigate = useNavigate()
+  const [selectedMember, setSelectedMember] = useState<TeamMemberDetail | null>(null)
+  const [memberVehicles, setMemberVehicles] = useState<Vehicule[]>([])
+  const [memberVehiclesLoading, setMemberVehiclesLoading] = useState(false)
+
+  const isGlobalView = permissions?.vehiculeVisibility === 'all'
+  const myVehicules = useMemo(() => {
+    if (!user || !permissions) return []
+    if (permissions.vehiculeVisibility === 'all') return vehicules
+    if (permissions.vehiculeVisibility === 'own') {
+      return vehicules.filter(v => isAssignedTo(v, user.id))
+    }
+    return []
+  }, [user, permissions, vehicules])
+
+  const equipeUsers = useMemo(() => getActiveEquipeUsers(users ?? []), [users])
+
+  const teamRows = useMemo(() => {
+    return equipeUsers
+      .map(tech => {
+        const detail = dashboardSummary?.teamLoadDetailByTechnicien?.[String(tech.id)]
+        const activeVehicules = myVehicules.filter(
+          v => v.etat_actuel !== 'vert' && isAssignedTo(v, tech.id)
+        )
+        const total = isGlobalView
+          ? (dashboardSummary?.teamLoadByTechnicien?.[String(tech.id)] ?? detail?.total ?? 0)
+          : activeVehicules.length
+        const byEtat = isGlobalView
+          ? (detail?.byEtat ?? {})
+          : activeVehicules.reduce<Record<string, number>>((acc, v) => {
+              acc[v.etat_actuel] = (acc[v.etat_actuel] ?? 0) + 1
+              return acc
+            }, {})
+        const urgentsCount = isGlobalView
+          ? (detail?.urgents ?? 0)
+          : activeVehicules.filter(v => v.etat_actuel === 'rouge').length
+        return {
+          id: tech.id,
+          nom: tech.nom_complet,
+          role: tech.role,
+          total,
+          byEtat,
+          urgents: urgentsCount,
+        } satisfies TeamMemberDetail
+      })
+      .sort((a, b) => b.total - a.total || a.nom.localeCompare(b.nom, 'fr'))
+  }, [equipeUsers, dashboardSummary, isGlobalView, myVehicules])
+
+  useEffect(() => {
+    if (!permissions?.canManageUsers) return
+    const id = window.setInterval(() => {
+      void fetchDashboardSummary()
+    }, 30_000)
+    return () => window.clearInterval(id)
+  }, [permissions?.canManageUsers, fetchDashboardSummary])
+
+  useEffect(() => {
+    if (!selectedMember) return
+    const fresh = teamRows.find(r => r.id === selectedMember.id)
+    if (fresh) setSelectedMember(fresh)
+  }, [teamRows]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!selectedMember) {
+      setMemberVehicles([])
+      return
+    }
+    const token = getAccessToken()
+    if (!token) return
+    let cancelled = false
+    setMemberVehiclesLoading(true)
+    void (async () => {
+      try {
+        const res = await apiFetch<{ data: Vehicule[] }>('/vehicules', {
+          token,
+          params: {
+            technicien_id: selectedMember.id,
+            exclude_etat: 'vert',
+            page: 1,
+            limit: 50,
+          },
+        })
+        if (!cancelled) setMemberVehicles(Array.isArray(res.data) ? res.data : [])
+      } catch {
+        if (!cancelled) {
+          // Fallback: véhicules déjà en mémoire
+          setMemberVehicles(
+            myVehicules.filter(v => v.etat_actuel !== 'vert' && isAssignedTo(v, selectedMember.id))
+          )
+        }
+      } finally {
+        if (!cancelled) setMemberVehiclesLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedMember?.id, getAccessToken, myVehicules]) // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!user || !permissions) return null
 
-  const isGlobalView = permissions.vehiculeVisibility === 'all'
-  const myVehicules = permissions.vehiculeVisibility === 'all'
-    ? vehicules
-    : permissions.vehiculeVisibility === 'own'
-      ? vehicules.filter(v => v.technicien_id === user.id)
-      : []
   const totalVehicules = isGlobalView ? (stats?.total ?? myVehicules.length) : myVehicules.length
 
   const countByEtat = (etat: EtatVehicule) =>
@@ -36,9 +164,19 @@ export default function DashboardPage() {
 
   const etats: EtatVehicule[] = ['orange', 'mauve', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'vert', 'retour']
 
-  /** Libellé dashboard pour l’état rouge */
   const labelEtatDashboard = (etat: EtatVehicule) =>
     etat === 'rouge' ? 'À RÉSOUDRE' : ETAT_CONFIG[etat].label
+
+  const maxLoad = Math.max(1, ...teamRows.map(r => r.total))
+
+  const openMember = (row: TeamMemberDetail) => {
+    setSelectedMember(row)
+  }
+
+  const closeMember = () => {
+    setSelectedMember(null)
+    setMemberVehicles([])
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -53,7 +191,6 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Counters by color - scrollable on mobile */}
       <div className="flex gap-2.5 overflow-x-auto pb-1 sm:pb-0 sm:grid sm:grid-cols-3 lg:grid-cols-5 sm:overflow-visible -mx-4 px-4 sm:mx-0 sm:px-0">
         {etats.map(etat => {
           const cfg = ETAT_CONFIG[etat]
@@ -72,7 +209,6 @@ export default function DashboardPage() {
         })}
       </div>
 
-      {/* Quick stats */}
       <div className="grid grid-cols-3 gap-2 sm:gap-4">
         <Card padding="sm">
           <div className="flex items-center gap-2 sm:gap-3">
@@ -80,19 +216,19 @@ export default function DashboardPage() {
               <Car className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
             </div>
             <div className="min-w-0">
-              <p className="text-lg sm:text-2xl font-extrabold text-gray-900">{totalVehicules}</p>
-              <p className="text-[10px] sm:text-sm text-gray-500 truncate">{permissions.vehiculeVisibility === 'all' ? 'Total' : 'Mes véh.'}</p>
+              <p className="text-lg sm:text-2xl font-bold text-gray-900">{totalVehicules}</p>
+              <p className="text-[10px] sm:text-xs text-gray-500 truncate">{permissions.vehiculeVisibility === 'own' ? 'Mes véhicules' : 'Total véhicules'}</p>
             </div>
           </div>
         </Card>
         <Card padding="sm">
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="w-9 h-9 sm:w-11 sm:h-11 bg-red-50 rounded-xl flex items-center justify-center flex-shrink-0">
-              <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
+              <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 text-red-500" />
             </div>
             <div className="min-w-0">
-              <p className="text-lg sm:text-2xl font-extrabold text-gray-900">{problemsCount}</p>
-              <p className="text-[10px] sm:text-sm text-gray-500">À résoudre</p>
+              <p className="text-lg sm:text-2xl font-bold text-red-600">{problemsCount}</p>
+              <p className="text-[10px] sm:text-xs text-gray-500">À résoudre</p>
             </div>
           </div>
         </Card>
@@ -102,228 +238,324 @@ export default function DashboardPage() {
               <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
             </div>
             <div className="min-w-0">
-              <p className="text-lg sm:text-2xl font-extrabold text-gray-900">{countByEtat('vert')}</p>
-              <p className="text-[10px] sm:text-sm text-gray-500">Validés</p>
+              <p className="text-lg sm:text-2xl font-bold text-green-600">{countByEtat('vert')}</p>
+              <p className="text-[10px] sm:text-xs text-gray-500">Validés</p>
             </div>
           </div>
         </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-        {/* Alerts */}
-        <Card>
-          <div
-            className="flex items-center justify-between mb-3 cursor-pointer select-none hover:text-red-600"
-            onClick={() => navigate('/vehicules')}
-          >
-            <h2 className="text-sm sm:text-base font-bold">Alertes</h2>
-            <AlertTriangle className="w-4 h-4 text-gray-400" />
+        <Card padding="none" className="overflow-hidden">
+          <div className="px-4 sm:px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="font-semibold text-gray-900 flex items-center gap-2 text-sm sm:text-base">
+              <AlertTriangle className="w-4 h-4 text-red-500" />
+              Urgents
+            </h2>
+            <button onClick={() => navigate('/vehicules?etat=rouge')} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+              Voir tout <ArrowRight className="w-3 h-3" />
+            </button>
           </div>
-          <div className="space-y-2">
-            {urgents.length === 0 && anciens.length === 0 && (
-              <p className="text-sm text-gray-400 py-4 text-center">Aucune alerte</p>
-            )}
-            {urgents.map(v => (
-              <button key={`r-${v.id}`} onClick={() => navigate(`/vehicules/${v.id}`)}
-                className="w-full flex items-center gap-2.5 bg-red-50 rounded-xl px-3 py-2.5 text-left hover:bg-red-100 active:bg-red-200 transition-colors"
-              >
+          <div className="divide-y divide-gray-50 max-h-64 overflow-y-auto">
+            {urgents.length === 0 ? (
+              <p className="p-4 text-sm text-gray-400 text-center">Aucun véhicule urgent</p>
+            ) : urgents.slice(0, 5).map(v => (
+              <button key={v.id} onClick={() => navigate(`/vehicules/${v.id}`)}
+                className="w-full px-4 py-3 flex items-center gap-3 hover:bg-red-50/50 transition-colors text-left">
                 <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-red-800 truncate">{v.modele} — {v.defaut}</p>
-                  <p className="text-xs text-red-600">{v.immatriculation || 'Sans immat.'} · {daysSince(v.date_entree)}j</p>
+                  <p className="text-sm font-medium text-gray-900 truncate">{v.modele}</p>
+                  <p className="text-xs text-gray-500">{v.immatriculation}</p>
                 </div>
-                <ArrowRight className="w-4 h-4 text-red-400 flex-shrink-0" />
-              </button>
-            ))}
-            {anciens.filter(v => v.etat_actuel !== 'rouge').slice(0, 3).map(v => (
-              <button key={`a-${v.id}`} onClick={() => navigate(`/vehicules/${v.id}`)}
-                className="w-full flex items-center gap-2.5 bg-orange-50 rounded-xl px-3 py-2.5 text-left hover:bg-orange-100 active:bg-orange-200 transition-colors"
-              >
-                <Clock className="w-4 h-4 text-orange-500 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-orange-800 truncate">{v.modele} — {daysSince(v.date_entree)}j</p>
-                  <p className="text-xs text-orange-600">{ETAT_CONFIG[v.etat_actuel].label}</p>
-                </div>
+                <span className="text-xs text-red-600 font-medium">{daysSince(v.date_entree)}j</span>
               </button>
             ))}
           </div>
         </Card>
 
-        {/* Recent activity */}
-        <Card>
-          <div
-            className="flex items-center justify-between mb-3 cursor-pointer select-none hover:text-indigo-600"
-            onClick={() => navigate('/vehicules')}
-          >
-            <h2 className="text-sm sm:text-base font-bold">Activité récente</h2>
-            <Clock className="w-4 h-4 text-gray-400" />
+        <Card padding="none" className="overflow-hidden">
+          <div className="px-4 sm:px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="font-semibold text-gray-900 flex items-center gap-2 text-sm sm:text-base">
+              <Clock className="w-4 h-4 text-amber-500" />
+              Anciens (&gt; 7 jours)
+            </h2>
           </div>
-          <div className="space-y-2.5">
-            {recentActivity.length === 0 && (
-              <p className="text-sm text-gray-400 py-4 text-center">Aucune activité</p>
-            )}
-            {recentActivity.map(h => {
-              const cfg = ETAT_CONFIG[h.etat_nouveau]
-              const vehicleModel =
-                (h as typeof h & { vehicleModel?: string }).vehicleModel ||
-                vehicules.find(vv => vv.id === h.vehicule_id)?.modele
-              return (
-                <div key={h.id} className="flex items-start gap-2.5">
-                  <div className="w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: cfg.color }} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-800">
-                      <span className="font-semibold">{h.utilisateur_nom}</span>
-                      {' → '}
-                      <span className="font-semibold" style={{ color: cfg.color }}>{cfg.label}</span>
-                      {vehicleModel && (
-                        <span className="text-gray-500"> · {vehicleModel}</span>
-                      )}
-                    </p>
-                    <p className="text-xs text-gray-400 truncate">{h.commentaire}</p>
-                  </div>
+          <div className="divide-y divide-gray-50 max-h-64 overflow-y-auto">
+            {anciens.length === 0 ? (
+              <p className="p-4 text-sm text-gray-400 text-center">Aucun véhicule ancien</p>
+            ) : anciens.slice(0, 5).map(v => (
+              <button key={v.id} onClick={() => navigate(`/vehicules/${v.id}`)}
+                className="w-full px-4 py-3 flex items-center gap-3 hover:bg-amber-50/50 transition-colors text-left">
+                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: ETAT_CONFIG[v.etat_actuel].color }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{v.modele}</p>
+                  <p className="text-xs text-gray-500">{v.immatriculation} · {labelEtatDashboard(v.etat_actuel)}</p>
                 </div>
-              )
-            })}
+                <span className="text-xs text-amber-600 font-medium">{daysSince(v.date_entree)}j</span>
+              </button>
+            ))}
           </div>
         </Card>
       </div>
 
-      {/* Team — charge réelle par technicien (affectation + états actifs) */}
-      {permissions.canManageUsers && (
+      {recentActivity.length > 0 && (
         <Card padding="none" className="overflow-hidden">
-          <div
-            className="px-4 sm:px-5 py-3.5 border-b border-violet-100 bg-gradient-to-r from-violet-50 via-white to-fuchsia-50/40 flex items-center justify-between cursor-pointer select-none hover:from-violet-100/80 transition-colors"
-            onClick={() => navigate('/equipe/membres')}
-          >
-            <div>
-              <h2 className="text-sm sm:text-base font-bold text-gray-900 flex items-center gap-2">
-                <Users className="w-4 h-4 text-violet-600" />
-                Équipe atelier
-              </h2>
-              <p className="text-[11px] sm:text-xs text-gray-500 mt-0.5">
-                Véhicules actifs (hors validés) · mis à jour selon affectation et état
-              </p>
-            </div>
-            <ArrowRight className="w-4 h-4 text-violet-400" />
+          <div className="px-4 sm:px-5 py-3 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-900 text-sm sm:text-base">Activité récente</h2>
           </div>
-          <div className="p-3 sm:p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-3">
-            {(() => {
-              const techs = users.filter(u => u.statut === 'actif' && u.role === 'technicien')
-              const maxLoad = Math.max(
-                1,
-                ...techs.map(t =>
-                  isGlobalView
-                    ? (dashboardSummary?.teamLoadByTechnicien?.[String(t.id)] ?? 0)
-                    : myVehicules.filter(
-                        v =>
-                          v.etat_actuel !== 'vert' &&
-                          (v.technicien_id === t.id ||
-                            (v.technicien_ids ?? []).includes(t.id))
-                      ).length
-                )
-              )
-              return techs
-                .map(tech => {
-                  const detail = dashboardSummary?.teamLoadDetailByTechnicien?.[String(tech.id)]
-                  const assignedCount = isGlobalView
-                    ? (dashboardSummary?.teamLoadByTechnicien?.[String(tech.id)] ?? detail?.total ?? 0)
-                    : myVehicules.filter(
-                        v =>
-                          v.etat_actuel !== 'vert' &&
-                          (v.technicien_id === tech.id ||
-                            (v.technicien_ids ?? []).includes(tech.id))
-                      ).length
-                  const urgentsCount = isGlobalView
-                    ? (detail?.urgents ?? 0)
-                    : myVehicules.filter(
-                        v =>
-                          v.etat_actuel === 'rouge' &&
-                          (v.technicien_id === tech.id ||
-                            (v.technicien_ids ?? []).includes(tech.id))
-                      ).length
-                  const enCoursCount = isGlobalView
-                    ? (detail?.byEtat?.orange ?? 0)
-                    : myVehicules.filter(
-                        v =>
-                          v.etat_actuel === 'orange' &&
-                          (v.technicien_id === tech.id ||
-                            (v.technicien_ids ?? []).includes(tech.id))
-                      ).length
-                  const loadRatio = assignedCount / maxLoad
-                  const tone =
-                    assignedCount === 0
-                      ? { ring: 'ring-gray-200', bar: 'bg-gray-300', badge: 'bg-gray-100 text-gray-600', avatar: 'from-gray-200 to-gray-300 text-gray-600' }
-                      : urgentsCount > 0
-                        ? { ring: 'ring-red-200', bar: 'bg-red-500', badge: 'bg-red-100 text-red-700', avatar: 'from-red-400 to-rose-500 text-white' }
-                        : assignedCount >= 5
-                          ? { ring: 'ring-orange-200', bar: 'bg-orange-500', badge: 'bg-orange-100 text-orange-800', avatar: 'from-orange-400 to-amber-500 text-white' }
-                          : { ring: 'ring-emerald-200', bar: 'bg-emerald-500', badge: 'bg-emerald-100 text-emerald-800', avatar: 'from-violet-500 to-fuchsia-500 text-white' }
-
-                  return { tech, assignedCount, urgentsCount, enCoursCount, loadRatio, tone }
-                })
-                .sort((a, b) => b.assignedCount - a.assignedCount)
-                .map(({ tech, assignedCount, urgentsCount, enCoursCount, loadRatio, tone }) => (
-                  <button
-                    key={tech.id}
-                    type="button"
-                    onClick={() => navigate('/vehicules')}
-                    className={`text-left rounded-2xl border border-gray-100 bg-white p-3 shadow-sm hover:shadow-md hover:border-violet-200 transition-all ring-1 ${tone.ring}`}
-                  >
-                    <div className="flex items-center gap-2.5 mb-2.5">
-                      <div
-                        className={`w-9 h-9 rounded-xl bg-gradient-to-br ${tone.avatar} flex items-center justify-center text-sm font-bold shadow-sm flex-shrink-0`}
-                      >
-                        {tech.nom_complet.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs sm:text-sm font-bold text-gray-900 truncate leading-tight">
-                          {tech.nom_complet}
-                        </p>
-                        <p className="text-[10px] text-gray-400 truncate">Technicien</p>
-                      </div>
-                    </div>
-                    <div className="flex items-end justify-between gap-2 mb-2">
-                      <div>
-                        <p className="text-2xl font-black text-gray-900 tabular-nums leading-none">
-                          {assignedCount}
-                        </p>
-                        <p className="text-[10px] font-semibold text-gray-500 mt-0.5 uppercase tracking-wide">
-                          véhicule{assignedCount !== 1 ? 's' : ''}
-                        </p>
-                      </div>
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${tone.badge}`}>
-                        {assignedCount === 0 ? 'Libre' : urgentsCount > 0 ? `${urgentsCount} urgent` : 'Actif'}
-                      </span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden mb-2">
-                      <div
-                        className={`h-full rounded-full transition-all ${tone.bar}`}
-                        style={{ width: `${Math.max(assignedCount === 0 ? 0 : 8, loadRatio * 100)}%` }}
-                      />
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {enCoursCount > 0 && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-100">
-                          {enCoursCount} EN COURS
-                        </span>
-                      )}
-                      {urgentsCount > 0 && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-100">
-                          {urgentsCount} À RÉSOUDRE
-                        </span>
-                      )}
-                      {assignedCount > 0 && enCoursCount === 0 && urgentsCount === 0 && (
-                        <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-gray-50 text-gray-500 border border-gray-100">
-                          Autres états
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                ))
-            })()}
+          <div className="divide-y divide-gray-50">
+            {recentActivity.map((h, i) => (
+              <div key={`${h.id}-${i}`} className="px-4 py-2.5 flex items-center gap-3 text-sm">
+                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: ETAT_CONFIG[h.etat_nouveau as EtatVehicule]?.color ?? '#94a3b8' }} />
+                <p className="flex-1 text-gray-700 truncate">
+                  <span className="font-medium">{h.vehicleModel || `Véhicule #${h.vehicule_id}`}</span>
+                  {' → '}
+                  <span className="text-gray-500">{labelEtatDashboard((h.etat_nouveau as EtatVehicule) || 'orange')}</span>
+                </p>
+                <span className="text-xs text-gray-400 flex-shrink-0">
+                  {h.date_changement?.slice(0, 16).replace('T', ' ')}
+                </span>
+              </div>
+            ))}
           </div>
         </Card>
       )}
+
+      {/* Équipe atelier — tous utilisateurs actifs, tous états sauf archivés */}
+      {permissions.canManageUsers && (
+        <Card padding="none" className="overflow-hidden border-stone-200/80 shadow-sm">
+          <div className="px-4 sm:px-5 py-4 border-b border-stone-100 bg-[#faf8f5] flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm sm:text-base font-bold text-stone-900 flex items-center gap-2">
+                <Users className="w-4 h-4 text-stone-600" />
+                Équipe atelier
+              </h2>
+              <p className="text-[11px] sm:text-xs text-stone-500 mt-0.5">
+                Tous les états sauf archivés (validés)
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/utilisateurs')}
+              className="text-xs font-medium text-stone-600 hover:text-stone-900 flex items-center gap-1"
+            >
+              Utilisateurs <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="p-3 sm:p-4 grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {teamRows.map(row => {
+              const loadRatio = row.total / maxLoad
+              const etatChips = ETATS_ACTIFS.filter(e => (row.byEtat[e] ?? 0) > 0)
+              return (
+                <button
+                  key={row.id}
+                  type="button"
+                  onClick={() => openMember(row)}
+                  className={cn(
+                    'text-left rounded-2xl border bg-white p-3.5 transition-all hover:shadow-md focus:outline-none focus:ring-2 focus:ring-stone-300',
+                    row.urgents > 0
+                      ? 'border-red-200 hover:border-red-300'
+                      : row.total > 0
+                        ? 'border-stone-200 hover:border-stone-300'
+                        : 'border-stone-100 opacity-90'
+                  )}
+                >
+                  <div className="flex items-start gap-3 mb-3">
+                    <div
+                      className={cn(
+                        'w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0',
+                        row.total === 0
+                          ? 'bg-stone-100 text-stone-500'
+                          : row.urgents > 0
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-amber-100 text-amber-900'
+                      )}
+                    >
+                      {row.nom.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-stone-900 truncate leading-tight">
+                        {row.nom}
+                      </p>
+                      <p className="text-[11px] text-stone-400 capitalize mt-0.5">{row.role}</p>
+                    </div>
+                    <span
+                      className={cn(
+                        'text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0',
+                        row.total === 0
+                          ? 'bg-stone-100 text-stone-500'
+                          : row.urgents > 0
+                            ? 'bg-red-50 text-red-700'
+                            : 'bg-emerald-50 text-emerald-700'
+                      )}
+                    >
+                      {row.total === 0 ? 'Libre' : row.urgents > 0 ? 'Urgent' : 'Actif'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-baseline gap-1.5 mb-2">
+                    <span className="text-3xl font-bold text-stone-900 tabular-nums tracking-tight">
+                      {row.total}
+                    </span>
+                    <span className="text-xs text-stone-500 font-medium">
+                      véhicule{row.total !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+
+                  <div className="h-1 rounded-full bg-stone-100 overflow-hidden mb-2.5">
+                    <div
+                      className={cn(
+                        'h-full rounded-full transition-all',
+                        row.urgents > 0 ? 'bg-red-400' : row.total > 0 ? 'bg-amber-500' : 'bg-stone-200'
+                      )}
+                      style={{ width: `${Math.max(row.total === 0 ? 0 : 6, loadRatio * 100)}%` }}
+                    />
+                  </div>
+
+                  {etatChips.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {etatChips.map(etat => (
+                        <span
+                          key={etat}
+                          className="text-[9px] font-bold px-1.5 py-0.5 rounded-md border"
+                          style={{
+                            color: ETAT_CONFIG[etat].color,
+                            borderColor: `${ETAT_CONFIG[etat].color}33`,
+                            backgroundColor: `${ETAT_CONFIG[etat].color}12`,
+                          }}
+                        >
+                          {row.byEtat[etat]} {labelEtatDashboard(etat)}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-stone-400">Aucun véhicule actif</p>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </Card>
+      )}
+
+      <Modal
+        open={selectedMember != null}
+        onClose={closeMember}
+        title={selectedMember?.nom ?? 'Membre'}
+        subtitle={
+          selectedMember
+            ? `${selectedMember.total} véhicule(s) actif(s) · hors archivés`
+            : undefined
+        }
+        maxWidth="lg"
+      >
+        {selectedMember && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-1.5">
+              {ETATS_ACTIFS.map(etat => {
+                const n = selectedMember.byEtat[etat] ?? 0
+                if (n <= 0) return null
+                return (
+                  <span
+                    key={etat}
+                    className="text-xs font-bold px-2.5 py-1 rounded-full border"
+                    style={{
+                      color: ETAT_CONFIG[etat].color,
+                      borderColor: `${ETAT_CONFIG[etat].color}44`,
+                      backgroundColor: `${ETAT_CONFIG[etat].color}14`,
+                    }}
+                  >
+                    {n} {labelEtatDashboard(etat)}
+                  </span>
+                )
+              })}
+            </div>
+
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-500 mb-2">
+                Véhicules de {selectedMember.nom}
+              </h3>
+              {memberVehiclesLoading ? (
+                <p className="text-sm text-stone-500 py-6 text-center">Chargement des véhicules…</p>
+              ) : memberVehicles.length === 0 ? (
+                <p className="text-sm text-stone-500 py-6 text-center">
+                  Aucun véhicule actif trouvé pour ce membre.
+                </p>
+              ) : (
+                <ul className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+                  {memberVehicles.map(v => {
+                    const etat = v.etat_actuel as EtatVehicule
+                    const cfg = ETAT_CONFIG[etat]
+                    const defaut = stripVehiculeAssigneesMeta(v.defaut || v.notes || '').trim()
+                    return (
+                      <li key={v.id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            closeMember()
+                            navigate(`/vehicules/${v.id}`)
+                          }}
+                          className="w-full text-left rounded-xl border border-stone-200 bg-white px-3.5 py-3 hover:border-amber-300 hover:bg-amber-50/40 transition-colors"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div
+                              className="w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0"
+                              style={{ backgroundColor: cfg?.color ?? '#a8a29e' }}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-bold text-stone-900 truncate">
+                                  {v.modele || '—'}
+                                </p>
+                                <span
+                                  className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0"
+                                  style={{
+                                    color: cfg?.color,
+                                    backgroundColor: `${cfg?.color ?? '#a8a29e'}18`,
+                                  }}
+                                >
+                                  {cfg ? labelEtatDashboard(etat) : v.etat_actuel}
+                                </span>
+                              </div>
+                              <p className="text-xs font-semibold text-stone-600 mt-0.5">
+                                {v.immatriculation}
+                              </p>
+                              <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-[11px] text-stone-400">
+                                <span>Entrée {v.date_entree || '—'}</span>
+                                <span>{daysSince(v.date_entree)} j</span>
+                                {v.type ? <span className="capitalize">{v.type}</span> : null}
+                              </div>
+                              {defaut ? (
+                                <p className="text-xs text-stone-500 mt-1.5 line-clamp-2">{defaut}</p>
+                              ) : null}
+                            </div>
+                            <ArrowRight className="w-4 h-4 text-stone-300 flex-shrink-0 mt-1" />
+                          </div>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-1 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => {
+                  const id = selectedMember.id
+                  closeMember()
+                  navigate(`/vehicules?technicien=${id}`)
+                }}
+                className="text-sm font-medium text-stone-700 hover:text-stone-900 underline"
+              >
+                Voir dans Véhicules →
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

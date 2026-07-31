@@ -539,11 +539,21 @@ router.get('/dashboard-summary', authenticate(), async (req: AuthRequest, res) =
       : []
     const modelByVehiculeId = new Map<number, string>((recentVehicles as Array<{ id: number; modele: string }>).map(v => [v.id, v.modele]))
 
-    /** Charge réelle par technicien : technicien_id + ASSIGNEES, hors véhicules validés (vert). */
+    /** Charge réelle : affectés (tech + responsable), hors archivés/validés (vert). */
     const teamLoadByTechnicien: Record<string, number> = {}
     const teamLoadDetailByTechnicien: Record<
       string,
-      { total: number; byEtat: Record<string, number>; urgents: number }
+      {
+        total: number
+        byEtat: Record<string, number>
+        urgents: number
+        vehicules: Array<{
+          id: number
+          immatriculation: string
+          modele: string
+          etat_actuel: string
+        }>
+      }
     > = {}
 
     if (!scoped) {
@@ -568,29 +578,49 @@ router.get('/dashboard-summary', authenticate(), async (req: AuthRequest, res) =
       })
 
       for (const raw of activeVehicles as Array<{
+        id: number
+        immatriculation: string
+        modele: string
         technicien_id: number | null
+        responsable_id: number | null
         notes: string
         defaut: string
         etat_actuel: string
       }>) {
         const mapped = toVehicule(raw as any)
-        const techIds = mapped.technicien_ids?.length
-          ? mapped.technicien_ids
-          : mapped.technicien_id != null
-            ? [mapped.technicien_id]
-            : []
+        const assigneeIds = new Set<number>()
+        const addId = (n: unknown) => {
+          const id = Number(n)
+          if (Number.isInteger(id) && id > 0) assigneeIds.add(id)
+        }
+        addId(mapped.technicien_id)
+        addId(mapped.responsable_id)
+        for (const id of mapped.technicien_ids ?? []) addId(id)
+        for (const id of mapped.responsable_ids ?? []) addId(id)
+
         const etat = mapped.etat_actuel
-        for (const tid of techIds) {
+        const vehicleBrief = {
+          id: mapped.id,
+          immatriculation: mapped.immatriculation,
+          modele: mapped.modele,
+          etat_actuel: etat,
+        }
+        for (const tid of assigneeIds) {
           const key = String(tid)
           teamLoadByTechnicien[key] = (teamLoadByTechnicien[key] ?? 0) + 1
           if (!teamLoadDetailByTechnicien[key]) {
-            teamLoadDetailByTechnicien[key] = { total: 0, byEtat: {}, urgents: 0 }
+            teamLoadDetailByTechnicien[key] = { total: 0, byEtat: {}, urgents: 0, vehicules: [] }
           }
           const detail = teamLoadDetailByTechnicien[key]
           detail.total += 1
           detail.byEtat[etat] = (detail.byEtat[etat] ?? 0) + 1
           if (etat === 'rouge') detail.urgents += 1
+          detail.vehicules.push(vehicleBrief)
         }
+      }
+
+      for (const detail of Object.values(teamLoadDetailByTechnicien)) {
+        detail.vehicules.sort((a, b) => a.immatriculation.localeCompare(b.immatriculation, 'fr'))
       }
     }
 

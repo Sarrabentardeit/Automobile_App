@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
+  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -128,11 +129,14 @@ export default function StatistiquesScreen({
   const now = new Date()
   const [statsMonth, setStatsMonth] = useState(now.getMonth() + 1)
   const [statsYear, setStatsYear] = useState(now.getFullYear())
+  const [techTempsMonth, setTechTempsMonth] = useState(now.getMonth() + 1)
+  const [techTempsYear, setTechTempsYear] = useState(now.getFullYear())
   const [trendGroupBy, setTrendGroupBy] = useState<StatsTrendGroupBy>('month')
   const [dashboard, setDashboard] = useState<StatsDashboardData | null>(null)
   const [trendData, setTrendData] = useState<Awaited<ReturnType<typeof fetchStatsTrends>>>([])
   const [techTemps, setTechTemps] = useState<TechTempsEnCours[]>([])
   const [techTempsLoading, setTechTempsLoading] = useState(false)
+  const [selectedTechTemps, setSelectedTechTemps] = useState<TechTempsEnCours | null>(null)
   const [loading, setLoading] = useState(true)
   const [trendLoading, setTrendLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -155,26 +159,50 @@ export default function StatistiquesScreen({
     }
   }, [accessToken, statsYear, trendGroupBy])
 
-  const loadTechTemps = useCallback(async () => {
-    setTechTempsLoading(true)
+  const loadTechTemps = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setTechTempsLoading(true)
     try {
       const data = await fetchTempsEnCoursTechniciens(accessToken, {
-        year: statsYear,
-        month: statsMonth,
+        year: techTempsYear,
+        month: techTempsMonth,
       })
       setTechTemps(data)
     } catch {
       setTechTemps([])
     } finally {
-      setTechTempsLoading(false)
+      if (!opts?.silent) setTechTempsLoading(false)
     }
-  }, [accessToken, statsYear, statsMonth])
+  }, [accessToken, techTempsYear, techTempsMonth])
 
   useEffect(() => {
     if (!canManageUsers) return
     setLoading(true)
     void Promise.all([loadDashboard(), loadTrends(), loadTechTemps()]).finally(() => setLoading(false))
   }, [canManageUsers, loadDashboard, loadTrends, loadTechTemps])
+
+  useEffect(() => {
+    if (!canManageUsers) return
+    const id = setInterval(() => {
+      void loadTechTemps({ silent: true })
+    }, 60_000)
+    return () => clearInterval(id)
+  }, [canManageUsers, loadTechTemps])
+
+  useEffect(() => {
+    if (!selectedTechTemps) return
+    const fresh = techTemps.find((t) => t.technicienId === selectedTechTemps.technicienId)
+    setSelectedTechTemps(fresh ?? null)
+  }, [techTemps]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const techTempsInsights = useMemo(() => {
+    if (techTemps.length === 0) return null
+    const plusLent = techTemps[0]
+    const plusRapide = techTemps[techTemps.length - 1]
+    const totalVeh = techTemps.reduce((s, r) => s + r.vehiculesCount, 0)
+    const totalMin = techTemps.reduce((s, r) => s + r.totalMinutes, 0)
+    const moyenneEquipe = totalVeh > 0 ? Math.round(totalMin / totalVeh) : 0
+    return { plusLent, plusRapide, totalVeh, moyenneEquipe, nbTechs: techTemps.length }
+  }, [techTemps])
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -232,6 +260,8 @@ export default function StatistiquesScreen({
 
   const years = yearOptions(statsYear)
   const moisLabel = monthYearLabel(statsMonth, statsYear)
+  const techTempsMoisLabel = monthYearLabel(techTempsMonth, techTempsYear)
+  const techTempsYears = yearOptions(techTempsYear)
   const fmt = (n: number) => `${formatMontant(n)} DT`
 
   const formatDuree = (minutes: number) => {
@@ -494,9 +524,59 @@ export default function StatistiquesScreen({
 
         <SectionCard
           title="Temps moyen EN COURS"
-          subtitle={`Par technicien — ${moisLabel}`}
+          subtitle={`Par technicien — ${techTempsMoisLabel} · appuyez un nom pour le détail`}
           icon="timer-outline"
         >
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.yearRow}>
+            {techTempsYears.map((y) => (
+              <Pressable
+                key={`tech-year-${y}`}
+                onPress={() => setTechTempsYear(y)}
+                style={[styles.yearChip, techTempsYear === y && styles.yearChipOn]}
+              >
+                <Text style={[styles.yearChipText, techTempsYear === y && styles.yearChipTextOn]}>{y}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.monthRow}>
+            {MOIS_FR.map((label, idx) => {
+              const m = idx + 1
+              const active = techTempsMonth === m
+              return (
+                <Pressable
+                  key={`tech-mois-${label}`}
+                  onPress={() => setTechTempsMonth(m)}
+                  style={[styles.monthChip, active && styles.monthChipOn]}
+                >
+                  <Text style={[styles.monthChipText, active && styles.monthChipTextOn]}>
+                    {label.slice(0, 3)}
+                  </Text>
+                </Pressable>
+              )
+            })}
+          </ScrollView>
+
+          {techTempsInsights ? (
+            <View style={styles.insightRow}>
+              <View style={[styles.insightCard, { backgroundColor: '#fff7ed' }]}>
+                <Text style={styles.insightLabel}>Plus long</Text>
+                <Text style={styles.insightName} numberOfLines={1}>
+                  {techTempsInsights.plusLent.nom}
+                </Text>
+                <Text style={styles.insightValue}>{formatDuree(techTempsInsights.plusLent.moyenneMinutes)}</Text>
+              </View>
+              <View style={[styles.insightCard, { backgroundColor: '#ecfdf5' }]}>
+                <Text style={[styles.insightLabel, { color: '#047857' }]}>Plus rapide</Text>
+                <Text style={styles.insightName} numberOfLines={1}>
+                  {techTempsInsights.plusRapide.nom}
+                </Text>
+                <Text style={[styles.insightValue, { color: '#047857' }]}>
+                  {formatDuree(techTempsInsights.plusRapide.moyenneMinutes)}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
           {techTempsLoading ? (
             <Text style={styles.emptyHint}>Chargement…</Text>
           ) : techTemps.length === 0 ? (
@@ -506,9 +586,13 @@ export default function StatistiquesScreen({
           ) : (
             <View style={styles.techTempsList}>
               {techTemps.map((row) => (
-                <View key={row.technicienId} style={styles.techTempsRow}>
+                <Pressable
+                  key={row.technicienId}
+                  style={styles.techTempsRow}
+                  onPress={() => setSelectedTechTemps(row)}
+                >
                   <View style={styles.techTempsLeft}>
-                    <Text style={styles.techTempsName} numberOfLines={1}>
+                    <Text style={[styles.techTempsName, styles.techTempsNameLink]} numberOfLines={1}>
                       {row.nom}
                     </Text>
                     <Text style={styles.techTempsMeta}>
@@ -520,7 +604,8 @@ export default function StatistiquesScreen({
                     <Text style={styles.techTempsAvg}>{formatDuree(row.moyenneMinutes)}</Text>
                     <Text style={styles.techTempsAvgLabel}>moy. / véhicule</Text>
                   </View>
-                </View>
+                  <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
+                </Pressable>
               ))}
             </View>
           )}
@@ -528,6 +613,57 @@ export default function StatistiquesScreen({
 
         <View style={styles.footerSpacer} />
       </ScrollView>
+
+      <Modal
+        visible={selectedTechTemps != null}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setSelectedTechTemps(null)}
+      >
+        <View style={styles.detailModal}>
+          <View style={styles.detailHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.detailTitle}>{selectedTechTemps?.nom ?? ''}</Text>
+              <Text style={styles.detailSub}>
+                EN COURS — {techTempsMoisLabel} · {selectedTechTemps?.vehiculesCount ?? 0} véhicule(s)
+              </Text>
+            </View>
+            <Pressable onPress={() => setSelectedTechTemps(null)} hitSlop={12}>
+              <Ionicons name="close" size={24} color={theme.text} />
+            </Pressable>
+          </View>
+          {selectedTechTemps ? (
+            <ScrollView contentContainerStyle={styles.detailBody}>
+              <View style={styles.detailKpis}>
+                <View style={styles.detailKpi}>
+                  <Text style={styles.detailKpiLabel}>Total</Text>
+                  <Text style={styles.detailKpiValue}>{formatDuree(selectedTechTemps.totalMinutes)}</Text>
+                </View>
+                <View style={[styles.detailKpi, styles.detailKpiAccent]}>
+                  <Text style={[styles.detailKpiLabel, { color: '#c2410c' }]}>Moyenne</Text>
+                  <Text style={[styles.detailKpiValue, { color: '#c2410c' }]}>
+                    {formatDuree(selectedTechTemps.moyenneMinutes)}
+                  </Text>
+                </View>
+              </View>
+              {(selectedTechTemps.vehicules?.length ?? 0) === 0 ? (
+                <Text style={styles.emptyHint}>Aucun détail véhicule.</Text>
+              ) : (
+                selectedTechTemps.vehicules!.map((v) => (
+                  <View key={v.vehiculeId} style={styles.vehDetailCard}>
+                    <Text style={styles.vehPlate}>{v.immatriculation}</Text>
+                    <Text style={styles.vehModel}>{v.modele}</Text>
+                    <View style={styles.vehMetaRow}>
+                      <Text style={styles.vehTime}>{formatDuree(v.minutes)}</Text>
+                      <Text style={styles.vehDate}>{v.lastChange}</Text>
+                    </View>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          ) : null}
+        </View>
+      </Modal>
 
       <AppToast message={toast} type="error" onDismiss={() => setToast(null)} />
     </View>
@@ -754,7 +890,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: 8,
     padding: 12,
     borderRadius: theme.radius.md,
     backgroundColor: '#fff7ed',
@@ -763,8 +899,53 @@ const styles = StyleSheet.create({
   },
   techTempsLeft: { flex: 1, minWidth: 0 },
   techTempsName: { fontSize: 14, fontWeight: '700', color: theme.text },
+  techTempsNameLink: { color: '#c2410c' },
   techTempsMeta: { fontSize: 11, color: theme.textMuted, marginTop: 2 },
   techTempsBadge: { alignItems: 'flex-end' },
   techTempsAvg: { fontSize: 14, fontWeight: '800', color: '#c2410c' },
   techTempsAvgLabel: { fontSize: 10, color: '#ea580c', marginTop: 2, fontWeight: '600' },
+  insightRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  insightCard: { flex: 1, borderRadius: 12, padding: 10 },
+  insightLabel: { fontSize: 10, fontWeight: '700', color: '#c2410c', textTransform: 'uppercase' },
+  insightName: { fontSize: 13, fontWeight: '700', color: theme.text, marginTop: 4 },
+  insightValue: { fontSize: 12, fontWeight: '700', color: '#c2410c', marginTop: 2 },
+  detailModal: { flex: 1, backgroundColor: theme.bg },
+  detailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+    backgroundColor: theme.card,
+  },
+  detailTitle: { fontSize: 18, fontWeight: '800', color: theme.text },
+  detailSub: { fontSize: 12, color: theme.textMuted, marginTop: 2 },
+  detailBody: { padding: 16, gap: 10, paddingBottom: 40 },
+  detailKpis: { flexDirection: 'row', gap: 8, marginBottom: 4 },
+  detailKpi: {
+    flex: 1,
+    backgroundColor: theme.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
+    padding: 12,
+  },
+  detailKpiAccent: { backgroundColor: '#fff7ed', borderColor: '#fed7aa' },
+  detailKpiLabel: { fontSize: 10, fontWeight: '700', color: theme.textMuted, textTransform: 'uppercase' },
+  detailKpiValue: { fontSize: 16, fontWeight: '800', color: theme.text, marginTop: 4 },
+  vehDetailCard: {
+    backgroundColor: theme.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
+    padding: 12,
+  },
+  vehPlate: { fontSize: 15, fontWeight: '800', color: theme.text },
+  vehModel: { fontSize: 13, color: theme.textMuted, marginTop: 2 },
+  vehMetaRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
+  vehTime: { fontSize: 13, fontWeight: '700', color: '#c2410c' },
+  vehDate: { fontSize: 12, color: theme.textMuted },
 })

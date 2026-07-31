@@ -116,7 +116,12 @@ export default function VehiculesPage() {
   )
   const [recherche, setRecherche] = useState('')
   const [rechercheDebounced, setRechercheDebounced] = useState('')
-  const [technicienId, setTechnicienId] = useState<number | undefined>()
+  const [technicienId, setTechnicienId] = useState<number | undefined>(() => {
+    const raw = searchParams.get('technicien')
+    if (!raw) return undefined
+    const n = Number(raw)
+    return Number.isFinite(n) && n > 0 ? n : undefined
+  })
   const [serviceType, setServiceType] = useState<ServiceType | undefined>()
   const [dateFilterMode, setDateFilterMode] = useState<'toutes' | 'aujourdhui' | 'hier' | 'semaine' | 'mois' | 'date'>('toutes')
   const [dateFilter, setDateFilter] = useState('')

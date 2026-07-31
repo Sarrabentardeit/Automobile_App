@@ -33,6 +33,14 @@ async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   }
 }
 
+export type TechTempsVehicule = {
+  vehiculeId: number
+  immatriculation: string
+  modele: string
+  minutes: number
+  lastChange: string
+}
+
 export type TechTempsEnCours = {
   technicienId: number
   nom: string
@@ -41,6 +49,7 @@ export type TechTempsEnCours = {
   moyenneMinutes: number
   moyenneHeures: number
   totalHeures: number
+  vehicules?: TechTempsVehicule[]
 }
 
 export function fetchTempsEnCoursTechniciens(
