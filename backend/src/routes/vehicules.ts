@@ -5,6 +5,7 @@ import {
   groupModelesByBrand,
   slugToModelePrefix,
 } from '../lib/vehiculeBrands'
+import { whereUserAssignedToVehicule } from '../lib/vehiculeAssignees'
 import { authenticate, type AuthRequest } from '../middleware/auth'
 import { promises as fs } from 'fs'
 import path from 'path'
@@ -273,26 +274,6 @@ function mergeNotesWithAssignees(notesRaw: string | null | undefined, technicien
   const base = splitNotesAndAssignees(notesRaw).notes
   const meta = `${ASSIGNEES_TAG}${JSON.stringify({ technicien_ids, responsable_ids })}]]`
   return base ? `${base}\n\n${meta}` : meta
-}
-
-/** Filtre Prisma : utilisateur assigné (colonne principale ou tag [[ASSIGNEES:…]] dans notes). */
-function whereUserAssignedToVehicule(userId: number): Record<string, unknown> {
-  const id = String(userId)
-  const notesMatch: Record<string, unknown>[] = [
-    { notes: { contains: `"technicien_ids":[${id},` } },
-    { notes: { contains: `"technicien_ids":[${id}]` } },
-    { notes: { contains: `"technicien_ids": [${id},` } },
-    { notes: { contains: `"technicien_ids": [${id}]` } },
-    { notes: { contains: `"responsable_ids":[${id},` } },
-    { notes: { contains: `"responsable_ids":[${id}]` } },
-    { notes: { contains: `"responsable_ids": [${id},` } },
-    { notes: { contains: `"responsable_ids": [${id}]` } },
-    { notes: { contains: `,${id},` } },
-    { notes: { contains: `,${id}]` } },
-  ]
-  return {
-    OR: [{ technicien_id: userId }, { responsable_id: userId }, ...notesMatch],
-  }
 }
 
 function toVehicule(v: {

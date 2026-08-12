@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { prisma } from '../lib/prisma'
+import { isUserAssignedToVehicule } from '../lib/vehiculeAssignees'
 import { detectVehiculeBrand } from '../lib/vehiculeBrands'
 import { authenticate } from '../middleware/auth'
 
@@ -13,44 +14,6 @@ const SERVICE_LABELS: Record<string, string> = {
   reprogrammation: 'Reprogrammation',
   mecanique: 'Mécanique',
   autre: 'Autre',
-}
-
-function techIdsFromVehicle(v: {
-  technicien_id: number | null
-  notes: string | null
-  responsable_id?: number | null
-}): number[] {
-  const ids = new Set<number>()
-  if (v.technicien_id != null && Number(v.technicien_id) > 0) ids.add(Number(v.technicien_id))
-  if (v.responsable_id != null && Number(v.responsable_id) > 0) ids.add(Number(v.responsable_id))
-  const notes = String(v.notes ?? '')
-  const tag = '[[ASSIGNEES:'
-  const start = notes.lastIndexOf(tag)
-  if (start >= 0) {
-    const end = notes.indexOf(']]', start)
-    if (end > start) {
-      try {
-        const parsed = JSON.parse(notes.slice(start + tag.length, end)) as {
-          technicien_ids?: unknown
-          technician_ids?: unknown
-          responsable_ids?: unknown
-        }
-        const rawTech = parsed.technicien_ids ?? parsed.technician_ids
-        const rawResp = parsed.responsable_ids
-        for (const raw of [rawTech, rawResp]) {
-          if (Array.isArray(raw)) {
-            for (const x of raw) {
-              const n = Number(x)
-              if (Number.isInteger(n) && n > 0) ids.add(n)
-            }
-          }
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-  return Array.from(ids)
 }
 
 function monthBounds(year: number, month: number) {
@@ -529,9 +492,10 @@ router.get('/performance-techniciens', authenticate(), async (req, res) => {
     }
 
     const byTech = new Map<number, Map<number, TechVeh>>()
+    const userIds = Array.from(nameById.keys())
     for (const v of vehicleById.values()) {
-      // Principal + co-assignés (chaque technicien sur la fiche compte +1)
-      const tids = techIdsFromVehicle(v)
+      // Même filtre technicien que les pages Archives / Véhicules
+      const tids = userIds.filter(uid => isUserAssignedToVehicule(uid, v))
       if (tids.length === 0) continue
       const time = minutesByVehicule.get(v.id)
       const service = (v.service_type || 'autre').trim() || 'autre'
