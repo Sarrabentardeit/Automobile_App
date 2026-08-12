@@ -1,6 +1,13 @@
 import type { EtatVehicule, VehiculeType } from '../types/vehicule'
 
-export type DateFilterMode = 'toutes' | 'aujourdhui' | 'hier' | 'semaine' | 'mois' | 'date'
+export type DateFilterMode =
+  | 'toutes'
+  | 'aujourdhui'
+  | 'hier'
+  | 'semaine'
+  | 'mois'
+  | 'mois_choisi'
+  | 'date'
 
 export type VehiculeFilteredCounts = {
   total: number
@@ -53,7 +60,8 @@ export function normalizeDateInput(raw: string): string | undefined {
 
 export function getDateRange(
   mode: DateFilterMode,
-  dateFilter: string
+  dateFilter: string,
+  monthFilter = ''
 ): { date_debut?: string; date_fin?: string } {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -80,6 +88,12 @@ export function getDateRange(
     const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0)
     return { date_debut: fmt(monthStart), date_fin: fmt(monthEnd) }
   }
+  if (mode === 'mois_choisi' && /^\d{4}-\d{2}$/.test(monthFilter.trim())) {
+    const [y, m] = monthFilter.trim().split('-').map(Number)
+    const monthStart = new Date(y, m - 1, 1)
+    const monthEnd = new Date(y, m, 0)
+    return { date_debut: fmt(monthStart), date_fin: fmt(monthEnd) }
+  }
   if (mode === 'date') {
     const iso = normalizeDateInput(dateFilter)
     if (iso) return { date_debut: iso, date_fin: iso }
@@ -93,6 +107,7 @@ type FilterOpts = {
   technicienId?: number
   dateFilterMode: DateFilterMode
   dateFilter: string
+  monthFilter?: string
   search: string
   serviceType?: string
   userId: number
@@ -116,7 +131,11 @@ export function buildFilterQuery(opts: FilterOpts) {
 }
 
 export function buildListParams(opts: FilterOpts & { page: number; limit: number }) {
-  const { date_debut, date_fin } = getDateRange(opts.dateFilterMode, opts.dateFilter)
+  const { date_debut, date_fin } = getDateRange(
+    opts.dateFilterMode,
+    opts.dateFilter,
+    opts.monthFilter
+  )
   const technicien_id =
     opts.visibility === 'own' ? opts.userId : opts.technicienId
 

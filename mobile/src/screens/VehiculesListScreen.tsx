@@ -296,6 +296,8 @@ export default function VehiculesListScreen({
   const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>('toutes')
   const [dateFilter, setDateFilter] = useState('')
   const [dateFilterDebounced, setDateFilterDebounced] = useState('')
+  const [monthFilter, setMonthFilter] = useState('')
+  const [monthFilterDebounced, setMonthFilterDebounced] = useState('')
   const [showTechnicienPicker, setShowTechnicienPicker] = useState(false)
   const [showServicePicker, setShowServicePicker] = useState(false)
   const [selectedBrand, setSelectedBrand] = useState<BrandFolder | null>(null)
@@ -323,6 +325,7 @@ export default function VehiculesListScreen({
       technicienId,
       dateFilterMode,
       dateFilter: dateFilterDebounced,
+      monthFilter: monthFilterDebounced,
       search: searchDebounced,
       serviceType,
       userId: user.id,
@@ -335,6 +338,7 @@ export default function VehiculesListScreen({
       technicienId,
       dateFilterMode,
       dateFilterDebounced,
+      monthFilterDebounced,
       searchDebounced,
       serviceType,
       user.id,
@@ -354,7 +358,17 @@ export default function VehiculesListScreen({
   useEffect(() => {
     setSelectedBrand(null)
     setFolderPage(1)
-  }, [tab, filtreEtat, technicienId, serviceType, dateFilterMode, dateFilterDebounced, searchDebounced, archives])
+  }, [
+    tab,
+    filtreEtat,
+    technicienId,
+    serviceType,
+    dateFilterMode,
+    dateFilterDebounced,
+    monthFilterDebounced,
+    searchDebounced,
+    archives,
+  ])
 
   const folderTotalPages = Math.max(1, Math.ceil(brands.length / BRAND_FOLDER_PAGE_SIZE))
 
@@ -377,10 +391,20 @@ export default function VehiculesListScreen({
     return () => clearTimeout(t)
   }, [dateFilter])
 
+  useEffect(() => {
+    const t = setTimeout(() => setMonthFilterDebounced(monthFilter.trim()), 400)
+    return () => clearTimeout(t)
+  }, [monthFilter])
+
   const dateInputInvalid =
     dateFilter.trim().length > 0 &&
     dateFilterMode === 'date' &&
     !normalizeDateInput(dateFilter)
+
+  const monthInputInvalid =
+    monthFilter.trim().length > 0 &&
+    dateFilterMode === 'mois_choisi' &&
+    !/^\d{4}-\d{2}$/.test(monthFilter.trim())
 
   useEffect(() => {
     void fetchUsers(accessToken).then(setUsers).catch(() => setUsers([]))
@@ -701,6 +725,7 @@ export default function VehiculesListScreen({
             onPress={() => {
               setDateFilterMode(mode)
               setDateFilter('')
+              setMonthFilter('')
             }}
             style={[styles.dateChip, dateFilterMode === mode && styles.dateChipActive]}
           >
@@ -717,6 +742,30 @@ export default function VehiculesListScreen({
       </ScrollView>
 
       <View style={styles.datePreciseRow}>
+        <Text style={styles.datePreciseLabel}>Mois</Text>
+        <TextInput
+          style={[
+            styles.datePreciseInput,
+            (dateFilterMode === 'mois_choisi' || monthInputInvalid) &&
+              (monthInputInvalid ? styles.datePreciseInputInvalid : styles.dateMonthInputActive),
+          ]}
+          placeholder="AAAA-MM"
+          placeholderTextColor="#9ca3af"
+          keyboardType="numbers-and-punctuation"
+          maxLength={7}
+          value={monthFilter}
+          onChangeText={(v) => {
+            setMonthFilter(v)
+            setDateFilter('')
+            setDateFilterMode(v.trim() ? 'mois_choisi' : 'toutes')
+          }}
+        />
+      </View>
+      {monthInputInvalid ? (
+        <Text style={styles.dateHintError}>Format attendu : AAAA-MM (ex. 2026-07)</Text>
+      ) : null}
+
+      <View style={styles.datePreciseRow}>
         <Text style={styles.datePreciseLabel}>
           {archives ? 'Date validation' : 'Jour précis'}
         </Text>
@@ -729,6 +778,7 @@ export default function VehiculesListScreen({
           value={dateFilter}
           onChangeText={(v) => {
             setDateFilter(v)
+            setMonthFilter('')
             setDateFilterMode(v.trim() ? 'date' : 'toutes')
           }}
         />
@@ -1159,6 +1209,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     fontSize: 13,
     color: '#111827',
+  },
+  dateMonthInputActive: {
+    borderColor: '#f97316',
   },
   datePreciseInputInvalid: {
     borderColor: '#fca5a5',

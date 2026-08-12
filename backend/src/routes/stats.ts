@@ -15,9 +15,14 @@ const SERVICE_LABELS: Record<string, string> = {
   autre: 'Autre',
 }
 
-function techIdsFromVehicle(v: { technicien_id: number | null; notes: string | null }): number[] {
+function techIdsFromVehicle(v: {
+  technicien_id: number | null
+  notes: string | null
+  responsable_id?: number | null
+}): number[] {
   const ids = new Set<number>()
   if (v.technicien_id != null && Number(v.technicien_id) > 0) ids.add(Number(v.technicien_id))
+  if (v.responsable_id != null && Number(v.responsable_id) > 0) ids.add(Number(v.responsable_id))
   const notes = String(v.notes ?? '')
   const tag = '[[ASSIGNEES:'
   const start = notes.lastIndexOf(tag)
@@ -28,12 +33,16 @@ function techIdsFromVehicle(v: { technicien_id: number | null; notes: string | n
         const parsed = JSON.parse(notes.slice(start + tag.length, end)) as {
           technicien_ids?: unknown
           technician_ids?: unknown
+          responsable_ids?: unknown
         }
-        const raw = parsed.technicien_ids ?? parsed.technician_ids
-        if (Array.isArray(raw)) {
-          for (const x of raw) {
-            const n = Number(x)
-            if (Number.isInteger(n) && n > 0) ids.add(n)
+        const rawTech = parsed.technicien_ids ?? parsed.technician_ids
+        const rawResp = parsed.responsable_ids
+        for (const raw of [rawTech, rawResp]) {
+          if (Array.isArray(raw)) {
+            for (const x of raw) {
+              const n = Number(x)
+              if (Number.isInteger(n) && n > 0) ids.add(n)
+            }
           }
         }
       } catch {
@@ -389,13 +398,11 @@ router.get('/temps-en-cours-techniciens', authenticate(), async (req, res) => {
 })
 
 /**
- * Rapport de performance techniciens.
- * Véhicules du mois =
- *   - sortis dans le mois (archives)
- *   - OU encore en atelier (≠ vert)
- *   - OU présents pendant le mois (entrée ≤ fin mois et sortie vide / ≥ début mois)
- *   - OU avec temps EN COURS enregistré dans le mois
- * Attribué à TOUS les techniciens assignés (principal + co-assignés).
+ * Rapport de performance — même logique que le comptage manuel client :
+ *   1) Page Archives : etat=vert + filtre mois sur date_sortie (+ entrée si pas de sortie)
+ *   2) Page Véhicules : etat≠vert + filtre mois sur date_entree
+ *   3) Technicien = principal OU co-assigné (comme le filtre liste)
+ * Temps moyen = minutes EN COURS (orange) dans le mois.
  */
 router.get('/performance-techniciens', authenticate(), async (req, res) => {
   try {
@@ -407,6 +414,7 @@ router.get('/performance-techniciens', authenticate(), async (req, res) => {
         ? monthRaw
         : now.getMonth() + 1
     const { from, to } = monthBounds(year, month)
+    const dateRange = { gte: from, lte: to }
 
     type VehRow = {
       id: number
@@ -414,6 +422,7 @@ router.get('/performance-techniciens', authenticate(), async (req, res) => {
       modele: string | null
       service_type: string | null
       technicien_id: number | null
+      responsable_id: number | null
       notes: string | null
       etat_actuel: string | null
       date_entree: string | null
@@ -426,34 +435,32 @@ router.get('/performance-techniciens', authenticate(), async (req, res) => {
       modele: true,
       service_type: true,
       technicien_id: true,
+      responsable_id: true,
       notes: true,
       etat_actuel: true,
       date_entree: true,
       date_sortie: true,
     }
 
-    const overlapsMonth = (v: VehRow): boolean => {
-      const sortie = (v.date_sortie || '').trim().slice(0, 10)
-      if (sortie && sortie >= from && sortie <= to) return true
-      if (v.etat_actuel && v.etat_actuel !== 'vert') return true
-      const entree = (v.date_entree || '').trim().slice(0, 10)
-      if (entree && entree <= to && (!sortie || sortie >= from)) return true
-      return false
-    }
-
-    const [users, candidates, enCoursActuels, histRows] = await Promise.all([
+    const [users, archivesDuMois, atelierDuMois, histRows] = await Promise.all([
       db.user.findMany({ select: { id: true, fullName: true, email: true } }),
+      // = filtre Archives + mois (date_sortie)
       db.vehicule.findMany({
         where: {
+          etat_actuel: 'vert',
           OR: [
-            { date_sortie: { gte: from, lte: to } },
-            { date_entree: { lte: to } },
+            { date_sortie: dateRange },
+            { date_sortie: null, date_entree: dateRange },
           ],
         },
         select: vehSelect,
       }),
+      // = filtre Véhicules (hors vert) + mois (date_entree)
       db.vehicule.findMany({
-        where: { etat_actuel: { not: 'vert' } },
+        where: {
+          etat_actuel: { not: 'vert' },
+          date_entree: dateRange,
+        },
         select: vehSelect,
       }),
       db.vehiculeHistorique.findMany({
@@ -476,21 +483,17 @@ router.get('/performance-techniciens', authenticate(), async (req, res) => {
     }
 
     const vehicleById = new Map<number, VehRow>()
-    for (const v of [...(candidates as VehRow[]), ...(enCoursActuels as VehRow[])]) {
-      if (overlapsMonth(v)) vehicleById.set(v.id, v)
+    for (const v of [...(archivesDuMois as VehRow[]), ...(atelierDuMois as VehRow[])]) {
+      vehicleById.set(v.id, v)
     }
 
+    // Minutes EN COURS : rattacher aux véhicules déjà dans le set (pas d'ajout hors filtres pages)
     const histVehIds = Array.from(
       new Set((histRows as Array<{ vehiculeId: number }>).map(h => h.vehiculeId).filter(Boolean))
     )
-    const missing = histVehIds.filter(id => !vehicleById.has(id))
-    if (missing.length > 0) {
-      const extra = await db.vehicule.findMany({
-        where: { id: { in: missing } },
-        select: vehSelect,
-      })
-      for (const v of extra as VehRow[]) vehicleById.set(v.id, v)
-    }
+    const missingForTime = histVehIds.filter(id => !vehicleById.has(id))
+    // Ne PAS ajouter missingForTime au décompte véhicules (hors logique Archives+Véhicules)
+    void missingForTime
 
     const minutesByVehicule = new Map<number, { minutes: number; lastChange: string }>()
     for (const h of histRows as Array<{

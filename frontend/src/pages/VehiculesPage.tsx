@@ -18,7 +18,11 @@ import { cn, getActiveEquipeUsers } from '@/lib/utils'
 
 const VEHICLE_PAGE_SIZE = 20
 
-function getDateRange(mode: string, dateFilter: string): { date_debut?: string; date_fin?: string } {
+function getDateRange(
+  mode: string,
+  dateFilter: string,
+  monthFilter = ''
+): { date_debut?: string; date_fin?: string } {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -44,6 +48,12 @@ function getDateRange(mode: string, dateFilter: string): { date_debut?: string; 
     const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0)
     return { date_debut: fmt(monthStart), date_fin: fmt(monthEnd) }
   }
+  if (mode === 'mois_choisi' && /^\d{4}-\d{2}$/.test(monthFilter)) {
+    const [y, m] = monthFilter.split('-').map(Number)
+    const monthStart = new Date(y, m - 1, 1)
+    const monthEnd = new Date(y, m, 0)
+    return { date_debut: fmt(monthStart), date_fin: fmt(monthEnd) }
+  }
   if (mode === 'date' && dateFilter) return { date_debut: dateFilter, date_fin: dateFilter }
   return {}
 }
@@ -54,6 +64,7 @@ function buildListFilters(opts: {
   technicienId?: number
   dateFilterMode: string
   dateFilter: string
+  monthFilter?: string
   rechercheDebounced: string
   serviceType?: ServiceType
   userId: number
@@ -62,7 +73,7 @@ function buildListFilters(opts: {
   page: number
   limit: number
 }): VehiculesFilters {
-  const { date_debut, date_fin } = getDateRange(opts.dateFilterMode, opts.dateFilter)
+  const { date_debut, date_fin } = getDateRange(opts.dateFilterMode, opts.dateFilter, opts.monthFilter)
   return {
     type: opts.tab,
     etat: opts.filtreEtat === 'tous' ? undefined : opts.filtreEtat,
@@ -123,8 +134,11 @@ export default function VehiculesPage() {
     return Number.isFinite(n) && n > 0 ? n : undefined
   })
   const [serviceType, setServiceType] = useState<ServiceType | undefined>()
-  const [dateFilterMode, setDateFilterMode] = useState<'toutes' | 'aujourdhui' | 'hier' | 'semaine' | 'mois' | 'date'>('toutes')
+  const [dateFilterMode, setDateFilterMode] = useState<
+    'toutes' | 'aujourdhui' | 'hier' | 'semaine' | 'mois' | 'mois_choisi' | 'date'
+  >('toutes')
   const [dateFilter, setDateFilter] = useState('')
+  const [monthFilter, setMonthFilter] = useState('')
   const [vehiclePage, setVehiclePage] = useState(1)
   const [folderPage, setFolderPage] = useState(1)
   const [brandFolders, setBrandFolders] = useState<BrandFolder[]>([])
@@ -142,12 +156,13 @@ export default function VehiculesPage() {
       technicienId,
       dateFilterMode,
       dateFilter,
+      monthFilter,
       rechercheDebounced,
       serviceType,
       userId: user?.id ?? 0,
       visibility: permissions?.vehiculeVisibility ?? 'own',
     }),
-    [tab, filtreEtat, technicienId, dateFilterMode, dateFilter, rechercheDebounced, serviceType, user?.id, permissions?.vehiculeVisibility]
+    [tab, filtreEtat, technicienId, dateFilterMode, dateFilter, monthFilter, rechercheDebounced, serviceType, user?.id, permissions?.vehiculeVisibility]
   )
 
   useEffect(() => {
@@ -172,7 +187,7 @@ export default function VehiculesPage() {
     }
     setBrandsLoading(true)
     try {
-      const { date_debut, date_fin } = getDateRange(dateFilterMode, dateFilter)
+      const { date_debut, date_fin } = getDateRange(dateFilterMode, dateFilter, monthFilter)
       const params: Record<string, string | number | undefined> = {
         type: tab,
         exclude_etat: 'vert',
@@ -202,6 +217,7 @@ export default function VehiculesPage() {
     technicienId,
     dateFilterMode,
     dateFilter,
+    monthFilter,
     rechercheDebounced,
     serviceType,
     permissions?.vehiculeVisibility,
@@ -238,7 +254,7 @@ export default function VehiculesPage() {
   useEffect(() => {
     setVehiclePage(1)
     setFolderPage(1)
-  }, [tab, filtreEtat, technicienId, dateFilterMode, dateFilter, rechercheDebounced, serviceType, brandParam])
+  }, [tab, filtreEtat, technicienId, dateFilterMode, dateFilter, monthFilter, rechercheDebounced, serviceType, brandParam])
 
   if (!user || !permissions) return null
 
@@ -424,6 +440,7 @@ export default function VehiculesPage() {
                 onClick={() => {
                   setDateFilterMode(mode as typeof dateFilterMode)
                   setDateFilter('')
+                  setMonthFilter('')
                 }}
                 className={cn(
                   'px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs font-medium border transition-all',
@@ -467,12 +484,28 @@ export default function VehiculesPage() {
                 </option>
               ))}
             </select>
+            <span className="text-[11px] sm:text-xs text-gray-500 whitespace-nowrap">Mois</span>
+            <input
+              type="month"
+              value={monthFilter}
+              onChange={e => {
+                const v = e.target.value
+                setMonthFilter(v)
+                setDateFilter('')
+                setDateFilterMode(v ? 'mois_choisi' : 'toutes')
+              }}
+              className={cn(
+                'px-2.5 py-1.5 rounded-lg border text-[11px] sm:text-xs text-gray-700 bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500',
+                dateFilterMode === 'mois_choisi' ? 'border-orange-500' : 'border-gray-200'
+              )}
+            />
             <span className="text-[11px] sm:text-xs text-gray-500 whitespace-nowrap">Jour précis</span>
             <input
               type="date"
               value={dateFilter}
               onChange={e => {
                 setDateFilter(e.target.value)
+                setMonthFilter('')
                 setDateFilterMode(e.target.value ? 'date' : 'toutes')
               }}
               className="px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px] sm:text-xs text-gray-700 bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500"

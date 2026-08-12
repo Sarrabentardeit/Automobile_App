@@ -536,7 +536,7 @@ export default function StatistiquesScreen({
 
         <SectionCard
           title="Rapport de performance"
-          subtitle={`Techniciens — ${techTempsMoisLabel} · archives + atelier · tous les assignés`}
+          subtitle={`Techniciens — ${techTempsMoisLabel} · Archives (mois) + Véhicules (mois)`}
           icon="trophy-outline"
         >
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.yearRow}>

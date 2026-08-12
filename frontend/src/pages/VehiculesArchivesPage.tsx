@@ -19,7 +19,11 @@ import { BRAND_FOLDER_PAGE_SIZE, type BrandFolder } from '@/lib/vehiculeBrands'
 
 const VEHICLE_PAGE_SIZE = 20
 
-function getDateRange(mode: string, dateFilter: string): { date_debut?: string; date_fin?: string } {
+function getDateRange(
+  mode: string,
+  dateFilter: string,
+  monthFilter = ''
+): { date_debut?: string; date_fin?: string } {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -43,6 +47,12 @@ function getDateRange(mode: string, dateFilter: string): { date_debut?: string; 
   if (mode === 'mois') {
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
     const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+    return { date_debut: fmt(monthStart), date_fin: fmt(monthEnd) }
+  }
+  if (mode === 'mois_choisi' && /^\d{4}-\d{2}$/.test(monthFilter)) {
+    const [y, m] = monthFilter.split('-').map(Number)
+    const monthStart = new Date(y, m - 1, 1)
+    const monthEnd = new Date(y, m, 0)
     return { date_debut: fmt(monthStart), date_fin: fmt(monthEnd) }
   }
   if (mode === 'date' && dateFilter) return { date_debut: dateFilter, date_fin: dateFilter }
@@ -80,8 +90,11 @@ export default function VehiculesArchivesPage() {
   const [rechercheDebounced, setRechercheDebounced] = useState('')
   const [technicienId, setTechnicienId] = useState<number | undefined>()
   const [serviceType, setServiceType] = useState<ServiceType | undefined>()
-  const [dateFilterMode, setDateFilterMode] = useState<'toutes' | 'aujourdhui' | 'hier' | 'semaine' | 'mois' | 'date'>('toutes')
+  const [dateFilterMode, setDateFilterMode] = useState<
+    'toutes' | 'aujourdhui' | 'hier' | 'semaine' | 'mois' | 'mois_choisi' | 'date'
+  >('toutes')
   const [dateFilter, setDateFilter] = useState('')
+  const [monthFilter, setMonthFilter] = useState('')
   const [vehiclePage, setVehiclePage] = useState(1)
   const [folderPage, setFolderPage] = useState(1)
   const [brandFolders, setBrandFolders] = useState<BrandFolder[]>([])
@@ -110,7 +123,7 @@ export default function VehiculesArchivesPage() {
     }
     setBrandsLoading(true)
     try {
-      const { date_debut, date_fin } = getDateRange(dateFilterMode, dateFilter)
+      const { date_debut, date_fin } = getDateRange(dateFilterMode, dateFilter, monthFilter)
       const params: Record<string, string | number | undefined> = {
         type: tab,
         etat: 'vert',
@@ -137,6 +150,7 @@ export default function VehiculesArchivesPage() {
     technicienId,
     dateFilterMode,
     dateFilter,
+    monthFilter,
     rechercheDebounced,
     serviceType,
     permissions?.vehiculeVisibility,
@@ -145,7 +159,7 @@ export default function VehiculesArchivesPage() {
 
   const loadVehiclesForBrand = useCallback(() => {
     if (!brandParam || !user || !permissions) return
-    const { date_debut, date_fin } = getDateRange(dateFilterMode, dateFilter)
+    const { date_debut, date_fin } = getDateRange(dateFilterMode, dateFilter, monthFilter)
     fetchVehicules({
       type: tab,
       etat: 'vert',
@@ -164,6 +178,7 @@ export default function VehiculesArchivesPage() {
     technicienId,
     dateFilterMode,
     dateFilter,
+    monthFilter,
     rechercheDebounced,
     serviceType,
     vehiclePage,
@@ -180,7 +195,7 @@ export default function VehiculesArchivesPage() {
   useEffect(() => {
     setVehiclePage(1)
     setFolderPage(1)
-  }, [tab, technicienId, dateFilterMode, dateFilter, rechercheDebounced, brandParam])
+  }, [tab, technicienId, dateFilterMode, dateFilter, monthFilter, rechercheDebounced, brandParam])
 
   if (!user || !permissions) return null
 
@@ -233,7 +248,7 @@ export default function VehiculesArchivesPage() {
     }
     setExporting(true)
     try {
-      const { date_debut, date_fin } = getDateRange(dateFilterMode, dateFilter)
+      const { date_debut, date_fin } = getDateRange(dateFilterMode, dateFilter, monthFilter)
       const all: Vehicule[] = []
       let pageNum = 1
       const pageLimit = 50
@@ -342,8 +357,9 @@ export default function VehiculesArchivesPage() {
                 onClick={() => {
                   setDateFilterMode(mode as typeof dateFilterMode)
                   setDateFilter('')
+                  setMonthFilter('')
                   setVehiclePage(1)
-              setFolderPage(1)
+                  setFolderPage(1)
                 }}
                 className={cn(
                   'px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs font-medium border transition-all',
@@ -389,15 +405,33 @@ export default function VehiculesArchivesPage() {
                 </option>
               ))}
             </select>
+            <span className="text-[11px] sm:text-xs text-gray-500 whitespace-nowrap">Mois</span>
+            <input
+              type="month"
+              value={monthFilter}
+              onChange={e => {
+                const v = e.target.value
+                setMonthFilter(v)
+                setDateFilter('')
+                setDateFilterMode(v ? 'mois_choisi' : 'toutes')
+                setVehiclePage(1)
+                setFolderPage(1)
+              }}
+              className={cn(
+                'px-2.5 py-1.5 rounded-lg border text-[11px] sm:text-xs text-gray-700 bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500',
+                dateFilterMode === 'mois_choisi' ? 'border-orange-500' : 'border-gray-200'
+              )}
+            />
             <span className="text-[11px] sm:text-xs text-gray-500 whitespace-nowrap">Date validation</span>
             <input
               type="date"
               value={dateFilter}
               onChange={e => {
                 setDateFilter(e.target.value)
+                setMonthFilter('')
                 setDateFilterMode(e.target.value ? 'date' : 'toutes')
                 setVehiclePage(1)
-              setFolderPage(1)
+                setFolderPage(1)
               }}
               className="px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px] sm:text-xs text-gray-700 bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
             />
