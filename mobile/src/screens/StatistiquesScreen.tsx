@@ -196,12 +196,24 @@ export default function StatistiquesScreen({
 
   const techTempsInsights = useMemo(() => {
     if (techTemps.length === 0) return null
-    const plusLent = techTemps[0]
-    const plusRapide = techTemps[techTemps.length - 1]
+    const byVolume = [...techTemps].sort((a, b) => b.vehiculesCount - a.vehiculesCount)
+    const withAvg = techTemps.filter((t) => t.moyenneMinutes > 0)
+    const plusLent =
+      [...withAvg].sort((a, b) => b.moyenneMinutes - a.moyenneMinutes)[0] ?? byVolume[0]
+    const plusRapide =
+      [...withAvg].sort((a, b) => a.moyenneMinutes - b.moyenneMinutes)[0] ??
+      byVolume[byVolume.length - 1]
     const totalVeh = techTemps.reduce((s, r) => s + r.vehiculesCount, 0)
     const totalMin = techTemps.reduce((s, r) => s + r.totalMinutes, 0)
-    const moyenneEquipe = totalVeh > 0 ? Math.round(totalMin / totalVeh) : 0
-    return { plusLent, plusRapide, totalVeh, moyenneEquipe, nbTechs: techTemps.length }
+    const moyenneEquipe = totalVeh > 0 ? Math.round(totalMin / Math.max(1, totalVeh)) : 0
+    return {
+      topVolume: byVolume[0],
+      plusLent,
+      plusRapide,
+      totalVeh,
+      moyenneEquipe,
+      nbTechs: techTemps.length,
+    }
   }, [techTemps])
 
   const onRefresh = useCallback(async () => {
@@ -523,9 +535,9 @@ export default function StatistiquesScreen({
         </SectionCard>
 
         <SectionCard
-          title="Temps moyen EN COURS"
-          subtitle={`Par technicien — ${techTempsMoisLabel} · appuyez un nom pour le détail`}
-          icon="timer-outline"
+          title="Rapport de performance"
+          subtitle={`Techniciens — ${techTempsMoisLabel} · véhicules, marques, services, temps moy.`}
+          icon="trophy-outline"
         >
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.yearRow}>
             {techTempsYears.map((y) => (
@@ -558,20 +570,24 @@ export default function StatistiquesScreen({
 
           {techTempsInsights ? (
             <View style={styles.insightRow}>
+              <View style={[styles.insightCard, { backgroundColor: '#eff6ff' }]}>
+                <Text style={[styles.insightLabel, { color: '#1d4ed8' }]}>Volume</Text>
+                <Text style={styles.insightName} numberOfLines={1}>
+                  {techTempsInsights.topVolume.nom}
+                </Text>
+                <Text style={[styles.insightValue, { color: '#1d4ed8' }]}>
+                  {techTempsInsights.topVolume.vehiculesCount} véh.
+                </Text>
+              </View>
               <View style={[styles.insightCard, { backgroundColor: '#fff7ed' }]}>
-                <Text style={styles.insightLabel}>Plus long</Text>
+                <Text style={styles.insightLabel}>Temps moy.</Text>
                 <Text style={styles.insightName} numberOfLines={1}>
                   {techTempsInsights.plusLent.nom}
                 </Text>
-                <Text style={styles.insightValue}>{formatDuree(techTempsInsights.plusLent.moyenneMinutes)}</Text>
-              </View>
-              <View style={[styles.insightCard, { backgroundColor: '#ecfdf5' }]}>
-                <Text style={[styles.insightLabel, { color: '#047857' }]}>Plus rapide</Text>
-                <Text style={styles.insightName} numberOfLines={1}>
-                  {techTempsInsights.plusRapide.nom}
-                </Text>
-                <Text style={[styles.insightValue, { color: '#047857' }]}>
-                  {formatDuree(techTempsInsights.plusRapide.moyenneMinutes)}
+                <Text style={styles.insightValue}>
+                  {techTempsInsights.plusLent.moyenneMinutes > 0
+                    ? formatDuree(techTempsInsights.plusLent.moyenneMinutes)
+                    : '—'}
                 </Text>
               </View>
             </View>
@@ -580,9 +596,7 @@ export default function StatistiquesScreen({
           {techTempsLoading ? (
             <Text style={styles.emptyHint}>Chargement…</Text>
           ) : techTemps.length === 0 ? (
-            <Text style={styles.emptyHint}>
-              Aucune donnée EN COURS pour ce mois (changements d&apos;état enregistrés).
-            </Text>
+            <Text style={styles.emptyHint}>Aucune donnée pour ce mois.</Text>
           ) : (
             <View style={styles.techTempsList}>
               {techTemps.map((row) => (
@@ -593,16 +607,21 @@ export default function StatistiquesScreen({
                 >
                   <View style={styles.techTempsLeft}>
                     <Text style={[styles.techTempsName, styles.techTempsNameLink]} numberOfLines={1}>
+                      {row.rang != null ? `#${row.rang} ` : ''}
                       {row.nom}
                     </Text>
                     <Text style={styles.techTempsMeta}>
-                      {row.vehiculesCount} véhicule{row.vehiculesCount !== 1 ? 's' : ''} · total{' '}
-                      {formatDuree(row.totalMinutes)}
+                      {row.vehiculesCount} véh. · {row.marquesCount ?? '—'} marques
+                      {(row.byServiceType?.length ?? 0) > 0
+                        ? ` · ${row.byServiceType!.map((s) => `${s.count} ${s.label}`).join(', ')}`
+                        : ''}
                     </Text>
                   </View>
                   <View style={styles.techTempsBadge}>
-                    <Text style={styles.techTempsAvg}>{formatDuree(row.moyenneMinutes)}</Text>
-                    <Text style={styles.techTempsAvgLabel}>moy. / véhicule</Text>
+                    <Text style={styles.techTempsAvg}>
+                      {row.moyenneMinutes > 0 ? formatDuree(row.moyenneMinutes) : '—'}
+                    </Text>
+                    <Text style={styles.techTempsAvgLabel}>moy. / véh.</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
                 </Pressable>
@@ -625,7 +644,7 @@ export default function StatistiquesScreen({
             <View style={{ flex: 1 }}>
               <Text style={styles.detailTitle}>{selectedTechTemps?.nom ?? ''}</Text>
               <Text style={styles.detailSub}>
-                EN COURS — {techTempsMoisLabel} · {selectedTechTemps?.vehiculesCount ?? 0} véhicule(s)
+                Performance — {techTempsMoisLabel} · {selectedTechTemps?.vehiculesCount ?? 0} véhicule(s)
               </Text>
             </View>
             <Pressable onPress={() => setSelectedTechTemps(null)} hitSlop={12}>
@@ -636,25 +655,52 @@ export default function StatistiquesScreen({
             <ScrollView contentContainerStyle={styles.detailBody}>
               <View style={styles.detailKpis}>
                 <View style={styles.detailKpi}>
-                  <Text style={styles.detailKpiLabel}>Total</Text>
-                  <Text style={styles.detailKpiValue}>{formatDuree(selectedTechTemps.totalMinutes)}</Text>
+                  <Text style={styles.detailKpiLabel}>Véhicules</Text>
+                  <Text style={styles.detailKpiValue}>{selectedTechTemps.vehiculesCount}</Text>
+                </View>
+                <View style={styles.detailKpi}>
+                  <Text style={styles.detailKpiLabel}>Marques</Text>
+                  <Text style={styles.detailKpiValue}>{selectedTechTemps.marquesCount ?? '—'}</Text>
                 </View>
                 <View style={[styles.detailKpi, styles.detailKpiAccent]}>
                   <Text style={[styles.detailKpiLabel, { color: '#c2410c' }]}>Moyenne</Text>
                   <Text style={[styles.detailKpiValue, { color: '#c2410c' }]}>
-                    {formatDuree(selectedTechTemps.moyenneMinutes)}
+                    {selectedTechTemps.moyenneMinutes > 0
+                      ? formatDuree(selectedTechTemps.moyenneMinutes)
+                      : '—'}
                   </Text>
                 </View>
               </View>
+              {(selectedTechTemps.byServiceType?.length ?? 0) > 0 ? (
+                <View style={{ marginBottom: 12, gap: 6 }}>
+                  <Text style={styles.detailKpiLabel}>Par type de service</Text>
+                  {selectedTechTemps.byServiceType!.map((s) => (
+                    <View key={s.service_type} style={styles.vehDetailCard}>
+                      <Text style={styles.vehPlate}>{s.label}</Text>
+                      <View style={styles.vehMetaRow}>
+                        <Text style={styles.vehModel}>{s.count} véhicule(s)</Text>
+                        <Text style={styles.vehTime}>
+                          moy. {s.moyenneMinutes > 0 ? formatDuree(s.moyenneMinutes) : '—'}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
               {(selectedTechTemps.vehicules?.length ?? 0) === 0 ? (
                 <Text style={styles.emptyHint}>Aucun détail véhicule.</Text>
               ) : (
                 selectedTechTemps.vehicules!.map((v) => (
                   <View key={v.vehiculeId} style={styles.vehDetailCard}>
                     <Text style={styles.vehPlate}>{v.immatriculation}</Text>
-                    <Text style={styles.vehModel}>{v.modele}</Text>
+                    <Text style={styles.vehModel}>
+                      {v.modele}
+                      {v.serviceLabel ? ` · ${v.serviceLabel}` : ''}
+                    </Text>
                     <View style={styles.vehMetaRow}>
-                      <Text style={styles.vehTime}>{formatDuree(v.minutes)}</Text>
+                      <Text style={styles.vehTime}>
+                        {v.minutes > 0 ? formatDuree(v.minutes) : '—'}
+                      </Text>
                       <Text style={styles.vehDate}>{v.lastChange}</Text>
                     </View>
                   </View>

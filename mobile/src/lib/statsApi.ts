@@ -33,10 +33,21 @@ async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   }
 }
 
+export type TechServiceAgg = {
+  service_type: string
+  label: string
+  count: number
+  totalMinutes: number
+  moyenneMinutes: number
+}
+
 export type TechTempsVehicule = {
   vehiculeId: number
   immatriculation: string
   modele: string
+  marque?: string
+  service_type?: string
+  serviceLabel?: string
   minutes: number
   lastChange: string
 }
@@ -44,11 +55,15 @@ export type TechTempsVehicule = {
 export type TechTempsEnCours = {
   technicienId: number
   nom: string
+  rang?: number
   vehiculesCount: number
+  marquesCount?: number
+  marques?: { name: string; count: number }[]
   totalMinutes: number
   moyenneMinutes: number
   moyenneHeures: number
   totalHeures: number
+  byServiceType?: TechServiceAgg[]
   vehicules?: TechTempsVehicule[]
 }
 
@@ -56,7 +71,7 @@ export function fetchTempsEnCoursTechniciens(
   token: string,
   params: { year: number; month: number }
 ): Promise<TechTempsEnCours[]> {
-  return apiFetch<{ data: TechTempsEnCours[] }>('/stats/temps-en-cours-techniciens', {
+  return apiFetch<{ data: TechTempsEnCours[] }>('/stats/performance-techniciens', {
     token,
     params,
   }).then((r) => (Array.isArray(r.data) ? r.data : []))
