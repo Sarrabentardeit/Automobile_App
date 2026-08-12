@@ -48,8 +48,10 @@ import {
   ArrowDownRight,
   Clock,
   RefreshCw,
+  FileDown,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { exportPerformanceTechniciensPdf } from '@/lib/exportPerformanceTechniciensPdf'
 import type { ClientAvecDette } from '@/types'
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, BarChart, Bar } from 'recharts'
 
@@ -143,6 +145,7 @@ export default function AdminEspacePage() {
   const [trendLoading, setTrendLoading] = useState(false)
   const [techTemps, setTechTemps] = useState<TechTempsEnCours[]>([])
   const [techTempsLoading, setTechTempsLoading] = useState(false)
+  const [techTempsExporting, setTechTempsExporting] = useState(false)
   const [techTempsUpdatedAt, setTechTempsUpdatedAt] = useState<Date | null>(null)
   const [selectedTechTemps, setSelectedTechTemps] = useState<TechTempsEnCours | null>(null)
   const [corrections, setCorrections] = useState<AdminCorrectionItem[]>([])
@@ -712,6 +715,30 @@ export default function AdminEspacePage() {
                 >
                   <RefreshCw className={cn('w-3.5 h-3.5', techTempsLoading && 'animate-spin')} />
                   Actualiser
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (techTemps.length === 0) {
+                      toast.error('Aucune donnée à exporter pour ce mois')
+                      return
+                    }
+                    setTechTempsExporting(true)
+                    void exportPerformanceTechniciensPdf({
+                      year: techTempsYear,
+                      month: techTempsMonth,
+                      techniciens: techTemps,
+                    })
+                      .then(() => toast.success('Rapport PDF téléchargé'))
+                      .catch(() => toast.error('Échec de l’export PDF'))
+                      .finally(() => setTechTempsExporting(false))
+                  }}
+                  disabled={techTempsExporting || techTempsLoading || techTemps.length === 0}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-orange-200 text-sm font-semibold text-orange-800 bg-orange-50 hover:bg-orange-100 disabled:opacity-50"
+                  title="Exporter le rapport du mois en PDF"
+                >
+                  <FileDown className={cn('w-3.5 h-3.5', techTempsExporting && 'animate-pulse')} />
+                  {techTempsExporting ? 'Export…' : 'Exporter PDF'}
                 </button>
               </div>
             </div>
