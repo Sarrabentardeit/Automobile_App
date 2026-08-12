@@ -5,7 +5,7 @@ import { useVehiculesContext } from '@/contexts/VehiculesContext'
 import { useUsers } from '@/contexts/UsersContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useNotifications } from '@/contexts/NotificationsContext'
-import { ETAT_CONFIG, SERVICE_OPTIONS, type EtatVehicule, type VehiculeType, type Vehicule, type ServiceType } from '@/types'
+import { ETAT_CONFIG, type EtatVehicule, type VehiculeType, type Vehicule, type ServiceType } from '@/types'
 import type { VehiculesFilters } from '@/hooks/useVehicules'
 import { apiFetch } from '@/lib/api'
 import { BRAND_FOLDER_PAGE_SIZE, type BrandFolder } from '@/lib/vehiculeBrands'
@@ -13,7 +13,8 @@ import VehiculeCard from '@/components/vehicules/VehiculeCard'
 import VehiculeForm from '@/components/vehicules/VehiculeForm'
 import VehiculeFicheFinanciereModal from '@/components/vehicules/VehiculeFicheFinanciereModal'
 import ChangeEtatModal from '@/components/vehicules/ChangeEtatModal'
-import { Car, Bike, Search, Plus, Filter, Trash2, ChevronLeft, ChevronRight, Folder, ArrowLeft } from 'lucide-react'
+import VehiculesListFilters from '@/components/vehicules/VehiculesListFilters'
+import { Car, Bike, Plus, Filter, Trash2, ChevronLeft, ChevronRight, Folder, ArrowLeft } from 'lucide-react'
 import { cn, getActiveEquipeUsers } from '@/lib/utils'
 
 const VEHICLE_PAGE_SIZE = 20
@@ -414,105 +415,23 @@ export default function VehiculesPage() {
         })}
       </div>
 
-      <div className="space-y-2">
-        <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            value={recherche}
-            onChange={e => setRecherche(e.target.value)}
-            placeholder="Rechercher modèle, immatriculation..."
-            className="w-full pl-10 pr-4 py-2.5 sm:py-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
-          />
-        </div>
-        <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
-          <div className="flex flex-wrap gap-1.5">
-            {[
-              ['toutes', 'Toutes dates'],
-              ['aujourdhui', "Aujourd'hui"],
-              ['hier', 'Hier'],
-              ['semaine', 'Cette semaine'],
-              ['mois', 'Ce mois'],
-            ].map(([mode, label]) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => {
-                  setDateFilterMode(mode as typeof dateFilterMode)
-                  setDateFilter('')
-                  setMonthFilter('')
-                }}
-                className={cn(
-                  'px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs font-medium border transition-all',
-                  dateFilterMode === mode
-                    ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {permissions.vehiculeVisibility === 'all' && techniciens.length > 0 && (
-              <select
-                value={technicienId ?? ''}
-                onChange={e => setTechnicienId(e.target.value ? Number(e.target.value) : undefined)}
-                className="px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px] sm:text-xs text-gray-700 bg-white focus:ring-2 focus:ring-orange-500"
-              >
-                <option value="">Tous techniciens</option>
-                {techniciens.map(t => (
-                  <option key={t.id} value={t.id}>
-                    {t.nom_complet}
-                  </option>
-                ))}
-              </select>
-            )}
-            <select
-              value={serviceType ?? ''}
-              onChange={e => {
-                setServiceType((e.target.value || undefined) as ServiceType | undefined)
-                setVehiclePage(1)
-                setFolderPage(1)
-              }}
-              className="px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px] sm:text-xs text-gray-700 bg-white focus:ring-2 focus:ring-orange-500"
-            >
-              <option value="">Tous services</option>
-              {SERVICE_OPTIONS.map(s => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-            <span className="text-[11px] sm:text-xs text-gray-500 whitespace-nowrap">Mois</span>
-            <input
-              type="month"
-              value={monthFilter}
-              onChange={e => {
-                const v = e.target.value
-                setMonthFilter(v)
-                setDateFilter('')
-                setDateFilterMode(v ? 'mois_choisi' : 'toutes')
-              }}
-              className={cn(
-                'px-2.5 py-1.5 rounded-lg border text-[11px] sm:text-xs text-gray-700 bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500',
-                dateFilterMode === 'mois_choisi' ? 'border-orange-500' : 'border-gray-200'
-              )}
-            />
-            <span className="text-[11px] sm:text-xs text-gray-500 whitespace-nowrap">Jour précis</span>
-            <input
-              type="date"
-              value={dateFilter}
-              onChange={e => {
-                setDateFilter(e.target.value)
-                setMonthFilter('')
-                setDateFilterMode(e.target.value ? 'date' : 'toutes')
-              }}
-              className="px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px] sm:text-xs text-gray-700 bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            />
-          </div>
-        </div>
-      </div>
+      <VehiculesListFilters
+        recherche={recherche}
+        onRechercheChange={setRecherche}
+        dateFilterMode={dateFilterMode}
+        onDatePreset={setDateFilterMode}
+        monthFilter={monthFilter}
+        onMonthChange={setMonthFilter}
+        dateFilter={dateFilter}
+        onDateChange={setDateFilter}
+        dateFieldLabel="Jour précis"
+        serviceType={serviceType}
+        onServiceChange={setServiceType}
+        showTechnicien={permissions.vehiculeVisibility === 'all' && techniciens.length > 0}
+        techniciens={techniciens}
+        technicienId={technicienId}
+        onTechnicienChange={setTechnicienId}
+      />
 
       <div className="space-y-3 sm:space-y-4">
         {contentLoading ? (
