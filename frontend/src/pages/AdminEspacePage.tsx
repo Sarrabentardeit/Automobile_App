@@ -194,6 +194,85 @@ function SectionHeader({
   )
 }
 
+function MonthYearFilter({
+  month,
+  year,
+  onMonth,
+  onYear,
+  moisOptions,
+  anneeOptions,
+  showMonth = true,
+}: {
+  month: number
+  year: number
+  onMonth: (m: number) => void
+  onYear: (y: number) => void
+  moisOptions: number[]
+  anneeOptions: number[]
+  showMonth?: boolean
+}) {
+  const go = (delta: number) => {
+    if (!showMonth) {
+      onYear(year + delta)
+      return
+    }
+    const next = shiftMonth(year, month, delta)
+    onYear(next.year)
+    onMonth(next.month)
+  }
+  return (
+    <div className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-1.5 py-1 shadow-sm">
+      <button
+        type="button"
+        onClick={() => go(-1)}
+        className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100"
+        aria-label="Période précédente"
+      >
+        <ChevronLeft className="w-3.5 h-3.5" />
+      </button>
+      {showMonth ? (
+        <select
+          value={month}
+          onChange={e => onMonth(Number(e.target.value))}
+          className="px-1.5 py-1 border-0 bg-transparent text-xs font-semibold text-slate-800 capitalize focus:ring-0 max-w-[7.5rem]"
+        >
+          {moisOptions.map(m => (
+            <option key={m} value={m}>
+              {new Date(2000, m - 1, 1).toLocaleString('fr-FR', { month: 'long' })}
+            </option>
+          ))}
+        </select>
+      ) : null}
+      <select
+        value={year}
+        onChange={e => onYear(Number(e.target.value))}
+        className="px-1.5 py-1 border-0 bg-transparent text-xs font-semibold text-slate-800 focus:ring-0"
+      >
+        {anneeOptions.map(y => (
+          <option key={y} value={y}>
+            {y}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        onClick={() => go(1)}
+        className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100"
+        aria-label="Période suivante"
+      >
+        <ChevronRight className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  )
+}
+
+function monthLabel(year: number, month: number) {
+  return new Date(year, month - 1, 1).toLocaleString('fr-FR', {
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
 export default function AdminEspacePage() {
   const navigate = useNavigate()
   const { user, permissions, getAccessToken } = useAuth()
@@ -205,8 +284,19 @@ export default function AdminEspacePage() {
   const { ins: moneyIns, outs: moneyOuts } = useMoney()
 
   const now = new Date()
-  const [statsMonth, setStatsMonth] = useState(now.getMonth() + 1)
-  const [statsYear, setStatsYear] = useState(now.getFullYear())
+  const defaultMonth = now.getMonth() + 1
+  const defaultYear = now.getFullYear()
+  const [apercuMonth, setApercuMonth] = useState(defaultMonth)
+  const [apercuYear, setApercuYear] = useState(defaultYear)
+  const [apercuTerminesPrev, setApercuTerminesPrev] = useState(0)
+  const [atelierMonth, setAtelierMonth] = useState(defaultMonth)
+  const [atelierYear, setAtelierYear] = useState(defaultYear)
+  const [atelierTermines, setAtelierTermines] = useState(0)
+  const [atelierTerminesPrev, setAtelierTerminesPrev] = useState(0)
+  const [financeMonth, setFinanceMonth] = useState(defaultMonth)
+  const [financeYear, setFinanceYear] = useState(defaultYear)
+  const [equipeMonth, setEquipeMonth] = useState(defaultMonth)
+  const [equipeYear, setEquipeYear] = useState(defaultYear)
   const [trendGroupBy, setTrendGroupBy] = useState<'month' | 'quarter'>('month')
   const [trendData, setTrendData] = useState<StatsTrendPoint[]>([])
   const [trendLoading, setTrendLoading] = useState(false)
@@ -217,6 +307,8 @@ export default function AdminEspacePage() {
   const [selectedTechTemps, setSelectedTechTemps] = useState<TechTempsEnCours | null>(null)
   const [activeSection, setActiveSection] = useState<StatsSectionId>('stats-apercu')
   const pageRef = useRef<HTMLDivElement>(null)
+  const moisOptions = Array.from({ length: 12 }, (_, i) => i + 1)
+  const anneeOptions = Array.from({ length: 5 }, (_, i) => defaultYear - 2 + i)
 
   const scrollToSection = useCallback((id: StatsSectionId) => {
     const el = document.getElementById(id)
@@ -255,8 +347,59 @@ export default function AdminEspacePage() {
 
   useEffect(() => {
     if (!permissions?.canManageUsers) return
-    fetchStats(statsMonth, statsYear)
-  }, [statsMonth, statsYear, fetchStats, permissions?.canManageUsers])
+    fetchStats(apercuMonth, apercuYear)
+    const token = getAccessToken()
+    if (!token) {
+      setApercuTerminesPrev(0)
+      return
+    }
+    const prevApercu = shiftMonth(apercuYear, apercuMonth, -1)
+    void (async () => {
+      try {
+        const prev = await apiFetch<{ terminesCeMois: number }>('/vehicules/stats', {
+          token,
+          params: { month: prevApercu.month, year: prevApercu.year },
+        })
+        setApercuTerminesPrev(prev.terminesCeMois ?? 0)
+      } catch {
+        setApercuTerminesPrev(0)
+      }
+    })()
+  }, [apercuMonth, apercuYear, fetchStats, getAccessToken, permissions?.canManageUsers])
+
+  useEffect(() => {
+    if (!permissions?.canManageUsers) {
+      setAtelierTermines(0)
+      setAtelierTerminesPrev(0)
+      return
+    }
+    const token = getAccessToken()
+    if (!token) {
+      setAtelierTermines(0)
+      setAtelierTerminesPrev(0)
+      return
+    }
+    const prevAtelier = shiftMonth(atelierYear, atelierMonth, -1)
+    void (async () => {
+      try {
+        const [cur, prev] = await Promise.all([
+          apiFetch<{ terminesCeMois: number }>('/vehicules/stats', {
+            token,
+            params: { month: atelierMonth, year: atelierYear },
+          }),
+          apiFetch<{ terminesCeMois: number }>('/vehicules/stats', {
+            token,
+            params: { month: prevAtelier.month, year: prevAtelier.year },
+          }),
+        ])
+        setAtelierTermines(cur.terminesCeMois ?? 0)
+        setAtelierTerminesPrev(prev.terminesCeMois ?? 0)
+      } catch {
+        setAtelierTermines(0)
+        setAtelierTerminesPrev(0)
+      }
+    })()
+  }, [getAccessToken, atelierMonth, atelierYear, permissions?.canManageUsers])
 
   useEffect(() => {
     if (!permissions?.canManageUsers) {
@@ -273,7 +416,7 @@ export default function AdminEspacePage() {
       try {
         const res = await apiFetch<{ data: StatsTrendPoint[] }>('/stats/trends', {
           token,
-          params: { year: statsYear, groupBy: trendGroupBy },
+          params: { year: financeYear, groupBy: trendGroupBy },
         })
         setTrendData(Array.isArray(res.data) ? res.data : [])
       } catch {
@@ -282,7 +425,7 @@ export default function AdminEspacePage() {
         setTrendLoading(false)
       }
     })()
-  }, [getAccessToken, statsYear, trendGroupBy, permissions?.canManageUsers])
+  }, [getAccessToken, financeYear, trendGroupBy, permissions?.canManageUsers])
 
   const loadTechTemps = useCallback(
     async (opts?: { silent?: boolean }) => {
@@ -299,7 +442,7 @@ export default function AdminEspacePage() {
       try {
         const res = await apiFetch<{ data: TechTempsEnCours[] }>('/stats/performance-techniciens', {
           token,
-          params: { year: statsYear, month: statsMonth },
+          params: { year: equipeYear, month: equipeMonth },
         })
         setTechTemps(Array.isArray(res.data) ? res.data : [])
         setTechTempsUpdatedAt(new Date())
@@ -309,7 +452,7 @@ export default function AdminEspacePage() {
         if (!opts?.silent) setTechTempsLoading(false)
       }
     },
-    [getAccessToken, statsYear, statsMonth, permissions?.canManageUsers]
+    [getAccessToken, equipeYear, equipeMonth, permissions?.canManageUsers]
   )
 
   useEffect(() => {
@@ -350,13 +493,14 @@ export default function AdminEspacePage() {
     [trendData]
   )
 
-  const prev = shiftMonth(statsYear, statsMonth, -1)
+  const apercuPrev = shiftMonth(apercuYear, apercuMonth, -1)
+  const financePrev = shiftMonth(financeYear, financeMonth, -1)
 
-  const moneyMonth = useMemo(() => {
-    const curIns = (moneyIns ?? []).filter(m => isInMonth(m.date, statsYear, statsMonth))
-    const curOuts = (moneyOuts ?? []).filter(m => isInMonth(m.date, statsYear, statsMonth))
-    const prevIns = (moneyIns ?? []).filter(m => isInMonth(m.date, prev.year, prev.month))
-    const prevOuts = (moneyOuts ?? []).filter(m => isInMonth(m.date, prev.year, prev.month))
+  const moneyApercu = useMemo(() => {
+    const curIns = (moneyIns ?? []).filter(m => isInMonth(m.date, apercuYear, apercuMonth))
+    const curOuts = (moneyOuts ?? []).filter(m => isInMonth(m.date, apercuYear, apercuMonth))
+    const prevIns = (moneyIns ?? []).filter(m => isInMonth(m.date, apercuPrev.year, apercuPrev.month))
+    const prevOuts = (moneyOuts ?? []).filter(m => isInMonth(m.date, apercuPrev.year, apercuPrev.month))
     const encaissements = curIns.reduce((s, m) => s + (m.amount ?? 0), 0)
     const depenses = curOuts.reduce((s, m) => s + (m.amount ?? 0), 0)
     const encaissementsPrev = prevIns.reduce((s, m) => s + (m.amount ?? 0), 0)
@@ -371,53 +515,58 @@ export default function AdminEspacePage() {
       insCount: curIns.length,
       outsCount: curOuts.length,
     }
-  }, [moneyIns, moneyOuts, statsYear, statsMonth, prev.year, prev.month])
+  }, [moneyIns, moneyOuts, apercuYear, apercuMonth, apercuPrev.year, apercuPrev.month])
 
-  const transMonth = useMemo(() => {
-    const cur = (transactions ?? []).filter(t => isInMonth(t.date, statsYear, statsMonth))
+  const moneyFinance = useMemo(() => {
+    const curIns = (moneyIns ?? []).filter(m => isInMonth(m.date, financeYear, financeMonth))
+    const curOuts = (moneyOuts ?? []).filter(m => isInMonth(m.date, financeYear, financeMonth))
+    const prevIns = (moneyIns ?? []).filter(m => isInMonth(m.date, financePrev.year, financePrev.month))
+    const prevOuts = (moneyOuts ?? []).filter(m => isInMonth(m.date, financePrev.year, financePrev.month))
+    const encaissements = curIns.reduce((s, m) => s + (m.amount ?? 0), 0)
+    const depenses = curOuts.reduce((s, m) => s + (m.amount ?? 0), 0)
+    const encaissementsPrev = prevIns.reduce((s, m) => s + (m.amount ?? 0), 0)
+    const depensesPrev = prevOuts.reduce((s, m) => s + (m.amount ?? 0), 0)
+    return {
+      encaissements,
+      depenses,
+      solde: encaissements - depenses,
+      encaissementsPrev,
+      depensesPrev,
+      soldePrev: encaissementsPrev - depensesPrev,
+    }
+  }, [moneyIns, moneyOuts, financeYear, financeMonth, financePrev.year, financePrev.month])
+
+  const transFinance = useMemo(() => {
+    const cur = (transactions ?? []).filter(t => isInMonth(t.date, financeYear, financeMonth))
     const achats = cur.filter(t => t.type === 'achat').reduce((s, t) => s + (t.montant ?? 0), 0)
     const revenus = cur.filter(t => t.type === 'revenue').reduce((s, t) => s + (t.montant ?? 0), 0)
     const paiements = cur.filter(t => t.type === 'paiement').reduce((s, t) => s + (t.montant ?? 0), 0)
-    return { achats, revenus, paiements, bilan: moneyMonth.encaissements - achats }
-  }, [transactions, statsYear, statsMonth, moneyMonth.encaissements])
+    return { achats, revenus, paiements, bilan: moneyFinance.encaissements - achats }
+  }, [transactions, financeYear, financeMonth, moneyFinance.encaissements])
 
-  const reclamationsMonth = useMemo(() => {
-    const cur = (reclamations ?? []).filter(r => isInMonth(r.date, statsYear, statsMonth)).length
-    const prevCount = (reclamations ?? []).filter(r => isInMonth(r.date, prev.year, prev.month)).length
+  const reclamationsApercu = useMemo(() => {
+    const cur = (reclamations ?? []).filter(r => isInMonth(r.date, apercuYear, apercuMonth)).length
+    const prevCount = (reclamations ?? []).filter(r => isInMonth(r.date, apercuPrev.year, apercuPrev.month)).length
     const open = (reclamations ?? []).filter(r => r.statut === 'ouverte' || r.statut === 'en_cours').length
     return { cur, prevCount, open }
-  }, [reclamations, statsYear, statsMonth, prev.year, prev.month])
+  }, [reclamations, apercuYear, apercuMonth, apercuPrev.year, apercuPrev.month])
 
-  const trendMonthPoint = trendGroupBy === 'month' ? trendData[statsMonth - 1] : null
-  const trendPrevPoint =
-    trendGroupBy === 'month'
-      ? statsMonth > 1
-        ? trendData[statsMonth - 2]
-        : null
-      : null
+  const apercuTrendPoint = trendGroupBy === 'month' && financeYear === apercuYear ? trendData[apercuMonth - 1] : null
 
-  const vehiculesTerminesCeMois = vehiculeStats?.terminesCeMois ?? trendMonthPoint?.vehiculesTraites ?? 0
-  const vehiculesTerminesPrev = trendPrevPoint?.vehiculesTraites ?? 0
+  const vehiculesTerminesApercu = vehiculeStats?.terminesCeMois ?? apercuTrendPoint?.vehiculesTraites ?? 0
+  const vehiculesTerminesApercuPrev = apercuTerminesPrev
   const vehiculesEnCours = vehiculeStats?.enCours ?? 0
   const aResoudre = vehiculeStats?.byEtat?.rouge ?? 0
   const totalDettesClients = (clientsDettes ?? []).reduce((s: number, c: ClientAvecDette) => s + (c.reste ?? 0), 0)
   const topDettes = [...(clientsDettes ?? [])].sort((a, b) => (b.reste ?? 0) - (a.reste ?? 0)).slice(0, 5)
 
-  const moisLabel = new Date(statsYear, statsMonth - 1, 1).toLocaleString('fr-FR', {
-    month: 'long',
-    year: 'numeric',
-  })
-  const moisOptions = Array.from({ length: 12 }, (_, i) => i + 1)
-  const anneeOptions = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i)
+  const apercuLabel = monthLabel(apercuYear, apercuMonth)
+  const atelierLabel = monthLabel(atelierYear, atelierMonth)
+  const financeLabel = monthLabel(financeYear, financeMonth)
+  const equipeLabel = monthLabel(equipeYear, equipeMonth)
   const updatedLabel = techTempsUpdatedAt
     ? techTempsUpdatedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : null
-
-  const goMonth = (delta: number) => {
-    const next = shiftMonth(statsYear, statsMonth, delta)
-    setStatsYear(next.year)
-    setStatsMonth(next.month)
-  }
 
   if (!user || !permissions) return null
 
@@ -439,22 +588,22 @@ export default function AdminEspacePage() {
     {
       key: 'encaissements',
       label: 'Encaissements',
-      value: `${moneyMonth.encaissements.toFixed(0)} DT`,
-      current: moneyMonth.encaissements,
-      previous: moneyMonth.encaissementsPrev,
+      value: `${moneyApercu.encaissements.toFixed(0)} DT`,
+      current: moneyApercu.encaissements,
+      previous: moneyApercu.encaissementsPrev,
       icon: ArrowUpRight,
       tone: 'emerald' as const,
       href: '/money',
-      hint: `${moneyMonth.insCount} entrée(s)`,
+      hint: `${moneyApercu.insCount} entrée(s)`,
     },
     {
       key: 'solde',
       label: 'Solde du mois',
-      value: `${moneyMonth.solde.toFixed(0)} DT`,
-      current: moneyMonth.solde,
-      previous: moneyMonth.soldePrev,
+      value: `${moneyApercu.solde.toFixed(0)} DT`,
+      current: moneyApercu.solde,
+      previous: moneyApercu.soldePrev,
       icon: Wallet,
-      tone: moneyMonth.solde >= 0 ? ('emerald' as const) : ('amber' as const),
+      tone: moneyApercu.solde >= 0 ? ('emerald' as const) : ('amber' as const),
       href: '/money',
       hint: 'Encaissements − dépenses',
     },
@@ -473,9 +622,9 @@ export default function AdminEspacePage() {
     {
       key: 'traites',
       label: 'Véhicules traités',
-      value: String(vehiculesTerminesCeMois),
-      current: vehiculesTerminesCeMois,
-      previous: vehiculesTerminesPrev,
+      value: String(vehiculesTerminesApercu),
+      current: vehiculesTerminesApercu,
+      previous: vehiculesTerminesApercuPrev,
       icon: Car,
       tone: 'sky' as const,
       href: '/vehicules',
@@ -497,13 +646,13 @@ export default function AdminEspacePage() {
     {
       key: 'reclamations',
       label: 'Réclamations',
-      value: String(reclamationsMonth.cur),
-      current: reclamationsMonth.cur,
-      previous: reclamationsMonth.prevCount,
+      value: String(reclamationsApercu.cur),
+      current: reclamationsApercu.cur,
+      previous: reclamationsApercu.prevCount,
       icon: AlertTriangle,
       tone: 'orange' as const,
       href: '/reclamation',
-      hint: `${reclamationsMonth.open} ouverte(s)`,
+      hint: `${reclamationsApercu.open} ouverte(s)`,
       invert: true,
     },
   ]
@@ -529,56 +678,13 @@ export default function AdminEspacePage() {
     <div ref={pageRef} className="relative space-y-8 sm:space-y-10 pb-8">
       <div className="pointer-events-none absolute inset-x-0 -top-6 h-56 bg-[radial-gradient(ellipse_at_top,_rgba(249,115,22,0.12),_transparent_55%)]" />
 
-      {/* Header + filtre unique */}
-      <div className="relative flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-orange-600">Analyse</p>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-1">Statistiques</h1>
-          <p className="text-slate-500 text-sm mt-1 max-w-xl">
-            Vue décisionnelle du garage — finance, atelier et performance équipe.
-          </p>
-        </div>
-
-        <div className="inline-flex items-center gap-1.5 self-start lg:self-auto rounded-2xl border border-slate-200/80 bg-white/90 backdrop-blur px-2 py-1.5 shadow-sm">
-          <button
-            type="button"
-            onClick={() => goMonth(-1)}
-            className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
-            aria-label="Mois précédent"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <select
-            value={statsMonth}
-            onChange={e => setStatsMonth(Number(e.target.value))}
-            className="px-2 py-1.5 rounded-xl border-0 bg-transparent text-sm font-semibold text-slate-800 capitalize focus:ring-0"
-          >
-            {moisOptions.map(m => (
-              <option key={m} value={m}>
-                {new Date(2000, m - 1, 1).toLocaleString('fr-FR', { month: 'long' })}
-              </option>
-            ))}
-          </select>
-          <select
-            value={statsYear}
-            onChange={e => setStatsYear(Number(e.target.value))}
-            className="px-2 py-1.5 rounded-xl border-0 bg-transparent text-sm font-semibold text-slate-800 focus:ring-0"
-          >
-            {anneeOptions.map(y => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={() => goMonth(1)}
-            className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
-            aria-label="Mois suivant"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
+      {/* Header */}
+      <div className="relative">
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-orange-600">Analyse</p>
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-1">Statistiques</h1>
+        <p className="text-slate-500 text-sm mt-1 max-w-xl">
+          Vue décisionnelle du garage — chaque section a son propre filtre de période.
+        </p>
       </div>
 
       {/* Ancres sticky */}
@@ -612,8 +718,18 @@ export default function AdminEspacePage() {
       <section id="stats-apercu" className="relative scroll-mt-20">
         <SectionHeader
           eyebrow="Aperçu"
-          title={`Indicateurs — ${moisLabel}`}
+          title={`Indicateurs — ${apercuLabel}`}
           subtitle="Comparaison vs mois précédent · clic pour ouvrir le module"
+          action={
+            <MonthYearFilter
+              month={apercuMonth}
+              year={apercuYear}
+              onMonth={setApercuMonth}
+              onYear={setApercuYear}
+              moisOptions={moisOptions}
+              anneeOptions={anneeOptions}
+            />
+          }
         />
         <div className="grid grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
           {kpis.map(kpi => {
@@ -654,12 +770,22 @@ export default function AdminEspacePage() {
         <SectionHeader
           eyebrow="Atelier"
           title="Stock global"
-          subtitle="Photo live du parc — indépendant du filtre mois ci-dessus"
+          subtitle={`Stock live · terminés filtrés sur ${atelierLabel}`}
           action={
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-sky-700">
-              <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />
-              Live — hors filtre mois
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-sky-700">
+                <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />
+                Live
+              </span>
+              <MonthYearFilter
+                month={atelierMonth}
+                year={atelierYear}
+                onMonth={setAtelierMonth}
+                onYear={setAtelierYear}
+                moisOptions={moisOptions}
+                anneeOptions={anneeOptions}
+              />
+            </div>
           }
         />
         <StockGlobalPanel title="Stock atelier" />
@@ -676,12 +802,12 @@ export default function AdminEspacePage() {
               <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Terminés ce mois</p>
               <span className="text-[9px] font-bold uppercase text-orange-600">Mois</span>
             </div>
-            <p className="text-xl font-extrabold text-emerald-600 tabular-nums mt-1">{vehiculesTerminesCeMois}</p>
+            <p className="text-xl font-extrabold text-emerald-600 tabular-nums mt-1">{atelierTermines}</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 col-span-2 sm:col-span-1">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">vs mois préc.</p>
             <div className="mt-1">
-              <MomBadge current={vehiculesTerminesCeMois} previous={vehiculesTerminesPrev} />
+              <MomBadge current={atelierTermines} previous={atelierTerminesPrev} />
             </div>
           </div>
         </div>
@@ -692,13 +818,21 @@ export default function AdminEspacePage() {
         <SectionHeader
           eyebrow="Finance"
           title="Tendances & trésorerie"
-          subtitle="Courbes annuelles + détail du mois sélectionné"
+          subtitle={`Courbes ${financeYear} · détail ${financeLabel}`}
           action={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <MonthYearFilter
+                month={financeMonth}
+                year={financeYear}
+                onMonth={setFinanceMonth}
+                onYear={setFinanceYear}
+                moisOptions={moisOptions}
+                anneeOptions={anneeOptions}
+              />
               <select
                 value={trendGroupBy}
                 onChange={e => setTrendGroupBy(e.target.value as 'month' | 'quarter')}
-                className="px-3 py-2 rounded-xl border border-slate-200 text-sm font-medium text-slate-800 bg-white shadow-sm"
+                className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 bg-white shadow-sm"
               >
                 <option value="month">Par mois</option>
                 <option value="quarter">Par trimestre</option>
@@ -771,30 +905,30 @@ export default function AdminEspacePage() {
 
           <div className="border-t border-slate-100 p-4 sm:p-5 space-y-5 bg-gradient-to-b from-white to-slate-50/60">
             <div>
-              <h3 className="text-sm font-bold text-slate-800 mb-3">Trésorerie — {moisLabel}</h3>
+              <h3 className="text-sm font-bold text-slate-800 mb-3">Trésorerie — {financeLabel}</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-semibold uppercase text-emerald-700">Encaissements</span>
-                    <MomBadge current={moneyMonth.encaissements} previous={moneyMonth.encaissementsPrev} />
+                    <MomBadge current={moneyFinance.encaissements} previous={moneyFinance.encaissementsPrev} />
                   </div>
                   <p className="text-2xl font-extrabold text-emerald-800 tabular-nums">
-                    {moneyMonth.encaissements.toFixed(2)} DT
+                    {moneyFinance.encaissements.toFixed(2)} DT
                   </p>
                 </div>
                 <div className="rounded-2xl border border-rose-100 bg-rose-50/50 p-4">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-semibold uppercase text-rose-700">Dépenses</span>
-                    <MomBadge current={moneyMonth.depenses} previous={moneyMonth.depensesPrev} invert />
+                    <MomBadge current={moneyFinance.depenses} previous={moneyFinance.depensesPrev} invert />
                   </div>
                   <p className="text-2xl font-extrabold text-rose-800 tabular-nums">
-                    {moneyMonth.depenses.toFixed(2)} DT
+                    {moneyFinance.depenses.toFixed(2)} DT
                   </p>
                 </div>
                 <div
                   className={cn(
                     'rounded-2xl border p-4',
-                    transMonth.bilan >= 0 ? 'border-teal-200 bg-teal-50/40' : 'border-orange-200 bg-orange-50/40'
+                    transFinance.bilan >= 0 ? 'border-teal-200 bg-teal-50/40' : 'border-orange-200 bg-orange-50/40'
                   )}
                 >
                   <div className="flex items-center gap-2 text-slate-700 mb-1">
@@ -804,29 +938,29 @@ export default function AdminEspacePage() {
                   <p
                     className={cn(
                       'text-2xl font-extrabold tabular-nums',
-                      transMonth.bilan >= 0 ? 'text-teal-800' : 'text-orange-800'
+                      transFinance.bilan >= 0 ? 'text-teal-800' : 'text-orange-800'
                     )}
                   >
-                    {transMonth.bilan.toFixed(2)} DT
+                    {transFinance.bilan.toFixed(2)} DT
                   </p>
                 </div>
                 <div
                   className={cn(
                     'rounded-2xl border p-4',
-                    moneyMonth.solde >= 0 ? 'border-emerald-200 bg-emerald-50/30' : 'border-amber-200 bg-amber-50/30'
+                    moneyFinance.solde >= 0 ? 'border-emerald-200 bg-emerald-50/30' : 'border-amber-200 bg-amber-50/30'
                   )}
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-semibold uppercase text-slate-700">Solde</span>
-                    <MomBadge current={moneyMonth.solde} previous={moneyMonth.soldePrev} />
+                    <MomBadge current={moneyFinance.solde} previous={moneyFinance.soldePrev} />
                   </div>
                   <p
                     className={cn(
                       'text-2xl font-extrabold tabular-nums',
-                      moneyMonth.solde >= 0 ? 'text-emerald-800' : 'text-amber-800'
+                      moneyFinance.solde >= 0 ? 'text-emerald-800' : 'text-amber-800'
                     )}
                   >
-                    {moneyMonth.solde.toFixed(2)} DT
+                    {moneyFinance.solde.toFixed(2)} DT
                   </p>
                 </div>
               </div>
@@ -834,19 +968,19 @@ export default function AdminEspacePage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <h3 className="text-sm font-bold text-slate-800 mb-3">Fournisseurs — {moisLabel}</h3>
+                <h3 className="text-sm font-bold text-slate-800 mb-3">Fournisseurs — {financeLabel}</h3>
                 <div className="space-y-2">
                   <div className="flex justify-between items-center py-2 border-b border-slate-100">
                     <span className="text-sm text-slate-600">Achats</span>
-                    <span className="font-semibold text-slate-900 tabular-nums">{transMonth.achats.toFixed(2)} DT</span>
+                    <span className="font-semibold text-slate-900 tabular-nums">{transFinance.achats.toFixed(2)} DT</span>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b border-slate-100">
                     <span className="text-sm text-slate-600">Revenus fournisseurs</span>
-                    <span className="font-semibold text-emerald-700 tabular-nums">{transMonth.revenus.toFixed(2)} DT</span>
+                    <span className="font-semibold text-emerald-700 tabular-nums">{transFinance.revenus.toFixed(2)} DT</span>
                   </div>
                   <div className="flex justify-between items-center py-2">
                     <span className="text-sm text-slate-600">Paiements</span>
-                    <span className="font-semibold text-rose-700 tabular-nums">{transMonth.paiements.toFixed(2)} DT</span>
+                    <span className="font-semibold text-rose-700 tabular-nums">{transFinance.paiements.toFixed(2)} DT</span>
                   </div>
                 </div>
               </div>
@@ -893,9 +1027,17 @@ export default function AdminEspacePage() {
         <SectionHeader
           eyebrow="Équipe"
           title="Performance techniciens"
-          subtitle={`Période ${moisLabel} · archives + atelier · clic sur un nom pour le détail`}
+          subtitle={`Période ${equipeLabel} · archives + atelier · clic sur un nom pour le détail`}
           action={
             <div className="flex flex-wrap items-center gap-2">
+              <MonthYearFilter
+                month={equipeMonth}
+                year={equipeYear}
+                onMonth={setEquipeMonth}
+                onYear={setEquipeYear}
+                moisOptions={moisOptions}
+                anneeOptions={anneeOptions}
+              />
               <button
                 type="button"
                 onClick={() => void loadTechTemps()}
@@ -914,8 +1056,8 @@ export default function AdminEspacePage() {
                   }
                   setTechTempsExporting(true)
                   void exportPerformanceTechniciensPdf({
-                    year: statsYear,
-                    month: statsMonth,
+                    year: equipeYear,
+                    month: equipeMonth,
                     techniciens: techTemps,
                   })
                     .then(() => toast.success('Rapport PDF téléchargé'))
@@ -966,7 +1108,7 @@ export default function AdminEspacePage() {
           <p className="text-xs text-slate-500">Chargement…</p>
         ) : techTemps.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 p-6 text-sm text-slate-500">
-            Aucune donnée pour {moisLabel}.
+            Aucune donnée pour {equipeLabel}.
           </div>
         ) : (
           <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -1044,7 +1186,7 @@ export default function AdminEspacePage() {
         open={selectedTechTemps != null}
         onClose={() => setSelectedTechTemps(null)}
         title={selectedTechTemps?.nom ?? 'Détail technicien'}
-        subtitle={`Performance — ${moisLabel} · ${selectedTechTemps?.vehiculesCount ?? 0} véhicule(s)`}
+        subtitle={`Performance — ${equipeLabel} · ${selectedTechTemps?.vehiculesCount ?? 0} véhicule(s)`}
         maxWidth="lg"
       >
         {selectedTechTemps && (
