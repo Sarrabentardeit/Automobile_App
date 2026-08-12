@@ -389,11 +389,13 @@ router.get('/temps-en-cours-techniciens', authenticate(), async (req, res) => {
 })
 
 /**
- * Rapport de performance — même règle que le comptage manuel client :
- *   1) Archives du mois  = date_sortie dans le mois
- *   2) + Véhicules EN COURS actuels (etat ≠ vert)
- * Attribué au technicien principal (technicien_id) uniquement — comme le filtre liste.
- * Temps moyen = minutes EN COURS (orange) dans le mois ÷ véhicules qui ont du temps.
+ * Rapport de performance techniciens.
+ * Véhicules du mois =
+ *   - sortis dans le mois (archives)
+ *   - OU encore en atelier (≠ vert)
+ *   - OU présents pendant le mois (entrée ≤ fin mois et sortie vide / ≥ début mois)
+ *   - OU avec temps EN COURS enregistré dans le mois
+ * Attribué à TOUS les techniciens assignés (principal + co-assignés).
  */
 router.get('/performance-techniciens', authenticate(), async (req, res) => {
   try {
@@ -430,10 +432,24 @@ router.get('/performance-techniciens', authenticate(), async (req, res) => {
       date_sortie: true,
     }
 
-    const [users, archivesDuMois, enCoursActuels, histRows] = await Promise.all([
+    const overlapsMonth = (v: VehRow): boolean => {
+      const sortie = (v.date_sortie || '').trim().slice(0, 10)
+      if (sortie && sortie >= from && sortie <= to) return true
+      if (v.etat_actuel && v.etat_actuel !== 'vert') return true
+      const entree = (v.date_entree || '').trim().slice(0, 10)
+      if (entree && entree <= to && (!sortie || sortie >= from)) return true
+      return false
+    }
+
+    const [users, candidates, enCoursActuels, histRows] = await Promise.all([
       db.user.findMany({ select: { id: true, fullName: true, email: true } }),
       db.vehicule.findMany({
-        where: { date_sortie: { gte: from, lte: to } },
+        where: {
+          OR: [
+            { date_sortie: { gte: from, lte: to } },
+            { date_entree: { lte: to } },
+          ],
+        },
         select: vehSelect,
       }),
       db.vehicule.findMany({
@@ -460,8 +476,20 @@ router.get('/performance-techniciens', authenticate(), async (req, res) => {
     }
 
     const vehicleById = new Map<number, VehRow>()
-    for (const v of [...(archivesDuMois as VehRow[]), ...(enCoursActuels as VehRow[])]) {
-      vehicleById.set(v.id, v)
+    for (const v of [...(candidates as VehRow[]), ...(enCoursActuels as VehRow[])]) {
+      if (overlapsMonth(v)) vehicleById.set(v.id, v)
+    }
+
+    const histVehIds = Array.from(
+      new Set((histRows as Array<{ vehiculeId: number }>).map(h => h.vehiculeId).filter(Boolean))
+    )
+    const missing = histVehIds.filter(id => !vehicleById.has(id))
+    if (missing.length > 0) {
+      const extra = await db.vehicule.findMany({
+        where: { id: { in: missing } },
+        select: vehSelect,
+      })
+      for (const v of extra as VehRow[]) vehicleById.set(v.id, v)
     }
 
     const minutesByVehicule = new Map<number, { minutes: number; lastChange: string }>()
@@ -499,10 +527,9 @@ router.get('/performance-techniciens', authenticate(), async (req, res) => {
 
     const byTech = new Map<number, Map<number, TechVeh>>()
     for (const v of vehicleById.values()) {
-      // Technicien principal uniquement (comme le filtre manuel sur la liste)
-      const tid =
-        v.technicien_id != null && Number(v.technicien_id) > 0 ? Number(v.technicien_id) : null
-      if (!tid) continue
+      // Principal + co-assignés (chaque technicien sur la fiche compte +1)
+      const tids = techIdsFromVehicle(v)
+      if (tids.length === 0) continue
       const time = minutesByVehicule.get(v.id)
       const service = (v.service_type || 'autre').trim() || 'autre'
       const modele = (v.modele || '').trim() || '—'
@@ -518,12 +545,14 @@ router.get('/performance-techniciens', authenticate(), async (req, res) => {
         date_sortie: (v.date_sortie || '').slice(0, 10),
         etat_actuel: v.etat_actuel || '',
       }
-      let map = byTech.get(tid)
-      if (!map) {
-        map = new Map()
-        byTech.set(tid, map)
+      for (const tid of tids) {
+        let map = byTech.get(tid)
+        if (!map) {
+          map = new Map()
+          byTech.set(tid, map)
+        }
+        map.set(v.id, entry)
       }
-      map.set(v.id, entry)
     }
 
     const data = Array.from(byTech.entries())

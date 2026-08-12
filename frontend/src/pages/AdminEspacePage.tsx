@@ -671,8 +671,8 @@ export default function AdminEspacePage() {
                   Rapport de performance des techniciens
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Période {techTempsMoisLabel} : même règle que le comptage manuel —
-                  archives (date de sortie du mois) + véhicules encore en atelier, technicien principal.
+                  Période {techTempsMoisLabel} : archives du mois + atelier + présents dans le mois ;
+                  compté pour chaque technicien assigné (principal et co-assignés).
                   Cliquez un nom pour le détail.
                 </p>
                 {updatedLabel && (
