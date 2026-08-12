@@ -389,9 +389,13 @@ router.get('/temps-en-cours-techniciens', authenticate(), async (req, res) => {
 })
 
 /**
- * Rapport de performance des techniciens (remplace le comptage manuel).
- * Archives (date_sortie) + entrées du mois + EN COURS (mois courant)
- * + marques + temps moyen EN COURS + répartition par type de service.
+ * Rapport de performance des techniciens (aligné sur le comptage manuel archives + en cours).
+ *
+ * Un véhicule compte pour le mois s'il a été "présent / pris en charge" pendant ce mois :
+ *   date_entree ≤ fin du mois  ET  (pas encore sorti OU date_sortie ≥ début du mois)
+ * = chevauchement avec le mois (comme archives du mois + atelier encore ouvert).
+ *
+ * Temps moyen = durée EN COURS (orange) enregistrée pendant le mois.
  */
 router.get('/performance-techniciens', authenticate(), async (req, res) => {
   try {
@@ -403,7 +407,6 @@ router.get('/performance-techniciens', authenticate(), async (req, res) => {
         ? monthRaw
         : now.getMonth() + 1
     const { from, to } = monthBounds(year, month)
-    const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1
 
     type VehRow = {
       id: number
@@ -429,23 +432,26 @@ router.get('/performance-techniciens', authenticate(), async (req, res) => {
       date_sortie: true,
     }
 
-    const [users, archivedOrEntered, enCours, histRows] = await Promise.all([
+    const overlapsMonth = (v: VehRow): boolean => {
+      const entree = (v.date_entree || '').slice(0, 10)
+      if (!entree || entree > to) return false
+      const sortie = (v.date_sortie || '').trim().slice(0, 10)
+      if (!sortie) return true // encore en atelier
+      return sortie >= from
+    }
+
+    const [users, candidates, histRows] = await Promise.all([
       db.user.findMany({ select: { id: true, fullName: true, email: true } }),
+      // Candidats : entrés avant la fin du mois (filtre large), affine en JS
       db.vehicule.findMany({
         where: {
           OR: [
+            { date_entree: { lte: to } },
             { date_sortie: { gte: from, lte: to } },
-            { date_entree: { gte: from, lte: to } },
           ],
         },
         select: vehSelect,
       }),
-      isCurrentMonth
-        ? db.vehicule.findMany({
-            where: { etat_actuel: { not: 'vert' } },
-            select: vehSelect,
-          })
-        : Promise.resolve([]),
       db.vehiculeHistorique.findMany({
         where: {
           etat_precedent: 'orange',
@@ -466,10 +472,11 @@ router.get('/performance-techniciens', authenticate(), async (req, res) => {
     }
 
     const vehicleById = new Map<number, VehRow>()
-    for (const v of [...(archivedOrEntered as VehRow[]), ...(enCours as VehRow[])]) {
-      vehicleById.set(v.id, v)
+    for (const v of candidates as VehRow[]) {
+      if (overlapsMonth(v)) vehicleById.set(v.id, v)
     }
 
+    // Compléter avec véhicules ayant eu du temps EN COURS dans le mois (dates parfois incomplètes)
     const histVehIds = Array.from(
       new Set((histRows as Array<{ vehiculeId: number }>).map(h => h.vehiculeId).filter(Boolean))
     )
