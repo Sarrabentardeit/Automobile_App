@@ -86,6 +86,8 @@ export default function CalendarPage() {
   const { clients, addClient } = useClients()
   const toast = useToast()
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  /** Filtre KPI : null = tout · today · statut RDV */
+  const [kpiFocus, setKpiFocus] = useState<'all' | 'today' | CalendarRdvStatut>('all')
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [newAssign, setNewAssign] = useState({
@@ -118,6 +120,35 @@ export default function CalendarPage() {
   )
   const grid = useMemo(() => getCalendarGrid(viewDate.year, viewDate.month), [viewDate.year, viewDate.month])
   const title = `${MONTH_NAMES[viewDate.month - 1]} ${viewDate.year}`
+  const monthPrefix = `${viewDate.year}-${String(viewDate.month).padStart(2, '0')}`
+  const todayStr = useMemo(() => {
+    const t = new Date()
+    return (
+      t.getFullYear() +
+      '-' +
+      String(t.getMonth() + 1).padStart(2, '0') +
+      '-' +
+      String(t.getDate()).padStart(2, '0')
+    )
+  }, [])
+
+  const monthAssignments = useMemo(
+    () => assignments.filter(a => a.date.startsWith(monthPrefix)),
+    [assignments, monthPrefix]
+  )
+
+  const kpiStats = useMemo(() => {
+    const byStatut = (s: CalendarRdvStatut) =>
+      monthAssignments.filter(a => (a.statut ?? 'prevu') === s).length
+    return {
+      total: monthAssignments.length,
+      today: assignments.filter(a => a.date === todayStr).length,
+      prevu: byStatut('prevu'),
+      honore: byStatut('honore'),
+      non_honore: byStatut('non_honore'),
+      annule: byStatut('annule'),
+    }
+  }, [monthAssignments, assignments, todayStr])
 
   const assignmentsByDate = useMemo(() => {
     const map = new Map<string, CalendarAssignment[]>()
@@ -129,10 +160,17 @@ export default function CalendarPage() {
     return map
   }, [assignments])
 
-  const selectedDayAssignments = useMemo(
-    () => (selectedDate ? (assignmentsByDate.get(selectedDate) ?? []) : []),
-    [selectedDate, assignmentsByDate]
-  )
+  const selectedDayAssignments = useMemo(() => {
+    const list = selectedDate ? (assignmentsByDate.get(selectedDate) ?? []) : []
+    if (kpiFocus === 'all' || kpiFocus === 'today') return list
+    return list.filter(a => (a.statut ?? 'prevu') === kpiFocus)
+  }, [selectedDate, assignmentsByDate, kpiFocus])
+
+  const kpiListAssignments = useMemo(() => {
+    if (kpiFocus === 'all') return []
+    if (kpiFocus === 'today') return assignments.filter(a => a.date === todayStr)
+    return monthAssignments.filter(a => (a.statut ?? 'prevu') === kpiFocus)
+  }, [kpiFocus, assignments, todayStr, monthAssignments])
 
   const goPrev = () => {
     if (viewDate.month === 1) setViewDate({ year: viewDate.year - 1, month: 12 })
@@ -142,15 +180,21 @@ export default function CalendarPage() {
     if (viewDate.month === 12) setViewDate({ year: viewDate.year + 1, month: 1 })
     else setViewDate({ year: viewDate.year, month: viewDate.month + 1 })
   }
-  const goToday = () => {
-    const t = new Date()
-    setViewDate({ year: t.getFullYear(), month: t.getMonth() + 1 })
-  }
 
   /** Sélectionne le jour et affiche toutes les affectations dans le panneau (sans limite). */
   const openDay = (date: string) => {
     setSelectedDate(date)
+    setKpiFocus('all')
     setNewAssign(prev => ({ ...prev, date }))
+  }
+
+  const selectKpi = (focus: 'all' | 'today' | CalendarRdvStatut) => {
+    setKpiFocus(prev => (prev === focus ? 'all' : focus))
+    if (focus === 'today') {
+      const t = new Date()
+      setViewDate({ year: t.getFullYear(), month: t.getMonth() + 1 })
+      setSelectedDate(todayStr)
+    }
   }
 
   const openAddForDate = (date: string) => {
@@ -347,37 +391,175 @@ export default function CalendarPage() {
 
   if (!user) return null
 
+  const monthTotal = Math.max(kpiStats.total, 1)
+  const statusKpis: {
+    key: CalendarRdvStatut
+    label: string
+    value: number
+    color: string
+  }[] = [
+    { key: 'prevu', label: 'Prévus', value: kpiStats.prevu, color: CALENDAR_RDV_STATUT_CONFIG.prevu.color },
+    {
+      key: 'non_honore',
+      label: 'Non honorés',
+      value: kpiStats.non_honore,
+      color: CALENDAR_RDV_STATUT_CONFIG.non_honore.color,
+    },
+    { key: 'honore', label: 'Honorés', value: kpiStats.honore, color: CALENDAR_RDV_STATUT_CONFIG.honore.color },
+    { key: 'annule', label: 'Annulés', value: kpiStats.annule, color: CALENDAR_RDV_STATUT_CONFIG.annule.color },
+  ]
+
   return (
     <div className="max-w-6xl mx-auto pb-12">
-      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900 tracking-tight flex items-center gap-2">
-            <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-indigo-500 text-white">
-              <CalendarIcon className="w-5 h-5" />
-            </span>
-            Calendrier
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {canManageCalendar
-              ? 'Affectation travail · Équipe et véhicules'
-              : 'Vos affectations planifiées (lecture seule)'}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={goToday}>
-            Aujourd'hui
-          </Button>
-          <div className="flex items-center rounded-xl border border-gray-200 bg-white overflow-hidden">
-            <button onClick={goPrev} className="p-2.5 text-gray-500 hover:bg-gray-50" aria-label="Mois précédent">
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            <span className="px-4 py-2 text-sm font-semibold text-gray-800 min-w-[160px] text-center">{title}</span>
-            <button onClick={goNext} className="p-2.5 text-gray-500 hover:bg-gray-50" aria-label="Mois suivant">
-              <ChevronRight className="w-5 h-5" />
-            </button>
+      <header className="flex flex-col gap-4 mb-4">
+        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold text-gray-900 tracking-tight flex items-center gap-2">
+              <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-indigo-500 text-white shadow-lg shadow-indigo-500/25">
+                <CalendarIcon className="w-5 h-5" />
+              </span>
+              Calendrier
+            </h1>
+            <p className="text-sm text-gray-500 mt-1">
+              {canManageCalendar
+                ? 'Affectation travail · Équipe et véhicules'
+                : 'Vos affectations planifiées (lecture seule)'}
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3">
+            {/* Contexte période — hors bande KPI statut */}
+            <div className="inline-flex items-stretch rounded-2xl border border-indigo-100 bg-gradient-to-r from-white to-indigo-50/60 shadow-sm overflow-hidden">
+              <button
+                type="button"
+                onClick={() => selectKpi('all')}
+                className={cn(
+                  'px-3.5 py-2 text-left transition-colors min-w-[5.5rem]',
+                  kpiFocus === 'all' ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-50/80'
+                )}
+              >
+                <p
+                  className={cn(
+                    'text-[9px] font-bold uppercase tracking-wider',
+                    kpiFocus === 'all' ? 'text-indigo-100' : 'text-indigo-500'
+                  )}
+                >
+                  RDV mois
+                </p>
+                <p className="text-lg font-extrabold tabular-nums leading-none mt-0.5">{kpiStats.total}</p>
+              </button>
+              <div className="w-px bg-indigo-100" />
+              <button
+                type="button"
+                onClick={() => selectKpi('today')}
+                className={cn(
+                  'px-3.5 py-2 text-left transition-colors min-w-[5.5rem]',
+                  kpiFocus === 'today' ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-50/80'
+                )}
+              >
+                <p
+                  className={cn(
+                    'text-[9px] font-bold uppercase tracking-wider',
+                    kpiFocus === 'today' ? 'text-indigo-100' : 'text-indigo-500'
+                  )}
+                >
+                  Aujourd’hui
+                </p>
+                <p className="text-lg font-extrabold tabular-nums leading-none mt-0.5">{kpiStats.today}</p>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="flex items-center rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+                <button onClick={goPrev} className="p-2.5 text-gray-500 hover:bg-gray-50" aria-label="Mois précédent">
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <span className="px-4 py-2 text-sm font-semibold text-gray-800 min-w-[160px] text-center">
+                  {title}
+                </span>
+                <button onClick={goNext} className="p-2.5 text-gray-500 hover:bg-gray-50" aria-label="Mois suivant">
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </header>
+
+      {/* KPI statut uniquement — couleurs existantes */}
+      <section className="mb-5">
+        <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-2.5 sm:p-3 shadow-sm">
+          <div className="flex items-center justify-between gap-2 mb-2 px-0.5">
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+              Statuts · {title}
+            </p>
+            {kpiFocus !== 'all' && kpiFocus !== 'today' ? (
+              <button
+                type="button"
+                onClick={() => setKpiFocus('all')}
+                className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800"
+              >
+                Effacer
+              </button>
+            ) : (
+              <span className="text-[10px] text-slate-400 hidden sm:inline">Filtrer la grille</span>
+            )}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {statusKpis.map(card => {
+              const active = kpiFocus === card.key
+              const pct = Math.min(100, Math.round((card.value / monthTotal) * 100))
+              return (
+                <button
+                  key={card.key}
+                  type="button"
+                  onClick={() => selectKpi(card.key)}
+                  className={cn(
+                    'relative text-left rounded-xl border bg-white px-3 py-2.5 transition-all duration-200',
+                    'hover:-translate-y-0.5 hover:shadow-md',
+                    active ? 'shadow-md' : 'border-slate-200 shadow-sm'
+                  )}
+                  style={
+                    active
+                      ? {
+                          borderColor: card.color,
+                          boxShadow: `0 8px 20px ${card.color}22`,
+                          background: `linear-gradient(180deg, ${card.color}14 0%, #fff 60%)`,
+                        }
+                      : undefined
+                  }
+                >
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span
+                      className="h-1.5 w-1.5 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: card.color, boxShadow: `0 0 0 3px ${card.color}20` }}
+                    />
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500 truncate">
+                      {card.label}
+                    </span>
+                  </div>
+                  <p
+                    className="text-2xl font-extrabold tabular-nums tracking-tight leading-none"
+                    style={{ color: active ? card.color : '#0f172a' }}
+                  >
+                    {card.value}
+                  </p>
+                  <div className="mt-2 h-1 rounded-full bg-slate-100 overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-300"
+                      style={{
+                        width: `${pct}%`,
+                        backgroundColor: card.color,
+                        opacity: card.value > 0 ? 1 : 0.2,
+                      }}
+                    />
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Grille du mois */}
@@ -392,7 +574,11 @@ export default function CalendarPage() {
             </div>
             <div className="grid grid-cols-7 auto-rows-fr min-h-[380px]">
               {grid.map((cell, i) => {
-                const dayAssignments = assignmentsByDate.get(cell.date) ?? []
+                const rawDay = assignmentsByDate.get(cell.date) ?? []
+                const dayAssignments =
+                  kpiFocus === 'all' || kpiFocus === 'today'
+                    ? rawDay
+                    : rawDay.filter(a => (a.statut ?? 'prevu') === kpiFocus)
                 const isSelected = selectedDate === cell.date
                 return (
                   <button
@@ -465,6 +651,66 @@ export default function CalendarPage() {
         {/* Panneau du jour sélectionné */}
         <div className="lg:col-span-1">
           <Card padding="md" className="sticky top-4">
+            {kpiFocus !== 'all' && kpiListAssignments.length >= 0 ? (
+              <div className="mb-5 pb-4 border-b border-slate-100">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm">
+                      {kpiFocus === 'today'
+                        ? 'Aujourd’hui'
+                        : CALENDAR_RDV_STATUT_CONFIG[kpiFocus].label}
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      {kpiListAssignments.length} affectation(s)
+                      {kpiFocus !== 'today' ? ` · ${title}` : ''}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setKpiFocus('all')}
+                    className="text-[11px] font-semibold text-indigo-600 hover:underline"
+                  >
+                    Tout
+                  </button>
+                </div>
+                {kpiListAssignments.length === 0 ? (
+                  <p className="text-sm text-slate-400 py-2">Aucune affectation.</p>
+                ) : (
+                  <ul className="space-y-2 max-h-56 overflow-y-auto pr-0.5">
+                    {kpiListAssignments
+                      .slice()
+                      .sort((a, b) => a.date.localeCompare(b.date))
+                      .map(a => {
+                        const statut = a.statut ?? 'prevu'
+                        const cfg = CALENDAR_RDV_STATUT_CONFIG[statut]
+                        return (
+                          <li key={`kpi-${a.id}`}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedDate(a.date)
+                                if (canManageCalendar) openEditAssignment(a)
+                              }}
+                              className="w-full text-left rounded-xl border border-slate-200 bg-white px-3 py-2.5 hover:border-indigo-300 hover:bg-indigo-50/40 transition-colors"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-xs font-bold text-slate-800 truncate">{a.memberName}</p>
+                                <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded-full', cfg.bg, cfg.text)}>
+                                  {cfg.label}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                                {formatDate(a.date)} · {a.vehicleLabel || '—'}
+                              </p>
+                            </button>
+                          </li>
+                        )
+                      })}
+                  </ul>
+                )}
+              </div>
+            ) : null}
+
             {selectedDate ? (
               <>
                 <div className="flex items-center justify-between mb-4">
@@ -580,9 +826,9 @@ export default function CalendarPage() {
                   </ul>
                 )}
               </>
-            ) : (
+            ) : kpiFocus === 'all' ? (
               <p className="text-sm text-gray-500">Cliquez sur un jour pour voir les affectations.</p>
-            )}
+            ) : null}
           </Card>
         </div>
       </div>
