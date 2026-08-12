@@ -138,9 +138,8 @@ function buildReportHtml(input: PerfReportInput): string {
     padding: 8px 6px;
     border-bottom: 1px solid #ddd;
     vertical-align: middle;
+    background: #ffffff;
   }
-  table.rank tr:nth-child(even) td { background: #f4f4f4; }
-  table.rank tr:nth-child(-n+3) td { background: #fff4e8; }
   table.rank .center { text-align: center; font-weight: 600; }
   table.rank .name { text-align: left; padding-left: 10px; font-weight: 700; }
   table.rank .svc { text-align: left; padding-left: 8px; font-size: 10.5px; color: #444; }

@@ -919,7 +919,19 @@ export default function AdminEspacePage() {
                   <tbody className="divide-y divide-gray-100">
                     {selectedTechTemps.vehicules!.map(v => (
                       <tr key={v.vehiculeId} className="hover:bg-gray-50">
-                        <td className="px-3 py-2 font-medium text-gray-900">{v.immatriculation}</td>
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedTechTemps(null)
+                              navigate(`/vehicules/${v.vehiculeId}`)
+                            }}
+                            className="font-medium text-orange-700 hover:text-orange-900 hover:underline text-left"
+                            title="Ouvrir la fiche véhicule"
+                          >
+                            {v.immatriculation}
+                          </button>
+                        </td>
                         <td className="px-3 py-2 text-gray-600">{v.modele}</td>
                         <td className="px-3 py-2 text-gray-600">{v.serviceLabel ?? '—'}</td>
                         <td className="px-3 py-2 text-right tabular-nums font-semibold text-orange-800">

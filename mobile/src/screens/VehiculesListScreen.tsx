@@ -814,7 +814,12 @@ export default function VehiculesListScreen({
       ) : null}
 
       {showTechnicienPicker ? (
-        <View style={styles.techList}>
+        <ScrollView
+          style={styles.techList}
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator
+        >
           <Pressable
             style={[styles.techItem, technicienId == null && styles.techItemActive]}
             onPress={() => {
@@ -836,7 +841,7 @@ export default function VehiculesListScreen({
               <Text style={styles.techItemText}>{t.nom_complet}</Text>
             </Pressable>
           ))}
-        </View>
+        </ScrollView>
       ) : null}
 
       <Pressable
@@ -858,7 +863,12 @@ export default function VehiculesListScreen({
       </Pressable>
 
       {showServicePicker ? (
-        <View style={styles.techList}>
+        <ScrollView
+          style={styles.techList}
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator
+        >
           <Pressable
             style={[styles.techItem, serviceType == null && styles.techItemActive]}
             onPress={() => {
@@ -880,7 +890,7 @@ export default function VehiculesListScreen({
               <Text style={styles.techItemText}>{s.label}</Text>
             </Pressable>
           ))}
-        </View>
+        </ScrollView>
       ) : null}
 
       {showVehicleList ? (
@@ -1248,7 +1258,8 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
     borderRadius: 10,
     marginBottom: 8,
-    overflow: 'hidden',
+    maxHeight: 220,
+    backgroundColor: '#fff',
   },
   techItem: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
   techItemActive: { backgroundColor: '#fff7ed' },

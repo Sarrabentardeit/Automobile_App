@@ -79,7 +79,7 @@ export default function ClientDetailSheet({
 }: Props) {
   if (!client) return null
 
-  const tel = client.telephone.replace(/\s/g, '')
+  const tel = (client.telephone ?? '').replace(/\s/g, '')
   const [c1, c2] = avatarGradient(client.nom)
   const topInset = getStatusBarInset()
 
@@ -91,9 +91,11 @@ export default function ClientDetailSheet({
         <View style={styles.handle} />
 
         <ScrollView
+          style={{ flex: 1 }}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scroll}
           bounces={false}
+          keyboardShouldPersistTaps="handled"
         >
           <View style={styles.profile}>
             <LinearGradient colors={[c1, c2]} style={styles.avatarLg}>

@@ -71,6 +71,7 @@ export default function OrdreExcelForm({ form, onChange }: Props) {
         rightLabel="TÉLÉPHONE CLIENT"
         rightValue={form.clientTelephone}
         onRightChange={(v) => set('clientTelephone', v)}
+        rightKeyboardType="phone-pad"
       />
       <ExcelRow
         leftLabel="VOITURE"
@@ -153,6 +154,7 @@ export default function OrdreExcelForm({ form, onChange }: Props) {
               <TextInput
                 style={[styles.cellInput, { flex: 1, textAlign: 'center' }]}
                 value={p.quantite}
+                keyboardType="number-pad"
                 onChangeText={(v) => {
                   const pieces = [...form.complement.pieces]
                   while (pieces.length <= i) pieces.push({ quantite: '', produit: '' })
@@ -258,7 +260,12 @@ export default function OrdreExcelForm({ form, onChange }: Props) {
             onChangeText={(v) => setComp('travauxProchains', v)}
             multiline
           />
-          <LabeledField label="PRIX" value={form.complement.prix} onChange={(v) => setComp('prix', v)} />
+          <LabeledField
+            label="PRIX"
+            value={form.complement.prix}
+            onChange={(v) => setComp('prix', v)}
+            keyboardType="decimal-pad"
+          />
           <LabeledField
             label="TECHNICIEN"
             value={form.complement.technicienMention}
@@ -292,6 +299,7 @@ function ExcelRow({
   rightValue,
   onRightChange,
   keyboardType,
+  rightKeyboardType,
 }: {
   leftLabel: string
   leftValue: string
@@ -299,7 +307,8 @@ function ExcelRow({
   rightLabel: string
   rightValue: string
   onRightChange: (v: string) => void
-  keyboardType?: 'default' | 'numeric'
+  keyboardType?: 'default' | 'numeric' | 'decimal-pad' | 'phone-pad' | 'number-pad'
+  rightKeyboardType?: 'default' | 'numeric' | 'decimal-pad' | 'phone-pad' | 'number-pad'
 }) {
   return (
     <View style={styles.excelRow}>
@@ -311,7 +320,12 @@ function ExcelRow({
         keyboardType={keyboardType}
       />
       <Text style={styles.lbl}>{rightLabel}</Text>
-      <TextInput style={styles.val} value={rightValue} onChangeText={onRightChange} />
+      <TextInput
+        style={styles.val}
+        value={rightValue}
+        onChangeText={onRightChange}
+        keyboardType={rightKeyboardType}
+      />
     </View>
   )
 }
@@ -320,15 +334,22 @@ function LabeledField({
   label,
   value,
   onChange,
+  keyboardType,
 }: {
   label: string
   value: string
   onChange: (v: string) => void
+  keyboardType?: 'default' | 'numeric' | 'decimal-pad' | 'phone-pad' | 'number-pad'
 }) {
   return (
     <View style={styles.labeledRow}>
       <Text style={styles.lblWide}>{label}</Text>
-      <TextInput style={styles.valFlex} value={value} onChangeText={onChange} />
+      <TextInput
+        style={styles.valFlex}
+        value={value}
+        onChangeText={onChange}
+        keyboardType={keyboardType}
+      />
     </View>
   )
 }

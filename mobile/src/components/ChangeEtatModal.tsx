@@ -42,7 +42,11 @@ export default function ChangeEtatModal({
   const [loading, setLoading] = useState(false)
 
   const transitions = TRANSITIONS_AUTORISEES[vehicule.etat_actuel] ?? []
-  const currentCfg = ETAT_CONFIG[vehicule.etat_actuel]
+  const currentCfg = ETAT_CONFIG[vehicule.etat_actuel] ?? {
+    label: String(vehicule.etat_actuel || 'Inconnu'),
+    color: '#6b7280',
+    description: '',
+  }
 
   const reset = () => {
     setSelected(null)
@@ -120,6 +124,7 @@ export default function ChangeEtatModal({
               <Text style={[styles.label, { marginTop: 16 }]}>Nouvel état</Text>
               {transitions.map((etat) => {
                 const cfg = ETAT_CONFIG[etat]
+                if (!cfg) return null
                 const isSel = selected === etat
                 return (
                   <Pressable
@@ -158,7 +163,7 @@ export default function ChangeEtatModal({
               </Pressable>
             </ScrollView>
           ) : (
-            <View>
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 12 }}>
               <View style={styles.transitionRow}>
                 <View style={[styles.badge, { backgroundColor: currentCfg.color }]}>
                   <Text style={styles.badgeText}>{currentCfg.label}</Text>
@@ -167,10 +172,12 @@ export default function ChangeEtatModal({
                 <View
                   style={[
                     styles.badge,
-                    { backgroundColor: ETAT_CONFIG[selected!].color },
+                    { backgroundColor: (ETAT_CONFIG[selected!] ?? currentCfg).color },
                   ]}
                 >
-                  <Text style={styles.badgeText}>{ETAT_CONFIG[selected!].label}</Text>
+                  <Text style={styles.badgeText}>
+                    {(ETAT_CONFIG[selected!] ?? currentCfg).label}
+                  </Text>
                 </View>
               </View>
               <Text style={styles.label}>Commentaire (optionnel)</Text>
@@ -203,7 +210,7 @@ export default function ChangeEtatModal({
                   </Text>
                 </Pressable>
               </View>
-            </View>
+            </ScrollView>
           )}
         </View>
       </View>

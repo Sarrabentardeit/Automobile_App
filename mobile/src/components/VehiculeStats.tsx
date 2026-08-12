@@ -55,7 +55,12 @@ export default function VehiculeStats({ historique, dateEntree }: Props) {
           <Ionicons name="timer-outline" size={16} color="#9ca3af" />
           <Text style={styles.summaryLabel}>Plus long</Text>
           {longestEtat ? (
-            <Text style={[styles.summaryValue, { color: ETAT_CONFIG[longestEtat[0]].color }]}>
+            <Text
+              style={[
+                styles.summaryValue,
+                { color: ETAT_CONFIG[longestEtat[0]]?.color ?? '#6b7280' },
+              ]}
+            >
               {formatDuree(longestEtat[1])}
             </Text>
           ) : (
@@ -76,7 +81,7 @@ export default function VehiculeStats({ historique, dateEntree }: Props) {
                   key={etat}
                   style={{
                     width: `${pct}%`,
-                    backgroundColor: ETAT_CONFIG[etat].color,
+                    backgroundColor: ETAT_CONFIG[etat]?.color ?? '#6b7280',
                     height: '100%',
                   }}
                 />
@@ -85,6 +90,7 @@ export default function VehiculeStats({ historique, dateEntree }: Props) {
           </View>
           {etats.map(([etat, mins]) => {
             const cfg = ETAT_CONFIG[etat]
+            if (!cfg) return null
             const pct = totalMinutes > 0 ? Math.round((mins / totalMinutes) * 100) : 0
             return (
               <View key={etat} style={styles.legendRow}>

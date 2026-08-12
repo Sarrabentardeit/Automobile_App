@@ -108,6 +108,7 @@ export default function SuiviExcelForm({ data, onChange, numero }: Props) {
             style={styles.valInput}
             value={data.kilometrage ?? ''}
             onChangeText={(v) => set('kilometrage', v)}
+            keyboardType="number-pad"
           />
         </View>
         <View style={styles.infoCell}>

@@ -60,8 +60,9 @@ export function completion(checklist: DailyChecklist | null): { done: number; to
   if (!checklist) return { done: 0, total: 0 }
   let total = 0
   let done = 0
-  checklist.data.sections.forEach((section) => {
-    section.items.forEach((item) => {
+  const sections = checklist.data?.sections ?? []
+  sections.forEach((section) => {
+    ;(section.items ?? []).forEach((item) => {
       total += 1
       if (item.status === 'done' || item.status === 'na') done += 1
     })

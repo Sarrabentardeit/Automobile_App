@@ -86,7 +86,12 @@ export default function OrdreFormModal({
           <View style={{ width: 26 }} />
         </View>
         <Text style={styles.subtitle}>Mise en page identique à la feuille Excel atelier</Text>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+        >
           <OrdreExcelForm form={form} onChange={setForm} />
         </ScrollView>
         <View style={styles.footer}>

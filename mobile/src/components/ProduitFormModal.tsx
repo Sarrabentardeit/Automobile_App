@@ -220,7 +220,7 @@ export default function ProduitFormModal({
 
           <View style={styles.sectionCard}>
             <Text style={styles.sectionHead}>Catégorie</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <ScrollView horizontal nestedScrollEnabled keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false}>
               <View style={styles.chipsRow}>
                 {catOptions.map((c) => (
                   <Pressable

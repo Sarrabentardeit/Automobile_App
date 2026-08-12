@@ -191,9 +191,7 @@ export default function StockGeneralScreen({
 
   const activityPreview = useMemo(
     () =>
-      [...mouvements]
-        .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
-        .slice(0, 6),
+      [...mouvements].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id),
     [mouvements]
   )
 
@@ -396,8 +394,14 @@ export default function StockGeneralScreen({
               color={theme.textMuted}
             />
           </Pressable>
-          {showActivity
-            ? activityPreview.map((m) => (
+          {showActivity ? (
+            <ScrollView
+              style={styles.activityScroll}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator
+            >
+              {activityPreview.map((m) => (
                 <View key={m.id} style={styles.activityRow}>
                   <View
                     style={[
@@ -423,8 +427,9 @@ export default function StockGeneralScreen({
                     {m.quantite}
                   </Text>
                 </View>
-              ))
-            : null}
+              ))}
+            </ScrollView>
+          ) : null}
         </View>
       ) : null}
       <View style={styles.footerSpacer} />
@@ -636,6 +641,7 @@ const styles = StyleSheet.create({
   },
   activityToggleText: { flex: 1, fontSize: 14, fontWeight: '700', color: theme.text },
   activityCount: { fontSize: 12, fontWeight: '600', color: theme.textMuted },
+  activityScroll: { maxHeight: 280 },
   activityRow: {
     flexDirection: 'row',
     alignItems: 'center',

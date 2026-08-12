@@ -97,7 +97,7 @@ export default function NotificationsBell({
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.overlay} onPress={() => setOpen(false)}>
-          <Pressable style={styles.panel} onPress={(e) => e.stopPropagation()}>
+          <View style={styles.panel}>
             <View style={styles.panelHeader}>
               <Text style={styles.panelTitle}>Notifications</Text>
               {unread > 0 ? (
@@ -109,7 +109,7 @@ export default function NotificationsBell({
                 <Ionicons name="close" size={22} color="#6b7280" />
               </Pressable>
             </View>
-            <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
+            <ScrollView style={styles.list} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
               {loading && list.length === 0 ? (
                 <Text style={styles.empty}>Chargement…</Text>
               ) : list.length === 0 ? (
@@ -140,7 +140,7 @@ export default function NotificationsBell({
                 ))
               )}
             </ScrollView>
-          </Pressable>
+          </View>
         </Pressable>
       </Modal>
     </>

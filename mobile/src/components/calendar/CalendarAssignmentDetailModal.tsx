@@ -109,9 +109,11 @@ export default function CalendarAssignmentDetailModal({
         </View>
 
         <ScrollView
+          style={{ flex: 1 }}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scroll}
           bounces={false}
+          keyboardShouldPersistTaps="handled"
         >
           <View style={styles.profile}>
             <LinearGradient colors={[c1, c2]} style={styles.avatarLg}>

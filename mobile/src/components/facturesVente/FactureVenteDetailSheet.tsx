@@ -213,9 +213,11 @@ export default function FactureVenteDetailSheet({
         </View>
 
         <ScrollView
+          style={{ flex: 1 }}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scroll}
           bounces={false}
+          keyboardShouldPersistTaps="handled"
         >
           <View style={styles.summary}>
             <View style={styles.summaryMain}>

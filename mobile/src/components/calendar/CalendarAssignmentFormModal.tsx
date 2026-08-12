@@ -255,7 +255,12 @@ export default function CalendarAssignmentFormModal({
           </Pressable>
         </View>
 
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+        >
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
           <Text style={styles.label}>Équipe *</Text>

@@ -100,7 +100,12 @@ export default function ChecklistDetailModal({
           </View>
         ) : (
           <>
-            <ScrollView contentContainerStyle={styles.scroll} bounces={false}>
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={styles.scroll}
+              bounces={false}
+              keyboardShouldPersistTaps="handled"
+            >
               <View style={styles.metaRow}>
                 <ChecklistWorkflowBadge status={checklist.status} />
                 <Text style={styles.prog}>
@@ -108,7 +113,7 @@ export default function ChecklistDetailModal({
                 </Text>
               </View>
 
-              {checklist.data.sections.map((section) => (
+              {(checklist.data?.sections ?? []).map((section) => (
                 <ChecklistSectionCard
                   key={section.id}
                   section={section}

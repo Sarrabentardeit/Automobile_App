@@ -78,7 +78,7 @@ export function ordreToExcelForm(o: OrdreReparation): OrdreExcelFormState {
     rempliPar: o.rempliPar,
     carrosserie: carrosserieFromJson(o.carrosserieJson),
     voyants: voyantsFromJson(o.voyantsJson),
-    lignes: o.lignes.map((l) => ({
+    lignes: (o.lignes ?? []).map((l) => ({
       description: l.description,
       statut: (l.statut as OrdreLigneStatut) || 'en_attente',
       ordre: l.ordre,

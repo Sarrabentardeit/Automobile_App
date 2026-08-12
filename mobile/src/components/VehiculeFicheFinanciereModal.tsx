@@ -249,7 +249,12 @@ export default function VehiculeFicheFinanciereModal({
             <ActivityIndicator size="large" color="#f97316" />
           </View>
         ) : (
-          <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.scroll}
+            keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled
+          >
             <View style={styles.totalsCard}>
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>Total dépenses</Text>
@@ -389,25 +394,34 @@ export default function VehiculeFicheFinanciereModal({
                   />
                 </Pressable>
                 {showStockPicker ? (
-                  <View style={styles.stockList}>
-                    {produits.slice(0, 40).map((p) => (
-                      <Pressable
-                        key={p.id}
-                        style={[
-                          styles.stockItem,
-                          stockProductId === p.id && styles.stockItemActive,
-                        ]}
-                        onPress={() => {
-                          setStockProductId(p.id)
-                          setShowStockPicker(false)
-                        }}
-                      >
-                        <Text style={styles.stockItemText} numberOfLines={1}>
-                          {p.nom} (stock: {p.quantite})
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
+                  <ScrollView
+                    style={styles.stockList}
+                    nestedScrollEnabled
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator
+                  >
+                    {produits.length === 0 ? (
+                      <Text style={styles.stockEmpty}>Aucun produit en stock</Text>
+                    ) : (
+                      produits.map((p) => (
+                        <Pressable
+                          key={p.id}
+                          style={[
+                            styles.stockItem,
+                            stockProductId === p.id && styles.stockItemActive,
+                          ]}
+                          onPress={() => {
+                            setStockProductId(p.id)
+                            setShowStockPicker(false)
+                          }}
+                        >
+                          <Text style={styles.stockItemText} numberOfLines={2}>
+                            {p.nom} (stock: {p.quantite})
+                          </Text>
+                        </Pressable>
+                      ))
+                    )}
+                  </ScrollView>
                 ) : null}
                 <TextInput
                   style={styles.input}
@@ -587,7 +601,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
     marginBottom: 8,
-    maxHeight: 160,
+    maxHeight: 220,
+  },
+  stockEmpty: {
+    padding: 14,
+    fontSize: 13,
+    color: '#9ca3af',
+    textAlign: 'center',
   },
   stockItem: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
   stockItemActive: { backgroundColor: '#fff7ed' },

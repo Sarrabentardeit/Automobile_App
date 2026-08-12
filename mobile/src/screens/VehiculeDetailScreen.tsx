@@ -567,12 +567,11 @@ export default function VehiculeDetailScreen({
                 const open = expandedOrdre === o.id
                 const done = o.lignes.filter((l) => l.statut === 'fait').length
                 return (
-                  <Pressable
-                    key={o.id}
-                    style={styles.listItem}
-                    onPress={() => setExpandedOrdre(open ? null : o.id)}
-                  >
-                    <View style={styles.listItemHeader}>
+                  <View key={o.id} style={styles.listItem}>
+                    <Pressable
+                      style={styles.listItemHeader}
+                      onPress={() => setExpandedOrdre(open ? null : o.id)}
+                    >
                       <View style={{ flex: 1 }}>
                         <Text style={styles.listItemTitle}>{o.numero}</Text>
                         <Text style={styles.listItemSub}>
@@ -587,7 +586,7 @@ export default function VehiculeDetailScreen({
                         size={18}
                         color="#9ca3af"
                       />
-                    </View>
+                    </Pressable>
                     <View style={styles.itemActions}>
                       <Pressable
                         onPress={() => {
@@ -666,7 +665,7 @@ export default function VehiculeDetailScreen({
                         ))}
                       </View>
                     ) : null}
-                  </Pressable>
+                  </View>
                 )
               })
             )}
@@ -693,12 +692,11 @@ export default function VehiculeDetailScreen({
               suivis.map((s) => {
                 const open = expandedSuivi === s.id
                 return (
-                  <Pressable
-                    key={s.id}
-                    style={styles.listItem}
-                    onPress={() => setExpandedSuivi(open ? null : s.id)}
-                  >
-                    <View style={styles.listItemHeader}>
+                  <View key={s.id} style={styles.listItem}>
+                    <Pressable
+                      style={styles.listItemHeader}
+                      onPress={() => setExpandedSuivi(open ? null : s.id)}
+                    >
                       <View style={{ flex: 1 }}>
                         <Text style={styles.listItemTitle}>{s.numero}</Text>
                         <Text style={styles.listItemSub}>
@@ -710,7 +708,7 @@ export default function VehiculeDetailScreen({
                         size={18}
                         color="#9ca3af"
                       />
-                    </View>
+                    </Pressable>
                     <View style={styles.itemActions}>
                       <Pressable
                         onPress={() => {
@@ -783,7 +781,7 @@ export default function VehiculeDetailScreen({
                         ) : null}
                       </View>
                     ) : null}
-                  </Pressable>
+                  </View>
                 )
               })
             )}

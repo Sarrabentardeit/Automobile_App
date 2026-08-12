@@ -255,7 +255,12 @@ export default function CalendarMemberPicker({
                     : 'Aucun autre membre disponible'}
                 </Text>
               ) : (
-                <View style={styles.extraList}>
+                <ScrollView
+                  style={styles.extraList}
+                  nestedScrollEnabled
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator
+                >
                   {extraFiltered.map((m) => {
                     const checked = extraMembers.includes(m.name)
                     return (
@@ -279,7 +284,7 @@ export default function CalendarMemberPicker({
                       </Pressable>
                     )
                   })}
-                </View>
+                </ScrollView>
               )}
             </View>
           ) : null}
@@ -361,7 +366,7 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 14, color: theme.text, padding: 0 },
   listBox: { maxHeight: 180 },
-  extraList: { gap: 6 },
+  extraList: { maxHeight: 180, gap: 6 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

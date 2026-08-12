@@ -441,6 +441,8 @@ export default function ChecklistsScreen({
     <View style={styles.root}>
       <ScrollView
         contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

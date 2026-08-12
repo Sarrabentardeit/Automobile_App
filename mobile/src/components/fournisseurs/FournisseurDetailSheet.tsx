@@ -85,7 +85,7 @@ export default function FournisseurDetailSheet({
 
   const [c1, c2] = avatarGradient(fournisseur.nom)
   const dialogHeight = Math.min(Dimensions.get('window').height * 0.88, 560)
-  const tel = fournisseur.telephone.replace(/\s/g, '')
+  const tel = (fournisseur.telephone ?? '').replace(/\s/g, '')
 
   return (
     <CenteredBlurModal visible={visible} onClose={onClose}>

@@ -142,7 +142,12 @@ export default function ReclamationFormModal({
             <Ionicons name="close" size={22} color={theme.textSecondary} />
           </Pressable>
         </View>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+        >
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
           <Text style={styles.label}>Date</Text>
@@ -213,7 +218,13 @@ export default function ReclamationFormModal({
           </View>
 
           <Text style={styles.label}>Assigné à</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          <ScrollView
+            horizontal
+            nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipRow}
+          >
             <Pressable
               style={[styles.chip, !form.assigneA && styles.chipActive]}
               onPress={() => setForm((f) => ({ ...f, assigneA: '' }))}

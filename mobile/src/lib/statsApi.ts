@@ -77,6 +77,16 @@ export function fetchTempsEnCoursTechniciens(
   }).then((r) => (Array.isArray(r.data) ? r.data : []))
 }
 
+export function fetchStatsTrends(
+  token: string,
+  params: { year: number; groupBy: StatsTrendGroupBy }
+): Promise<StatsTrendPoint[]> {
+  return apiFetch<TrendsResponse>('/stats/trends', {
+    token,
+    params: { year: params.year, groupBy: params.groupBy },
+  }).then((r) => (Array.isArray(r.data) ? r.data : []))
+}
+
 async function fetchMoneyIns(token: string): Promise<MoneyInRow[]> {
   const list = await apiFetch<MoneyInRow[]>('/money/in', { token })
   return Array.isArray(list) ? list : []

@@ -33,7 +33,12 @@ export default function UserPermissionsSheet({ visible, user, onClose }: Props) 
           </View>
         </View>
 
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           <Text style={styles.sectionLabel}>Visibilité véhicules</Text>
           {VISIBILITY_OPTIONS.map((opt) => {
             const active = user.permissions.vehiculeVisibility === opt.value

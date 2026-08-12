@@ -19,7 +19,13 @@ import { fetchStatsDashboard, fetchStatsTrends, fetchTempsEnCoursTechniciens, ty
 import { isInStatsMonth, MOIS_FR, monthYearLabel, yearOptions } from '../lib/statsHelpers'
 import { MENU_STRUCTURE, type MenuRouteId } from '../navigation/menuConfig'
 import { theme } from '../theme/appTheme'
-import type { GlobalStatCounts, GlobalStatItem, StatsDashboardData, StatsTrendGroupBy } from '../types/stats'
+import type {
+  GlobalStatCounts,
+  GlobalStatItem,
+  StatsDashboardData,
+  StatsTrendGroupBy,
+  StatsTrendPoint,
+} from '../types/stats'
 
 type IonIcon = ComponentProps<typeof Ionicons>['name']
 
@@ -133,7 +139,7 @@ export default function StatistiquesScreen({
   const [techTempsYear, setTechTempsYear] = useState(now.getFullYear())
   const [trendGroupBy, setTrendGroupBy] = useState<StatsTrendGroupBy>('month')
   const [dashboard, setDashboard] = useState<StatsDashboardData | null>(null)
-  const [trendData, setTrendData] = useState<Awaited<ReturnType<typeof fetchStatsTrends>>>([])
+  const [trendData, setTrendData] = useState<StatsTrendPoint[]>([])
   const [techTemps, setTechTemps] = useState<TechTempsEnCours[]>([])
   const [techTempsLoading, setTechTempsLoading] = useState(false)
   const [selectedTechTemps, setSelectedTechTemps] = useState<TechTempsEnCours | null>(null)
@@ -965,7 +971,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: theme.border,
-    backgroundColor: theme.card,
+    backgroundColor: theme.surface,
   },
   detailTitle: { fontSize: 18, fontWeight: '800', color: theme.text },
   detailSub: { fontSize: 12, color: theme.textMuted, marginTop: 2 },
@@ -973,7 +979,7 @@ const styles = StyleSheet.create({
   detailKpis: { flexDirection: 'row', gap: 8, marginBottom: 4 },
   detailKpi: {
     flex: 1,
-    backgroundColor: theme.card,
+    backgroundColor: theme.surface,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: theme.border,
@@ -983,7 +989,7 @@ const styles = StyleSheet.create({
   detailKpiLabel: { fontSize: 10, fontWeight: '700', color: theme.textMuted, textTransform: 'uppercase' },
   detailKpiValue: { fontSize: 16, fontWeight: '800', color: theme.text, marginTop: 4 },
   vehDetailCard: {
-    backgroundColor: theme.card,
+    backgroundColor: theme.surface,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: theme.border,

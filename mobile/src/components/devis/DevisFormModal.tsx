@@ -168,8 +168,10 @@ export default function DevisFormModal({
         </View>
 
         <ScrollView
+          style={{ flex: 1 }}
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
           showsVerticalScrollIndicator={false}
         >
           {error ? <Text style={styles.error}>{error}</Text> : null}

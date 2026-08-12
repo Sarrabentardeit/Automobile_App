@@ -106,7 +106,12 @@ export default function SuiviFormModal({
           </Text>
           <View style={{ width: 26 }} />
         </View>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+        >
           <SuiviExcelForm
             data={form}
             onChange={setForm}

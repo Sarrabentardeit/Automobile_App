@@ -144,7 +144,12 @@ export default function ClientDetteFormModal({
             <Ionicons name="close" size={22} color={theme.textSecondary} />
           </Pressable>
         </View>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+        >
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
           <Text style={styles.sectionLabel}>Client</Text>
