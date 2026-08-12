@@ -784,10 +784,9 @@ router.get('/dashboard-insights', authenticate(), async (req: AuthRequest, res) 
   }
 })
 
-/** Snapshot ops : RDV, SAV, dettes, devis, chat — filtres day | week | month. */
+/** Snapshot ops : RDV, SAV, dettes, devis, clients — filtres day | week | month. */
 router.get('/dashboard-today', authenticate(), async (req: AuthRequest, res) => {
   try {
-    const me = req.user!.sub
     const now = new Date()
     const today = toYmd(now)
     const periodRaw = String(req.query.period ?? 'day')
@@ -820,31 +819,17 @@ router.get('/dashboard-today', authenticate(), async (req: AuthRequest, res) => 
       end = year === now.getFullYear() && month === now.getMonth() + 1 ? today : range.end
     }
 
-    const participants = await db.chatParticipant.findMany({
-      where: { userId: me },
-      select: { conversationId: true, lastReadAt: true },
-    })
-
-    const unreadCounts = await Promise.all(
-      (participants as Array<{ conversationId: number; lastReadAt: Date | null }>).map(p =>
-        db.chatMessage.count({
-          where: {
-            conversationId: p.conversationId,
-            senderId: { not: me },
-            ...(p.lastReadAt ? { createdAt: { gt: p.lastReadAt } } : {}),
-          },
-        })
-      )
-    )
-    const chatUnread = unreadCounts.reduce((a: number, b: number) => a + b, 0)
-
     const dateRange = { gte: start, lte: end }
+    const createdRange = {
+      gte: new Date(`${start}T00:00:00.000Z`),
+      lte: new Date(`${end}T23:59:59.999Z`),
+    }
     const dettesWhere =
       period === 'day'
         ? { reste: { gt: 0 } }
-        : { reste: { gt: 0 }, createdAt: { gte: new Date(`${start}T00:00:00.000Z`), lte: new Date(`${end}T23:59:59.999Z`) } }
+        : { reste: { gt: 0 }, createdAt: createdRange }
 
-    const [rdvCount, reclamationsCount, dettesAgg, devisCount] = await Promise.all([
+    const [rdvCount, reclamationsCount, dettesAgg, devisCount, clientsCount] = await Promise.all([
       db.calendarAssignment.count({
         where: { date: dateRange, statut: { not: 'annule' } },
       }),
@@ -865,6 +850,9 @@ router.get('/dashboard-today', authenticate(), async (req: AuthRequest, res) => 
             ? { statut: 'en_attente' }
             : { statut: 'en_attente', date: dateRange },
       }),
+      db.client.count({
+        where: { createdAt: createdRange },
+      }),
     ])
 
     return res.json({
@@ -883,7 +871,7 @@ router.get('/dashboard-today', authenticate(), async (req: AuthRequest, res) => 
           total: Math.round((Number(dettesAgg._sum?.reste) || 0) * 100) / 100,
         },
         devis: { count: devisCount },
-        chat: { count: chatUnread },
+        clients: { count: clientsCount },
       },
     })
   } catch (err) {

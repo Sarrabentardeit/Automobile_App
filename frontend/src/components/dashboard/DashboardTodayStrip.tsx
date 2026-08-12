@@ -5,7 +5,7 @@ import {
   AlertCircle,
   CreditCard,
   ClipboardList,
-  MessageSquare,
+  Users,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
@@ -27,7 +27,7 @@ type TodayResponse = {
     reclamations: { count: number }
     dettes: { count: number; total: number }
     devis: { count: number }
-    chat: { count: number }
+    clients: { count: number }
   }
 }
 
@@ -136,6 +136,8 @@ export default function DashboardTodayStrip() {
     period === 'day' ? 'aujourd’hui' : period === 'week' ? 'cette semaine' : 'ce mois'
   const hintSav = period === 'day' ? 'ouverts' : 'ouverts · période'
   const hintDevis = period === 'day' ? 'en attente' : 'en attente · période'
+  const hintClients =
+    period === 'day' ? 'nouveaux' : period === 'week' ? 'nouveaux · semaine' : 'nouveaux · mois'
 
   const tiles = useMemo(() => {
     const i = data?.items
@@ -185,19 +187,19 @@ export default function DashboardTodayStrip() {
         alert: (i?.devis.count ?? 0) > 0,
       },
       {
-        key: 'chat',
-        label: 'Chat',
-        value: i?.chat.count ?? null,
-        hint: 'non lus',
-        icon: MessageSquare,
-        href: '/chat',
-        accent: 'text-orange-600 bg-orange-50',
+        key: 'clients',
+        label: 'Clients',
+        value: i?.clients.count ?? null,
+        hint: hintClients,
+        icon: Users,
+        href: '/clients',
+        accent: 'text-emerald-700 bg-emerald-50',
         show: true,
-        alert: (i?.chat.count ?? 0) > 0,
+        alert: (i?.clients.count ?? 0) > 0,
       },
     ]
     return list.filter(t => t.show)
-  }, [data, permissions?.canViewFinance, hintRdv, hintSav, hintDevis])
+  }, [data, permissions?.canViewFinance, hintRdv, hintSav, hintDevis, hintClients])
 
   const cols =
     tiles.length <= 3
