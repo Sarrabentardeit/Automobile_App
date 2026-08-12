@@ -26,6 +26,7 @@ export type MenuRouteId =
   | 'clients_dettes'
   | 'utilisateurs'
   | 'equipe_membres'
+  | 'chat'
   | 'outils_ahmed'
   | 'checklists'
   | 'checklists_modeles'
@@ -173,6 +174,12 @@ export const MENU_STRUCTURE: MenuCategory[] = [
   {
     label: 'ÉQUIPE',
     items: [
+      {
+        id: 'chat',
+        name: 'Chat équipe',
+        icon: 'chatbubbles-outline',
+        implemented: true,
+      },
       {
         id: 'utilisateurs',
         name: 'Utilisateurs',

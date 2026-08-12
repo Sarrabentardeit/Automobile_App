@@ -1,0 +1,760 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  ActivityIndicator,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
+import {
+  addGroupMembers,
+  createGroupChat,
+  fetchChatConversations,
+  fetchChatMembers,
+  fetchChatMessages,
+  markChatRead,
+  openDirectChat,
+  sendChatMessage,
+  type ChatConversation,
+  type ChatMember,
+  type ChatMessage,
+} from '../lib/chatApi'
+import { getStatusBarInset } from '../lib/safeArea'
+import { theme } from '../theme/appTheme'
+
+type Props = {
+  accessToken: string
+  userId: number
+}
+
+type ComposeMode = 'dm' | 'group'
+type ListFilter = 'all' | 'unread'
+
+function formatTime(iso: string) {
+  const d = new Date(iso)
+  const now = new Date()
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  if (sameDay) {
+    return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  }
+  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
+}
+
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+  return name.slice(0, 2).toUpperCase()
+}
+
+export default function ChatScreen({ accessToken, userId }: Props) {
+  const topInset = getStatusBarInset()
+  const [conversations, setConversations] = useState<ChatConversation[]>([])
+  const [members, setMembers] = useState<ChatMember[]>([])
+  const [selected, setSelected] = useState<ChatConversation | null>(null)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [draft, setDraft] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [showCompose, setShowCompose] = useState(false)
+  const [composeMode, setComposeMode] = useState<ComposeMode>('dm')
+  const [listFilter, setListFilter] = useState<ListFilter>('all')
+  const [groupTitle, setGroupTitle] = useState('')
+  const [groupPick, setGroupPick] = useState<number[]>([])
+  const [showAddMembers, setShowAddMembers] = useState(false)
+  const [addPick, setAddPick] = useState<number[]>([])
+  const listRef = useRef<FlatList<ChatMessage>>(null)
+
+  const loadList = useCallback(async () => {
+    const list = await fetchChatConversations(accessToken)
+    setConversations(list)
+    setSelected((prev) => {
+      if (!prev) return prev
+      return list.find((c) => c.id === prev.id) ?? prev
+    })
+  }, [accessToken])
+
+  const loadThread = useCallback(
+    async (conv: ChatConversation) => {
+      const list = await fetchChatMessages(accessToken, conv.id)
+      setMessages(list)
+      await markChatRead(accessToken, conv.id)
+      setConversations((prev) =>
+        prev.map((c) => (c.id === conv.id ? { ...c, unreadCount: 0 } : c))
+      )
+    },
+    [accessToken]
+  )
+
+  useEffect(() => {
+    setLoading(true)
+    void loadList()
+      .catch(() => setConversations([]))
+      .finally(() => setLoading(false))
+    void fetchChatMembers(accessToken)
+      .then(setMembers)
+      .catch(() => setMembers([]))
+  }, [accessToken, loadList])
+
+  useEffect(() => {
+    if (!selected) return
+    void loadThread(selected).catch(() => setMessages([]))
+    const id = setInterval(() => {
+      void loadThread(selected).catch(() => undefined)
+      void loadList().catch(() => undefined)
+    }, 8000)
+    return () => clearInterval(id)
+  }, [selected?.id, loadThread, loadList])
+
+  const openConversation = (c: ChatConversation) => {
+    setSelected(c)
+    setDraft('')
+    setShowAddMembers(false)
+    setAddPick([])
+  }
+
+  const handleSend = async () => {
+    if (!selected || !draft.trim() || sending) return
+    const text = draft.trim()
+    setSending(true)
+    setDraft('')
+    try {
+      const msg = await sendChatMessage(accessToken, selected.id, text)
+      setMessages((prev) => [...prev, msg])
+      void loadList()
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80)
+    } catch {
+      setDraft(text)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const handleNewDm = async (memberId: number) => {
+    try {
+      const conv = await openDirectChat(accessToken, memberId)
+      setShowCompose(false)
+      await loadList()
+      openConversation(conv)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const togglePick = (id: number, list: number[], setList: (v: number[]) => void) => {
+    setList(list.includes(id) ? list.filter((x) => x !== id) : [...list, id])
+  }
+
+  const handleCreateGroup = async () => {
+    const title = groupTitle.trim()
+    if (!title || groupPick.length < 1) return
+    try {
+      const conv = await createGroupChat(accessToken, title, groupPick)
+      setShowCompose(false)
+      setGroupTitle('')
+      setGroupPick([])
+      await loadList()
+      openConversation(conv)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const membersNotInSelected = useMemo(() => {
+    if (!selected || selected.type !== 'group') return []
+    const have = new Set(selected.participants.map((p) => p.userId))
+    return members.filter((m) => !have.has(m.id))
+  }, [members, selected])
+
+  const handleAddMembers = async () => {
+    if (!selected || selected.type !== 'group' || addPick.length === 0) return
+    try {
+      const updated = await addGroupMembers(accessToken, selected.id, addPick)
+      setSelected(updated)
+      setConversations((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+      setAddPick([])
+      setShowAddMembers(false)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const totalUnread = useMemo(
+    () => conversations.reduce((s, c) => s + (c.unreadCount || 0), 0),
+    [conversations]
+  )
+
+  const filteredConversations = useMemo(() => {
+    if (listFilter === 'all') return conversations
+    return conversations.filter((c) => c.unreadCount > 0)
+  }, [conversations, listFilter])
+
+  return (
+    <View style={styles.root}>
+      <View style={[styles.header, { paddingTop: topInset + 8 }]}>
+        <View>
+          <Text style={styles.title}>Chat équipe</Text>
+          <Text style={styles.sub}>
+            {totalUnread > 0 ? `${totalUnread} non lu(s)` : 'Privés et groupes'}
+          </Text>
+        </View>
+        <Pressable
+          style={styles.newBtn}
+          onPress={() => {
+            setComposeMode('dm')
+            setShowCompose(true)
+          }}
+        >
+          <Ionicons name="create-outline" size={20} color="#fff" />
+        </Pressable>
+      </View>
+
+      <View style={styles.filterRow}>
+        <Ionicons name="filter-outline" size={14} color={theme.textSubtle} />
+        <Pressable
+          style={[styles.pill, listFilter === 'all' && styles.pillActive]}
+          onPress={() => setListFilter('all')}
+        >
+          <Text style={[styles.pillText, listFilter === 'all' && styles.pillTextActive]}>Tous</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.pill, listFilter === 'unread' && styles.pillActive]}
+          onPress={() => setListFilter('unread')}
+        >
+          <Text style={[styles.pillText, listFilter === 'unread' && styles.pillTextActive]}>
+            Non lus
+          </Text>
+        </Pressable>
+      </View>
+
+      {loading ? (
+        <View style={styles.centered}>
+          <ActivityIndicator color={theme.primary} />
+        </View>
+      ) : (
+        <FlatList
+          data={filteredConversations}
+          keyExtractor={(c) => String(c.id)}
+          contentContainerStyle={styles.listPad}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true)
+                void loadList().finally(() => setRefreshing(false))
+              }}
+              tintColor={theme.primary}
+            />
+          }
+          ListEmptyComponent={
+            <Text style={styles.empty}>
+              {listFilter === 'unread'
+                ? 'Aucun message non lu'
+                : 'Aucune conversation pour le moment'}
+            </Text>
+          }
+          renderItem={({ item }) => (
+            <Pressable style={styles.row} onPress={() => openConversation(item)}>
+              <View
+                style={[
+                  styles.avatar,
+                  item.type === 'group' ? styles.avatarGroup : styles.avatarDm,
+                ]}
+              >
+                {item.type === 'group' ? (
+                  <Ionicons name="people" size={18} color="#fdba74" />
+                ) : (
+                  <Text style={styles.avatarText}>{initials(item.title)}</Text>
+                )}
+              </View>
+              <View style={styles.rowBody}>
+                <View style={styles.rowTop}>
+                  <Text style={styles.rowTitle} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                  {item.lastMessage ? (
+                    <Text style={styles.rowTime}>{formatTime(item.lastMessage.createdAt)}</Text>
+                  ) : null}
+                </View>
+                <View style={styles.rowTop}>
+                  <Text style={styles.rowPreview} numberOfLines={1}>
+                    {item.lastMessage
+                      ? `${item.lastMessage.senderId === userId ? 'Vous' : item.lastMessage.senderNom.split(' ')[0]} : ${item.lastMessage.body}`
+                      : 'Aucun message'}
+                  </Text>
+                  {item.unreadCount > 0 ? (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>
+                        {item.unreadCount > 99 ? '99+' : item.unreadCount}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+            </Pressable>
+          )}
+        />
+      )}
+
+      <Modal visible={selected != null} animationType="slide" onRequestClose={() => setSelected(null)}>
+        <KeyboardAvoidingView
+          style={styles.threadRoot}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={[styles.threadHeader, { paddingTop: topInset + 8 }]}>
+            <Pressable onPress={() => setSelected(null)} hitSlop={10} style={styles.backBtn}>
+              <Ionicons name="chevron-back" size={24} color={theme.text} />
+            </Pressable>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.threadTitle} numberOfLines={1}>
+                {selected?.title}
+              </Text>
+              <Text style={styles.threadSub}>
+                {selected?.type === 'group'
+                  ? `${selected.participants.length} membre(s)`
+                  : 'Message privé'}
+              </Text>
+            </View>
+            {selected?.type === 'group' ? (
+              <Pressable
+                onPress={() => {
+                  setAddPick([])
+                  setShowAddMembers(true)
+                }}
+                hitSlop={10}
+                style={styles.backBtn}
+              >
+                <Ionicons name="person-add-outline" size={22} color={theme.primary} />
+              </Pressable>
+            ) : null}
+          </View>
+
+          <FlatList
+            ref={listRef}
+            data={messages}
+            keyExtractor={(m) => String(m.id)}
+            contentContainerStyle={styles.msgPad}
+            onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+            ListEmptyComponent={<Text style={styles.empty}>Écrivez le premier message</Text>}
+            renderItem={({ item }) => (
+              <View style={[styles.bubbleWrap, item.mine ? styles.mineWrap : styles.theirsWrap]}>
+                <View style={[styles.bubble, item.mine ? styles.mineBubble : styles.theirsBubble]}>
+                  {!item.mine && selected?.type === 'group' ? (
+                    <Text style={styles.sender}>{item.senderNom}</Text>
+                  ) : null}
+                  <Text style={[styles.bubbleText, item.mine && styles.mineText]}>{item.body}</Text>
+                  <Text style={[styles.bubbleTime, item.mine && styles.mineTime]}>
+                    {formatTime(item.createdAt)}
+                  </Text>
+                </View>
+              </View>
+            )}
+          />
+
+          <View style={styles.composer}>
+            <TextInput
+              style={styles.input}
+              value={draft}
+              onChangeText={setDraft}
+              placeholder="Écrire un message…"
+              placeholderTextColor={theme.textSubtle}
+              multiline
+            />
+            <Pressable
+              style={[styles.sendBtn, (!draft.trim() || sending) && styles.sendDisabled]}
+              disabled={!draft.trim() || sending}
+              onPress={() => void handleSend()}
+            >
+              <Ionicons name="send" size={18} color="#fff" />
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Composer DM / Groupe */}
+      <Modal
+        visible={showCompose}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCompose(false)}
+      >
+        <View style={styles.sheetOverlay}>
+          <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setShowCompose(false)} />
+          <View style={styles.sheet}>
+            <Text style={styles.sheetTitle}>Nouvelle conversation</Text>
+            <View style={styles.tabs}>
+              <Pressable
+                style={[styles.tab, composeMode === 'dm' && styles.tabActive]}
+                onPress={() => setComposeMode('dm')}
+              >
+                <Text style={[styles.tabText, composeMode === 'dm' && styles.tabTextActive]}>
+                  Message
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.tab, composeMode === 'group' && styles.tabActiveDark]}
+                onPress={() => setComposeMode('group')}
+              >
+                <Text style={[styles.tabText, composeMode === 'group' && styles.tabTextActive]}>
+                  Groupe
+                </Text>
+              </Pressable>
+            </View>
+
+            {composeMode === 'dm' ? (
+              <ScrollView
+                style={{ maxHeight: 360 }}
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled
+              >
+                {members.length === 0 ? (
+                  <Text style={styles.empty}>Aucun autre utilisateur</Text>
+                ) : (
+                  members.map((m) => (
+                    <Pressable
+                      key={m.id}
+                      style={styles.memberRow}
+                      onPress={() => void handleNewDm(m.id)}
+                    >
+                      <View style={[styles.avatar, styles.avatarDm]}>
+                        <Text style={styles.avatarText}>{initials(m.nom)}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.rowTitle}>{m.nom}</Text>
+                        <Text style={styles.threadSub} numberOfLines={1}>
+                          {m.role}
+                          {m.email ? ` · ${m.email}` : ''}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  ))
+                )}
+              </ScrollView>
+            ) : (
+              <ScrollView
+                style={{ maxHeight: 400 }}
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled
+              >
+                <TextInput
+                  style={styles.groupInput}
+                  value={groupTitle}
+                  onChangeText={setGroupTitle}
+                  placeholder="Nom du groupe"
+                  placeholderTextColor={theme.textSubtle}
+                />
+                <Text style={styles.sheetHint}>Sélectionnez les membres</Text>
+                {members.map((m) => {
+                  const on = groupPick.includes(m.id)
+                  return (
+                    <Pressable
+                      key={m.id}
+                      style={styles.memberRow}
+                      onPress={() => togglePick(m.id, groupPick, setGroupPick)}
+                    >
+                      <View style={[styles.check, on && styles.checkOn]}>
+                        {on ? <Ionicons name="checkmark" size={12} color="#fff" /> : null}
+                      </View>
+                      <Text style={styles.rowTitle}>{m.nom}</Text>
+                    </Pressable>
+                  )
+                })}
+                <Pressable
+                  style={[
+                    styles.createBtn,
+                    (!groupTitle.trim() || groupPick.length < 1) && styles.sendDisabled,
+                  ]}
+                  disabled={!groupTitle.trim() || groupPick.length < 1}
+                  onPress={() => void handleCreateGroup()}
+                >
+                  <Text style={styles.createBtnText}>Créer le groupe</Text>
+                </Pressable>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Ajouter membres */}
+      <Modal
+        visible={showAddMembers}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAddMembers(false)}
+      >
+        <View style={styles.sheetOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFillObject}
+            onPress={() => setShowAddMembers(false)}
+          />
+          <View style={styles.sheet}>
+            <Text style={styles.sheetTitle}>Ajouter des membres</Text>
+            <Text style={styles.sheetHint}>
+              {selected?.participants.map((p) => p.nom).join(', ')}
+            </Text>
+            <ScrollView
+              style={{ maxHeight: 360 }}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+            >
+              {membersNotInSelected.length === 0 ? (
+                <Text style={styles.empty}>Tous les utilisateurs sont déjà membres</Text>
+              ) : (
+                membersNotInSelected.map((m) => {
+                  const on = addPick.includes(m.id)
+                  return (
+                    <Pressable
+                      key={m.id}
+                      style={styles.memberRow}
+                      onPress={() => togglePick(m.id, addPick, setAddPick)}
+                    >
+                      <View style={[styles.check, on && styles.checkOn]}>
+                        {on ? <Ionicons name="checkmark" size={12} color="#fff" /> : null}
+                      </View>
+                      <Text style={styles.rowTitle}>{m.nom}</Text>
+                    </Pressable>
+                  )
+                })
+              )}
+            </ScrollView>
+            {membersNotInSelected.length > 0 ? (
+              <Pressable
+                style={[styles.createBtn, addPick.length === 0 && styles.sendDisabled]}
+                disabled={addPick.length === 0}
+                onPress={() => void handleAddMembers()}
+              >
+                <Text style={styles.createBtnText}>Ajouter ({addPick.length})</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+    </View>
+  )
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: theme.bg },
+  header: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: theme.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  title: { fontSize: 20, fontWeight: '800', color: theme.text },
+  sub: { fontSize: 12, color: theme.textMuted, marginTop: 2 },
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: theme.bg,
+  },
+  pill: {
+    height: 28,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pillActive: {
+    backgroundColor: '#0f172a',
+    borderColor: '#0f172a',
+  },
+  pillText: { fontSize: 12, fontWeight: '700', color: theme.textMuted },
+  pillTextActive: { color: '#fff' },
+  newBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: theme.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  listPad: { padding: 12, paddingBottom: 40 },
+  empty: { textAlign: 'center', color: theme.textSubtle, marginTop: 24, fontSize: 13 },
+  row: {
+    flexDirection: 'row',
+    gap: 12,
+    backgroundColor: theme.surface,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: theme.borderLight,
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarGroup: { backgroundColor: '#1e293b' },
+  avatarDm: { backgroundColor: '#ffedd5' },
+  avatarText: { fontSize: 13, fontWeight: '800', color: '#c2410c' },
+  rowBody: { flex: 1, minWidth: 0 },
+  rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  rowTitle: { fontSize: 15, fontWeight: '700', color: theme.text, flex: 1 },
+  rowTime: { fontSize: 11, color: theme.textSubtle },
+  rowPreview: { fontSize: 12, color: theme.textMuted, flex: 1, marginTop: 3 },
+  badge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: theme.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  badgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  threadRoot: { flex: 1, backgroundColor: theme.bg },
+  threadHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingBottom: 10,
+    backgroundColor: theme.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+  },
+  backBtn: { padding: 6 },
+  threadTitle: { fontSize: 16, fontWeight: '800', color: theme.text },
+  threadSub: { fontSize: 11, color: theme.textMuted, marginTop: 1 },
+  msgPad: { padding: 12, paddingBottom: 20 },
+  bubbleWrap: { marginBottom: 8, flexDirection: 'row' },
+  mineWrap: { justifyContent: 'flex-end' },
+  theirsWrap: { justifyContent: 'flex-start' },
+  bubble: { maxWidth: '82%', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 },
+  mineBubble: { backgroundColor: theme.primary, borderBottomRightRadius: 4 },
+  theirsBubble: {
+    backgroundColor: theme.surface,
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: theme.borderLight,
+  },
+  sender: { fontSize: 11, fontWeight: '800', color: theme.primaryDark, marginBottom: 2 },
+  bubbleText: { fontSize: 14, color: theme.text, lineHeight: 20 },
+  mineText: { color: '#fff' },
+  bubbleTime: { fontSize: 10, color: theme.textSubtle, marginTop: 4 },
+  mineTime: { color: '#ffedd5', textAlign: 'right' },
+  composer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    padding: 10,
+    borderTopWidth: 1,
+    borderTopColor: theme.border,
+    backgroundColor: theme.surface,
+  },
+  input: {
+    flex: 1,
+    minHeight: 42,
+    maxHeight: 110,
+    borderWidth: 1,
+    borderColor: theme.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: theme.text,
+    backgroundColor: theme.surfaceMuted,
+  },
+  sendBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: theme.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendDisabled: { opacity: 0.4 },
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: theme.surface,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    padding: 16,
+    paddingBottom: 28,
+  },
+  sheetTitle: { fontSize: 16, fontWeight: '800', color: theme.text, marginBottom: 4 },
+  sheetHint: { fontSize: 12, color: theme.textMuted, marginBottom: 10 },
+  tabs: { flexDirection: 'row', gap: 8, marginBottom: 12, marginTop: 6 },
+  tab: {
+    flex: 1,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: theme.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.surfaceMuted,
+  },
+  tabActive: { backgroundColor: theme.primary, borderColor: theme.primary },
+  tabActiveDark: { backgroundColor: '#1e293b', borderColor: '#1e293b' },
+  tabText: { fontSize: 13, fontWeight: '700', color: theme.textMuted },
+  tabTextActive: { color: '#fff' },
+  memberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.borderLight,
+  },
+  groupInput: {
+    borderWidth: 1,
+    borderColor: theme.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: theme.text,
+    marginBottom: 8,
+    backgroundColor: theme.surfaceMuted,
+  },
+  check: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: theme.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkOn: { backgroundColor: theme.primary, borderColor: theme.primary },
+  createBtn: {
+    marginTop: 12,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: theme.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  createBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+})

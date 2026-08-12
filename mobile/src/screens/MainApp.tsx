@@ -20,6 +20,7 @@ import type { EtatVehicule } from '../types/vehicule'
 import ClientsListScreen from './ClientsListScreen'
 import ContactsImportantsScreen from './ContactsImportantsScreen'
 import EquipeMembresScreen from './EquipeMembresScreen'
+import ChatScreen from './ChatScreen'
 import ProduitsListScreen from './ProduitsListScreen'
 import ClientsDettesScreen from './ClientsDettesScreen'
 import FournisseursScreen from './FournisseursScreen'
@@ -174,6 +175,8 @@ export default function MainApp({ user: rawUser, accessToken, onLogout }: Props)
         return (
           <ReclamationsScreen accessToken={accessToken} drawerOpen={drawerOpen} />
         )
+      case 'chat':
+        return <ChatScreen accessToken={accessToken} userId={user.id} />
       case 'equipe_membres':
         return (
           <EquipeMembresScreen
