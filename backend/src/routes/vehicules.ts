@@ -475,6 +475,533 @@ router.get('/stats', authenticate(), async (req, res) => {
   }
 })
 
+function pad2(n: number) {
+  return String(n).padStart(2, '0')
+}
+
+function toYmd(d: Date) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+
+function daysBetweenYmd(a: string, b: string) {
+  const da = new Date(`${String(a).slice(0, 10)}T12:00:00`)
+  const db = new Date(`${String(b).slice(0, 10)}T12:00:00`)
+  if (Number.isNaN(da.getTime()) || Number.isNaN(db.getTime())) return null
+  return Math.max(0, Math.round((db.getTime() - da.getTime()) / 86400000))
+}
+
+function monthRange(year: number, month: number) {
+  const start = `${year}-${pad2(month)}-01`
+  const last = new Date(year, month, 0).getDate()
+  const end = `${year}-${pad2(month)}-${pad2(last)}`
+  return { start, end }
+}
+
+function kpiDelta(value: number, prev: number) {
+  const delta = value - prev
+  const deltaPct =
+    prev === 0 ? (value > 0 ? 100 : 0) : Math.round((delta / prev) * 1000) / 10
+  return { value, prev, delta, deltaPct }
+}
+
+/**
+ * Insights dashboard : deltas MoM, temps moyen, sparklines 7j, alertes.
+ */
+router.get('/dashboard-insights', authenticate(), async (req: AuthRequest, res) => {
+  try {
+    const now = new Date()
+    const year = Math.max(
+      2000,
+      Math.min(2100, parseInt(String(req.query.year ?? ''), 10) || now.getFullYear())
+    )
+    const month = Math.max(
+      1,
+      Math.min(12, parseInt(String(req.query.month ?? ''), 10) || now.getMonth() + 1)
+    )
+    const rawTid = (req.query as { technicien_id?: string }).technicien_id
+    const techId = rawTid !== undefined && rawTid !== '' ? parseInt(rawTid, 10) : NaN
+    const scoped = !Number.isNaN(techId)
+    if (scoped && req.user?.sub !== techId) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+    const techWhere = scoped ? whereUserAssignedToVehicule(techId) : {}
+
+    const cur = monthRange(year, month)
+    let prevYear = year
+    let prevMonth = month - 1
+    if (prevMonth < 1) {
+      prevMonth = 12
+      prevYear -= 1
+    }
+    const prev = monthRange(prevYear, prevMonth)
+
+    const sparkStart = new Date(now)
+    sparkStart.setDate(sparkStart.getDate() - 6)
+    const sparkFrom = toYmd(sparkStart)
+    const sparkTo = toYmd(now)
+
+    const [
+      entreesCur,
+      entreesPrev,
+      sortiesCur,
+      sortiesPrev,
+      histVertsCur,
+      histVertsPrev,
+      rougeLive,
+      anciensCount,
+      sparkEntrees,
+      sparkSorties,
+      completedCur,
+      completedPrev,
+      productsStock,
+      urgentsSample,
+      anciensSample,
+    ] = await Promise.all([
+      db.vehicule.count({
+        where: { date_entree: { gte: cur.start, lte: cur.end }, ...techWhere },
+      }),
+      db.vehicule.count({
+        where: { date_entree: { gte: prev.start, lte: prev.end }, ...techWhere },
+      }),
+      db.vehicule.findMany({
+        where: { date_sortie: { gte: cur.start, lte: cur.end }, ...techWhere },
+        select: { id: true, date_sortie: true },
+      }),
+      db.vehicule.findMany({
+        where: { date_sortie: { gte: prev.start, lte: prev.end }, ...techWhere },
+        select: { id: true, date_sortie: true },
+      }),
+      db.vehiculeHistorique.findMany({
+        where: {
+          etat_nouveau: 'vert',
+          date_changement: { gte: cur.start, lte: `${cur.end}T23:59:59.999Z` },
+          ...(scoped ? { vehicule: techWhere } : {}),
+        },
+        select: { vehiculeId: true, date_changement: true },
+      }),
+      db.vehiculeHistorique.findMany({
+        where: {
+          etat_nouveau: 'vert',
+          date_changement: { gte: prev.start, lte: `${prev.end}T23:59:59.999Z` },
+          ...(scoped ? { vehicule: techWhere } : {}),
+        },
+        select: { vehiculeId: true, date_changement: true },
+      }),
+      db.vehicule.count({ where: { etat_actuel: 'rouge', ...techWhere } }),
+      db.vehicule.count({
+        where: {
+          etat_actuel: { notIn: ['vert', 'rouge'] },
+          date_entree: { lt: toYmd(new Date(now.getTime() - 7 * 86400000)) },
+          ...techWhere,
+        },
+      }),
+      db.vehicule.findMany({
+        where: { date_entree: { gte: sparkFrom, lte: sparkTo }, ...techWhere },
+        select: { date_entree: true },
+      }),
+      db.vehicule.findMany({
+        where: { date_sortie: { gte: sparkFrom, lte: sparkTo }, ...techWhere },
+        select: { date_sortie: true },
+      }),
+      db.vehicule.findMany({
+        where: {
+          date_sortie: { gte: cur.start, lte: cur.end },
+          ...techWhere,
+        },
+        select: { date_entree: true, date_sortie: true },
+      }),
+      db.vehicule.findMany({
+        where: {
+          date_sortie: { gte: prev.start, lte: prev.end },
+          ...techWhere,
+        },
+        select: { date_entree: true, date_sortie: true },
+      }),
+      db.produitStock.findMany({
+        select: { quantite: true, seuil_alerte: true },
+      }),
+      db.vehicule.findMany({
+        where: { etat_actuel: 'rouge', ...techWhere },
+        orderBy: { date_entree: 'asc' },
+        take: 4,
+        select: { id: true, modele: true, immatriculation: true, date_entree: true },
+      }),
+      db.vehicule.findMany({
+        where: {
+          etat_actuel: { notIn: ['vert', 'rouge'] },
+          date_entree: { lt: toYmd(new Date(now.getTime() - 7 * 86400000)) },
+          ...techWhere,
+        },
+        orderBy: { date_entree: 'asc' },
+        take: 4,
+        select: {
+          id: true,
+          modele: true,
+          immatriculation: true,
+          date_entree: true,
+          etat_actuel: true,
+        },
+      }),
+    ])
+
+    const countValides = (
+      sorties: Array<{ id: number; date_sortie: string }>,
+      hist: Array<{ vehiculeId: number; date_changement: string }>
+    ) => {
+      const set = new Set<number>()
+      for (const s of sorties) set.add(s.id)
+      for (const h of hist) set.add(h.vehiculeId)
+      return set.size
+    }
+
+    const validesCur = countValides(sortiesCur, histVertsCur)
+    const validesPrev = countValides(sortiesPrev, histVertsPrev)
+
+    const avgDays = (rows: Array<{ date_entree: string; date_sortie: string | null }>) => {
+      const days: number[] = []
+      for (const r of rows) {
+        if (!r.date_sortie) continue
+        const d = daysBetweenYmd(r.date_entree, r.date_sortie)
+        if (d != null) days.push(d)
+      }
+      if (!days.length) return null
+      return Math.round((days.reduce((a, b) => a + b, 0) / days.length) * 10) / 10
+    }
+
+    const tempsCur = avgDays(completedCur)
+    const tempsPrev = avgDays(completedPrev)
+
+    const sparkline = []
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now)
+      d.setDate(d.getDate() - i)
+      const key = toYmd(d)
+      const entrees = (sparkEntrees as Array<{ date_entree: string }>).filter(
+        v => String(v.date_entree).slice(0, 10) === key
+      ).length
+      const valides = (sparkSorties as Array<{ date_sortie: string }>).filter(
+        v => String(v.date_sortie).slice(0, 10) === key
+      ).length
+      sparkline.push({
+        date: key,
+        label: d.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', ''),
+        entrees,
+        valides,
+      })
+    }
+
+    const stockBasCount = (
+      productsStock as Array<{ quantite: number; seuil_alerte: number | null }>
+    ).filter(p => {
+      const q = Number(p.quantite) || 0
+      if (p.seuil_alerte != null) return q <= Number(p.seuil_alerte)
+      return q <= 3
+    }).length
+
+    const alerts: Array<{
+      id: string
+      type: 'urgent' | 'ancien' | 'stock'
+      severity: 'high' | 'medium' | 'low'
+      title: string
+      subtitle: string
+      href: string
+      count?: number
+    }> = []
+
+    if (rougeLive > 0) {
+      alerts.push({
+        id: 'urgents',
+        type: 'urgent',
+        severity: 'high',
+        title: `${rougeLive} véhicule${rougeLive > 1 ? 's' : ''} à résoudre`,
+        subtitle:
+          (urgentsSample as Array<{ modele: string }>)
+            .slice(0, 2)
+            .map(v => v.modele)
+            .join(' · ') || 'Action requise',
+        href: '/vehicules?etat=rouge',
+        count: rougeLive,
+      })
+    }
+    if (anciensCount > 0) {
+      alerts.push({
+        id: 'anciens',
+        type: 'ancien',
+        severity: 'medium',
+        title: `${anciensCount} véhicule${anciensCount > 1 ? 's' : ''} > 7 jours`,
+        subtitle:
+          (anciensSample as Array<{ modele: string }>)
+            .slice(0, 2)
+            .map(v => v.modele)
+            .join(' · ') || 'Retard atelier',
+        href: '/vehicules',
+        count: anciensCount,
+      })
+    }
+    if (stockBasCount > 0 && !scoped) {
+      alerts.push({
+        id: 'stock',
+        type: 'stock',
+        severity: stockBasCount > 5 ? 'high' : 'medium',
+        title: `${stockBasCount} produit${stockBasCount > 1 ? 's' : ''} en stock bas`,
+        subtitle: 'Réassort recommandé',
+        href: '/stock-general',
+        count: stockBasCount,
+      })
+    }
+
+    const tempsDelta =
+      tempsCur != null && tempsPrev != null
+        ? Math.round((tempsCur - tempsPrev) * 10) / 10
+        : null
+
+    return res.json({
+      year,
+      month,
+      generatedAt: now.toISOString(),
+      kpis: {
+        entrees: kpiDelta(entreesCur, entreesPrev),
+        valides: kpiDelta(validesCur, validesPrev),
+        aResoudre: { value: rougeLive, prev: null, delta: null, deltaPct: null },
+        tempsMoyenJours: {
+          value: tempsCur,
+          prev: tempsPrev,
+          delta: tempsDelta,
+          // pour le temps, une baisse est positive
+          betterWhenDown: true,
+        },
+      },
+      sparkline,
+      alerts,
+      samples: {
+        urgents: urgentsSample,
+        anciens: anciensSample,
+      },
+    })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+/** Snapshot ops : RDV, SAV, dettes, devis, chat — filtres day | week | month. */
+router.get('/dashboard-today', authenticate(), async (req: AuthRequest, res) => {
+  try {
+    const me = req.user!.sub
+    const now = new Date()
+    const today = toYmd(now)
+    const periodRaw = String(req.query.period ?? 'day')
+    const period = periodRaw === 'week' || periodRaw === 'month' ? periodRaw : 'day'
+
+    let year = Math.max(
+      2000,
+      Math.min(2100, parseInt(String(req.query.year ?? ''), 10) || now.getFullYear())
+    )
+    let month = Math.max(
+      1,
+      Math.min(12, parseInt(String(req.query.month ?? ''), 10) || now.getMonth() + 1)
+    )
+    if (year === now.getFullYear() && month > now.getMonth() + 1) {
+      month = now.getMonth() + 1
+    }
+
+    let start = today
+    let end = today
+    if (period === 'week') {
+      const d = new Date(now)
+      const day = d.getDay() // 0=dim
+      const diffToMon = day === 0 ? -6 : 1 - day
+      d.setDate(d.getDate() + diffToMon)
+      start = toYmd(d)
+      end = today
+    } else if (period === 'month') {
+      const range = monthRange(year, month)
+      start = range.start
+      end = year === now.getFullYear() && month === now.getMonth() + 1 ? today : range.end
+    }
+
+    const participants = await db.chatParticipant.findMany({
+      where: { userId: me },
+      select: { conversationId: true, lastReadAt: true },
+    })
+
+    const unreadCounts = await Promise.all(
+      (participants as Array<{ conversationId: number; lastReadAt: Date | null }>).map(p =>
+        db.chatMessage.count({
+          where: {
+            conversationId: p.conversationId,
+            senderId: { not: me },
+            ...(p.lastReadAt ? { createdAt: { gt: p.lastReadAt } } : {}),
+          },
+        })
+      )
+    )
+    const chatUnread = unreadCounts.reduce((a: number, b: number) => a + b, 0)
+
+    const dateRange = { gte: start, lte: end }
+    const dettesWhere =
+      period === 'day'
+        ? { reste: { gt: 0 } }
+        : { reste: { gt: 0 }, createdAt: { gte: new Date(`${start}T00:00:00.000Z`), lte: new Date(`${end}T23:59:59.999Z`) } }
+
+    const [rdvCount, reclamationsCount, dettesAgg, devisCount] = await Promise.all([
+      db.calendarAssignment.count({
+        where: { date: dateRange, statut: { not: 'annule' } },
+      }),
+      db.reclamation.count({
+        where:
+          period === 'day'
+            ? { statut: { in: ['ouverte', 'en_cours'] } }
+            : { statut: { in: ['ouverte', 'en_cours'] }, date: dateRange },
+      }),
+      db.clientDette.aggregate({
+        where: dettesWhere,
+        _count: { id: true },
+        _sum: { reste: true },
+      }),
+      db.demandeDevis.count({
+        where:
+          period === 'day'
+            ? { statut: 'en_attente' }
+            : { statut: 'en_attente', date: dateRange },
+      }),
+    ])
+
+    return res.json({
+      period,
+      date: today,
+      start,
+      end,
+      year: period === 'month' ? year : now.getFullYear(),
+      month: period === 'month' ? month : now.getMonth() + 1,
+      generatedAt: now.toISOString(),
+      items: {
+        rdv: { count: rdvCount },
+        reclamations: { count: reclamationsCount },
+        dettes: {
+          count: dettesAgg._count?.id ?? 0,
+          total: Math.round((Number(dettesAgg._sum?.reste) || 0) * 100) / 100,
+        },
+        devis: { count: devisCount },
+        chat: { count: chatUnread },
+      },
+    })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+/**
+ * Stats mensuelles (activité) :
+ * - byEtat = véhicules entrés ce mois, groupés par état actuel (même logique visuelle que le stock global)
+ * - entrees / valides / aResoudre pour le mois
+ */
+router.get('/dashboard-monthly', authenticate(), async (req: AuthRequest, res) => {
+  try {
+    const now = new Date()
+    const year = Math.max(
+      2000,
+      Math.min(2100, parseInt(String(req.query.year ?? ''), 10) || now.getFullYear())
+    )
+    const rawTid = (req.query as { technicien_id?: string }).technicien_id
+    const techId = rawTid !== undefined && rawTid !== '' ? parseInt(rawTid, 10) : NaN
+    const scoped = !Number.isNaN(techId)
+    if (scoped && req.user?.sub !== techId) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    const techWhere = scoped ? whereUserAssignedToVehicule(techId) : {}
+    const from = `${year}-01-01`
+    const to = `${year}-12-31`
+    const moisLabels = [
+      'Janvier',
+      'Février',
+      'Mars',
+      'Avril',
+      'Mai',
+      'Juin',
+      'Juillet',
+      'Août',
+      'Septembre',
+      'Octobre',
+      'Novembre',
+      'Décembre',
+    ]
+    const moisShort = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc']
+
+    const emptyByEtat = () => {
+      const o: Record<string, number> = {}
+      for (const e of ETATS) o[e] = 0
+      return o
+    }
+
+    const months = moisLabels.map((label, i) => ({
+      month: i + 1,
+      label,
+      labelShort: moisShort[i],
+      entrees: 0,
+      valides: 0,
+      aResoudre: 0,
+      byEtat: emptyByEtat(),
+    }))
+
+    const [entreesRows, sortiesRows, histVerts] = await Promise.all([
+      db.vehicule.findMany({
+        where: { date_entree: { gte: from, lte: to }, ...techWhere },
+        select: { id: true, date_entree: true, etat_actuel: true },
+      }),
+      db.vehicule.findMany({
+        where: { date_sortie: { gte: from, lte: to }, ...techWhere },
+        select: { id: true, date_sortie: true },
+      }),
+      db.vehiculeHistorique.findMany({
+        where: {
+          etat_nouveau: 'vert',
+          date_changement: { gte: from, lte: `${to}T23:59:59.999Z` },
+          ...(scoped ? { vehicule: techWhere } : {}),
+        },
+        select: { vehiculeId: true, date_changement: true },
+        orderBy: { date_changement: 'asc' },
+      }),
+    ])
+
+    for (const v of entreesRows as Array<{ id: number; date_entree: string; etat_actuel: string }>) {
+      const m = Number(String(v.date_entree).slice(5, 7))
+      if (m < 1 || m > 12) continue
+      const bucket = months[m - 1]
+      bucket.entrees += 1
+      if (ETATS.includes(v.etat_actuel as (typeof ETATS)[number])) {
+        bucket.byEtat[v.etat_actuel] += 1
+      }
+      if (v.etat_actuel === 'rouge') bucket.aResoudre += 1
+    }
+
+    const valideMonthByVehicule = new Map<number, number>()
+    for (const v of sortiesRows as Array<{ id: number; date_sortie: string }>) {
+      const m = Number(String(v.date_sortie).slice(5, 7))
+      if (m >= 1 && m <= 12) valideMonthByVehicule.set(v.id, m)
+    }
+    for (const h of histVerts as Array<{ vehiculeId: number; date_changement: string }>) {
+      if (valideMonthByVehicule.has(h.vehiculeId)) continue
+      const m = Number(String(h.date_changement).slice(5, 7))
+      if (m >= 1 && m <= 12) valideMonthByVehicule.set(h.vehiculeId, m)
+    }
+    for (const m of valideMonthByVehicule.values()) {
+      months[m - 1].valides += 1
+    }
+
+    return res.json({
+      year,
+      generatedAt: now.toISOString(),
+      months,
+    })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
 router.get('/dashboard-summary', authenticate(), async (req: AuthRequest, res) => {
   try {
     const rawTid = (req.query as { technicien_id?: string }).technicien_id

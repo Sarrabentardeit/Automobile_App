@@ -30,6 +30,7 @@ import VehiculeDetailPage from '@/pages/VehiculeDetailPage'
 import UtilisateursPage from '@/pages/UtilisateursPage'
 import CaissePage from '@/pages/CaissePage'
 import EquipeMembresPage from '@/pages/EquipeMembresPage'
+import ChatPage from '@/pages/ChatPage'
 import MoneyPage from '@/pages/MoneyPage'
 import CalendarPage from '@/pages/CalendarPage'
 import ReclamationPage from '@/pages/ReclamationPage'
@@ -97,6 +98,7 @@ export default function App() {
               <Route path="/utilisateurs" element={<UtilisateursPage />} />
               <Route path="/caisse" element={<CaissePage />} />
               <Route path="/equipe/membres" element={<EquipeMembresPage />} />
+              <Route path="/chat" element={<ChatPage />} />
               <Route path="/money" element={<MoneyPage />} />
               <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/reclamation" element={<ReclamationPage />} />

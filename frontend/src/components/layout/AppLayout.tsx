@@ -3,6 +3,7 @@ import { Outlet, Navigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import Sidebar from './Sidebar'
 import Header from './Header'
+import ChatFloatingWidget from '@/components/chat/ChatFloatingWidget'
 
 export default function AppLayout() {
   const { isAuthenticated } = useAuth()
@@ -21,6 +22,7 @@ export default function AppLayout() {
           </div>
         </main>
       </div>
+      <ChatFloatingWidget />
     </div>
   )
 }

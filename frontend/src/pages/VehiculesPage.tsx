@@ -137,9 +137,25 @@ export default function VehiculesPage() {
   const [serviceType, setServiceType] = useState<ServiceType | undefined>()
   const [dateFilterMode, setDateFilterMode] = useState<
     'toutes' | 'aujourdhui' | 'hier' | 'semaine' | 'mois' | 'mois_choisi' | 'date'
-  >('toutes')
+  >(() => {
+    const p = searchParams.get('periode')
+    if (
+      p === 'aujourdhui' ||
+      p === 'hier' ||
+      p === 'semaine' ||
+      p === 'mois' ||
+      p === 'mois_choisi' ||
+      p === 'date'
+    ) {
+      return p
+    }
+    return searchParams.get('mois') ? 'mois_choisi' : 'toutes'
+  })
   const [dateFilter, setDateFilter] = useState('')
-  const [monthFilter, setMonthFilter] = useState('')
+  const [monthFilter, setMonthFilter] = useState(() => {
+    const m = searchParams.get('mois') || ''
+    return /^\d{4}-\d{2}$/.test(m) ? m : ''
+  })
   const [vehiclePage, setVehiclePage] = useState(1)
   const [folderPage, setFolderPage] = useState(1)
   const [brandFolders, setBrandFolders] = useState<BrandFolder[]>([])
@@ -382,12 +398,15 @@ export default function VehiculesPage() {
         ))}
       </div>
 
-      <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap sm:overflow-visible">
+      <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-0.5 -mx-4 px-4 sm:mx-0 sm:px-0">
         <button
+          type="button"
           onClick={() => handleFilterEtat('tous')}
           className={cn(
-            'px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs font-bold border-2 transition-all whitespace-nowrap flex-shrink-0',
-            filtreEtat === 'tous' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+            'px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all whitespace-nowrap flex-shrink-0',
+            filtreEtat === 'tous'
+              ? 'bg-gray-900 text-white border-gray-900 shadow-sm'
+              : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
           )}
         >
           Tous ({totalAll})
@@ -395,18 +414,20 @@ export default function VehiculesPage() {
         {etats.map(etat => {
           const cfg = ETAT_CONFIG[etat]
           const count = countByEtat(etat)
+          const active = filtreEtat === etat
           return (
             <button
               key={etat}
-              onClick={() => handleFilterEtat(etat)}
+              type="button"
+              onClick={() => handleFilterEtat(active ? 'tous' : etat)}
               className={cn(
-                'px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs font-bold border-2 transition-all whitespace-nowrap flex-shrink-0',
-                filtreEtat === etat ? 'scale-105 shadow-md' : 'opacity-70 hover:opacity-100'
+                'px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all whitespace-nowrap flex-shrink-0',
+                active && 'shadow-sm'
               )}
               style={{
-                backgroundColor: filtreEtat === etat ? `${cfg.color}15` : 'white',
                 borderColor: cfg.color,
                 color: cfg.color,
+                backgroundColor: active ? `${cfg.color}18` : '#fff',
               }}
             >
               {cfg.label} ({count})

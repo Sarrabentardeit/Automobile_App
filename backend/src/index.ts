@@ -33,6 +33,7 @@ import outilsRouter from './routes/outils'
 import checklistsRouter from './routes/checklists'
 import statsRouter from './routes/stats'
 import settingsRouter from './routes/settings'
+import chatRouter from './routes/chat'
 import { ensureDocumentTemplates } from './lib/seedDocumentTemplates'
 
 const app = express()
@@ -109,6 +110,7 @@ app.use('/outils', outilsRouter)
 app.use('/checklists', checklistsRouter)
 app.use('/stats', statsRouter)
 app.use('/settings', settingsRouter)
+app.use('/chat', chatRouter)
 app.use('/vehicules', ordreReparationExcelRouter)
 app.use('/vehicules', suivisRouter)
 app.use('/vehicules', suivisExcelRouter)

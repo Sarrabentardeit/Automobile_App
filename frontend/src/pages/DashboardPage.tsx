@@ -6,7 +6,10 @@ import { useUsers } from '@/contexts/UsersContext'
 import { ETAT_CONFIG, type EtatVehicule, type Vehicule } from '@/types'
 import Card from '@/components/ui/Card'
 import Modal from '@/components/ui/Modal'
-import { Car, AlertTriangle, Clock, CheckCircle, Users, ArrowRight } from 'lucide-react'
+import DashboardMonthlyStats from '@/components/dashboard/DashboardMonthlyStats'
+import DashboardInsights, { DashboardAlertsPanel } from '@/components/dashboard/DashboardInsights'
+import DashboardTodayStrip from '@/components/dashboard/DashboardTodayStrip'
+import { AlertTriangle, Clock, Users, ArrowRight, LayoutDashboard } from 'lucide-react'
 import { daysSince, getActiveEquipeUsers, cn, stripVehiculeAssigneesMeta } from '@/lib/utils'
 import { apiFetch } from '@/lib/api'
 
@@ -45,7 +48,7 @@ function isAssignedTo(v: {
 
 export default function DashboardPage() {
   const { user, permissions, getAccessToken } = useAuth()
-  const { vehicules, stats, dashboardSummary, fetchDashboardSummary } = useVehiculesContext()
+  const { vehicules, dashboardSummary, fetchDashboardSummary, fetchStats } = useVehiculesContext()
   const { users } = useUsers()
   const navigate = useNavigate()
   const [selectedMember, setSelectedMember] = useState<TeamMemberDetail | null>(null)
@@ -96,12 +99,24 @@ export default function DashboardPage() {
   }, [equipeUsers, dashboardSummary, isGlobalView, myVehicules])
 
   useEffect(() => {
-    if (!permissions?.canManageUsers) return
+    void fetchDashboardSummary()
+    void fetchStats()
     const id = window.setInterval(() => {
       void fetchDashboardSummary()
-    }, 30_000)
-    return () => window.clearInterval(id)
-  }, [permissions?.canManageUsers, fetchDashboardSummary])
+      void fetchStats()
+    }, 45_000)
+    const onVis = () => {
+      if (document.visibilityState === 'visible') {
+        void fetchDashboardSummary()
+        void fetchStats()
+      }
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      window.clearInterval(id)
+      document.removeEventListener('visibilitychange', onVis)
+    }
+  }, [fetchDashboardSummary, fetchStats])
 
   useEffect(() => {
     if (!selectedMember) return
@@ -132,7 +147,6 @@ export default function DashboardPage() {
         if (!cancelled) setMemberVehicles(Array.isArray(res.data) ? res.data : [])
       } catch {
         if (!cancelled) {
-          // Fallback: véhicules déjà en mémoire
           setMemberVehicles(
             myVehicules.filter(v => v.etat_actuel !== 'vert' && isAssignedTo(v, selectedMember.id))
           )
@@ -148,21 +162,14 @@ export default function DashboardPage() {
 
   if (!user || !permissions) return null
 
-  const totalVehicules = isGlobalView ? (stats?.total ?? myVehicules.length) : myVehicules.length
-
-  const countByEtat = (etat: EtatVehicule) =>
-    isGlobalView ? (stats?.byEtat?.[etat] ?? 0) : myVehicules.filter(v => v.etat_actuel === etat).length
   const urgents = isGlobalView
     ? (dashboardSummary?.urgents ?? [])
     : myVehicules.filter(v => v.etat_actuel === 'rouge')
   const anciens = isGlobalView
     ? (dashboardSummary?.anciens ?? [])
     : myVehicules.filter(v => daysSince(v.date_entree) > 7 && v.etat_actuel !== 'vert')
-  const problemsCount = isGlobalView ? (dashboardSummary?.problemsCount ?? urgents.length) : urgents.length
 
   const recentActivity = (dashboardSummary?.recentActivity ?? []).slice(0, 6)
-
-  const etats: EtatVehicule[] = ['orange', 'mauve', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'vert', 'retour']
 
   const labelEtatDashboard = (etat: EtatVehicule) =>
     etat === 'rouge' ? 'À RÉSOUDRE' : ETAT_CONFIG[etat].label
@@ -180,96 +187,107 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
-          {permissions.vehiculeVisibility === 'own' ? `Mes véhicules` : 'Dashboard'}
-        </h1>
-        <p className="text-gray-500 mt-0.5 text-sm">
-          {permissions.vehiculeVisibility === 'own'
-            ? `Bonjour ${user.nom_complet}, ${myVehicules.length} véhicule(s) assigné(s)`
-            : `Bienvenue ${user.nom_complet} — Vue d'ensemble`}
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
+            <LayoutDashboard className="w-6 h-6 text-orange-500" />
+            {permissions.vehiculeVisibility === 'own' ? `Mes véhicules` : 'Dashboard'}
+          </h1>
+          <p className="text-gray-500 mt-0.5 text-sm">
+            {permissions.vehiculeVisibility === 'own'
+              ? `Bonjour ${user.nom_complet}`
+              : `Bienvenue ${user.nom_complet}`}
+          </p>
+        </div>
+        {permissions.canManageUsers ? (
+          <button
+            type="button"
+            onClick={() => navigate('/admin')}
+            className="text-xs font-semibold text-slate-600 hover:text-slate-900 border border-gray-200 bg-white px-3 py-1.5 rounded-lg"
+          >
+            Stock global → Statistiques
+          </button>
+        ) : null}
       </div>
 
-      <div className="flex gap-2.5 overflow-x-auto pb-1 sm:pb-0 sm:grid sm:grid-cols-3 lg:grid-cols-5 sm:overflow-visible -mx-4 px-4 sm:mx-0 sm:px-0">
-        {etats.map(etat => {
-          const cfg = ETAT_CONFIG[etat]
-          const count = countByEtat(etat)
-          return (
-            <button key={etat} onClick={() => navigate(`/vehicules?etat=${etat}`)}
-              className="bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-gray-100 hover:shadow-md active:scale-95 transition-all text-left group min-w-[120px] flex-shrink-0 sm:min-w-0"
-            >
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cfg.color }} />
-                <span className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wide">{labelEtatDashboard(etat)}</span>
-              </div>
-              <p className="text-2xl sm:text-3xl font-extrabold" style={{ color: cfg.color }}>{count}</p>
-            </button>
-          )
-        })}
+      <DashboardInsights showAlerts={false} />
+
+      <DashboardTodayStrip />
+
+      <div className="grid grid-cols-1 xl:grid-cols-[1.4fr_1fr] gap-4 sm:gap-5 items-start">
+        <DashboardMonthlyStats />
+        <div className="space-y-4">
+          <DashboardAlertsPanel />
+          <Card padding="none" className="overflow-hidden">
+            <div className="px-4 sm:px-5 py-3 border-b border-gray-100">
+              <h2 className="font-semibold text-gray-900 text-sm">Activité récente</h2>
+            </div>
+            <div className="divide-y divide-gray-50 max-h-56 overflow-y-auto">
+              {recentActivity.length === 0 ? (
+                <p className="p-4 text-sm text-gray-400 text-center">Aucune activité</p>
+              ) : (
+                recentActivity.map((h, i) => (
+                  <div key={`${h.id}-${i}`} className="px-4 py-2.5 flex items-center gap-3 text-sm">
+                    <div
+                      className="w-2 h-2 rounded-full flex-shrink-0"
+                      style={{
+                        backgroundColor:
+                          ETAT_CONFIG[h.etat_nouveau as EtatVehicule]?.color ?? '#94a3b8',
+                      }}
+                    />
+                    <p className="flex-1 text-gray-700 truncate">
+                      <span className="font-medium">
+                        {h.vehicleModel || `Véhicule #${h.vehicule_id}`}
+                      </span>
+                      {' → '}
+                      <span className="text-gray-500">
+                        {labelEtatDashboard((h.etat_nouveau as EtatVehicule) || 'orange')}
+                      </span>
+                    </p>
+                    <span className="text-[10px] text-gray-400 flex-shrink-0 tabular-nums">
+                      {h.date_changement?.slice(5, 16).replace('T', ' ')}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </Card>
+        </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 sm:gap-4">
-        <Card padding="sm">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-9 h-9 sm:w-11 sm:h-11 bg-blue-50 rounded-xl flex items-center justify-center flex-shrink-0">
-              <Car className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-lg sm:text-2xl font-bold text-gray-900">{totalVehicules}</p>
-              <p className="text-[10px] sm:text-xs text-gray-500 truncate">{permissions.vehiculeVisibility === 'own' ? 'Mes véhicules' : 'Total véhicules'}</p>
-            </div>
-          </div>
-        </Card>
-        <Card padding="sm">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-9 h-9 sm:w-11 sm:h-11 bg-red-50 rounded-xl flex items-center justify-center flex-shrink-0">
-              <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 text-red-500" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-lg sm:text-2xl font-bold text-red-600">{problemsCount}</p>
-              <p className="text-[10px] sm:text-xs text-gray-500">À résoudre</p>
-            </div>
-          </div>
-        </Card>
-        <Card padding="sm">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-9 h-9 sm:w-11 sm:h-11 bg-green-50 rounded-xl flex items-center justify-center flex-shrink-0">
-              <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-lg sm:text-2xl font-bold text-green-600">{countByEtat('vert')}</p>
-              <p className="text-[10px] sm:text-xs text-gray-500">Validés</p>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
         <Card padding="none" className="overflow-hidden">
           <div className="px-4 sm:px-5 py-3 border-b border-gray-100 flex items-center justify-between">
             <h2 className="font-semibold text-gray-900 flex items-center gap-2 text-sm sm:text-base">
               <AlertTriangle className="w-4 h-4 text-red-500" />
               Urgents
             </h2>
-            <button onClick={() => navigate('/vehicules?etat=rouge')} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-              Voir tout <ArrowRight className="w-3 h-3" />
+            <button
+              onClick={() => navigate('/vehicules?etat=rouge')}
+              className="text-xs text-orange-600 hover:underline flex items-center gap-1 font-semibold"
+            >
+              Voir <ArrowRight className="w-3 h-3" />
             </button>
           </div>
           <div className="divide-y divide-gray-50 max-h-64 overflow-y-auto">
             {urgents.length === 0 ? (
               <p className="p-4 text-sm text-gray-400 text-center">Aucun véhicule urgent</p>
-            ) : urgents.slice(0, 5).map(v => (
-              <button key={v.id} onClick={() => navigate(`/vehicules/${v.id}`)}
-                className="w-full px-4 py-3 flex items-center gap-3 hover:bg-red-50/50 transition-colors text-left">
-                <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{v.modele}</p>
-                  <p className="text-xs text-gray-500">{v.immatriculation}</p>
-                </div>
-                <span className="text-xs text-red-600 font-medium">{daysSince(v.date_entree)}j</span>
-              </button>
-            ))}
+            ) : (
+              urgents.slice(0, 5).map(v => (
+                <button
+                  key={v.id}
+                  onClick={() => navigate(`/vehicules/${v.id}`)}
+                  className="w-full px-4 py-3 flex items-center gap-3 hover:bg-red-50/50 transition-colors text-left"
+                >
+                  <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{v.modele}</p>
+                    <p className="text-xs text-gray-500">{v.immatriculation}</p>
+                  </div>
+                  <span className="text-xs text-red-600 font-medium">{daysSince(v.date_entree)}j</span>
+                </button>
+              ))
+            )}
           </div>
         </Card>
 
@@ -283,45 +301,31 @@ export default function DashboardPage() {
           <div className="divide-y divide-gray-50 max-h-64 overflow-y-auto">
             {anciens.length === 0 ? (
               <p className="p-4 text-sm text-gray-400 text-center">Aucun véhicule ancien</p>
-            ) : anciens.slice(0, 5).map(v => (
-              <button key={v.id} onClick={() => navigate(`/vehicules/${v.id}`)}
-                className="w-full px-4 py-3 flex items-center gap-3 hover:bg-amber-50/50 transition-colors text-left">
-                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: ETAT_CONFIG[v.etat_actuel].color }} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{v.modele}</p>
-                  <p className="text-xs text-gray-500">{v.immatriculation} · {labelEtatDashboard(v.etat_actuel)}</p>
-                </div>
-                <span className="text-xs text-amber-600 font-medium">{daysSince(v.date_entree)}j</span>
-              </button>
-            ))}
+            ) : (
+              anciens.slice(0, 5).map(v => (
+                <button
+                  key={v.id}
+                  onClick={() => navigate(`/vehicules/${v.id}`)}
+                  className="w-full px-4 py-3 flex items-center gap-3 hover:bg-amber-50/50 transition-colors text-left"
+                >
+                  <div
+                    className="w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: ETAT_CONFIG[v.etat_actuel].color }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{v.modele}</p>
+                    <p className="text-xs text-gray-500">
+                      {v.immatriculation} · {labelEtatDashboard(v.etat_actuel)}
+                    </p>
+                  </div>
+                  <span className="text-xs text-amber-600 font-medium">{daysSince(v.date_entree)}j</span>
+                </button>
+              ))
+            )}
           </div>
         </Card>
       </div>
 
-      {recentActivity.length > 0 && (
-        <Card padding="none" className="overflow-hidden">
-          <div className="px-4 sm:px-5 py-3 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-900 text-sm sm:text-base">Activité récente</h2>
-          </div>
-          <div className="divide-y divide-gray-50">
-            {recentActivity.map((h, i) => (
-              <div key={`${h.id}-${i}`} className="px-4 py-2.5 flex items-center gap-3 text-sm">
-                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: ETAT_CONFIG[h.etat_nouveau as EtatVehicule]?.color ?? '#94a3b8' }} />
-                <p className="flex-1 text-gray-700 truncate">
-                  <span className="font-medium">{h.vehicleModel || `Véhicule #${h.vehicule_id}`}</span>
-                  {' → '}
-                  <span className="text-gray-500">{labelEtatDashboard((h.etat_nouveau as EtatVehicule) || 'orange')}</span>
-                </p>
-                <span className="text-xs text-gray-400 flex-shrink-0">
-                  {h.date_changement?.slice(0, 16).replace('T', ' ')}
-                </span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {/* Équipe atelier — tous utilisateurs actifs, tous états sauf archivés */}
       {permissions.canManageUsers && (
         <Card padding="none" className="overflow-hidden border-stone-200/80 shadow-sm">
           <div className="px-4 sm:px-5 py-4 border-b border-stone-100 bg-[#faf8f5] flex items-center justify-between gap-3">
