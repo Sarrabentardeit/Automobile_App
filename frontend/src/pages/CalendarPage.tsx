@@ -428,45 +428,19 @@ export default function CalendarPage() {
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3">
-            {/* Contexte période — hors bande KPI statut */}
+            {/* Contexte période — compteurs info uniquement */}
             <div className="inline-flex items-stretch rounded-2xl border border-indigo-100 bg-gradient-to-r from-white to-indigo-50/60 shadow-sm overflow-hidden">
-              <button
-                type="button"
-                onClick={() => selectKpi('all')}
-                className={cn(
-                  'px-3.5 py-2 text-left transition-colors min-w-[5.5rem]',
-                  kpiFocus === 'all' ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-50/80'
-                )}
-              >
-                <p
-                  className={cn(
-                    'text-[9px] font-bold uppercase tracking-wider',
-                    kpiFocus === 'all' ? 'text-indigo-100' : 'text-indigo-500'
-                  )}
-                >
-                  RDV mois
-                </p>
+              <div className="px-3.5 py-2 min-w-[5.5rem] bg-indigo-600 text-white">
+                <p className="text-[9px] font-bold uppercase tracking-wider text-indigo-100">RDV mois</p>
                 <p className="text-lg font-extrabold tabular-nums leading-none mt-0.5">{kpiStats.total}</p>
-              </button>
+              </div>
               <div className="w-px bg-indigo-100" />
-              <button
-                type="button"
-                onClick={() => selectKpi('today')}
-                className={cn(
-                  'px-3.5 py-2 text-left transition-colors min-w-[5.5rem]',
-                  kpiFocus === 'today' ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-50/80'
-                )}
-              >
-                <p
-                  className={cn(
-                    'text-[9px] font-bold uppercase tracking-wider',
-                    kpiFocus === 'today' ? 'text-indigo-100' : 'text-indigo-500'
-                  )}
-                >
-                  Aujourd’hui
+              <div className="px-3.5 py-2 min-w-[5.5rem]">
+                <p className="text-[9px] font-bold uppercase tracking-wider text-indigo-500">Aujourd’hui</p>
+                <p className="text-lg font-extrabold tabular-nums leading-none mt-0.5 text-slate-900">
+                  {kpiStats.today}
                 </p>
-                <p className="text-lg font-extrabold tabular-nums leading-none mt-0.5">{kpiStats.today}</p>
-              </button>
+              </div>
             </div>
 
             <div className="flex items-center gap-2">
@@ -515,42 +489,42 @@ export default function CalendarPage() {
                   type="button"
                   onClick={() => selectKpi(card.key)}
                   className={cn(
-                    'relative text-left rounded-xl border bg-white px-3 py-2.5 transition-all duration-200',
+                    'relative text-left rounded-xl border px-3 py-2.5 transition-all duration-200',
                     'hover:-translate-y-0.5 hover:shadow-md',
-                    active ? 'shadow-md' : 'border-slate-200 shadow-sm'
+                    active ? 'shadow-md' : 'shadow-sm'
                   )}
-                  style={
-                    active
-                      ? {
-                          borderColor: card.color,
-                          boxShadow: `0 8px 20px ${card.color}22`,
-                          background: `linear-gradient(180deg, ${card.color}14 0%, #fff 60%)`,
-                        }
-                      : undefined
-                  }
+                  style={{
+                    borderColor: active ? card.color : `${card.color}99`,
+                    borderWidth: active ? 2 : 1,
+                    background: `linear-gradient(165deg, ${card.color}28 0%, #ffffff 58%)`,
+                    boxShadow: active ? `0 8px 22px ${card.color}33` : undefined,
+                  }}
                 >
                   <div className="flex items-center gap-1.5 mb-1">
                     <span
-                      className="h-1.5 w-1.5 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: card.color, boxShadow: `0 0 0 3px ${card.color}20` }}
+                      className="h-2.5 w-2.5 rounded-full flex-shrink-0 ring-2 ring-white"
+                      style={{ backgroundColor: card.color, boxShadow: `0 0 0 3px ${card.color}35` }}
                     />
-                    <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500 truncate">
+                    <span
+                      className="text-[10px] font-bold uppercase tracking-wide truncate"
+                      style={{ color: card.color }}
+                    >
                       {card.label}
                     </span>
                   </div>
                   <p
                     className="text-2xl font-extrabold tabular-nums tracking-tight leading-none"
-                    style={{ color: active ? card.color : '#0f172a' }}
+                    style={{ color: card.color }}
                   >
                     {card.value}
                   </p>
-                  <div className="mt-2 h-1 rounded-full bg-slate-100 overflow-hidden">
+                  <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: `${card.color}18` }}>
                     <div
                       className="h-full rounded-full transition-all duration-300"
                       style={{
                         width: `${pct}%`,
                         backgroundColor: card.color,
-                        opacity: card.value > 0 ? 1 : 0.2,
+                        opacity: card.value > 0 ? 1 : 0.35,
                       }}
                     />
                   </div>
