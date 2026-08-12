@@ -1,10 +1,14 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import { Plus, Pencil, Trash2, Eye, Download, Printer } from 'lucide-react'
+import { Plus, Pencil, Trash2, Eye, Download, Printer, FileDown } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSuivisApi } from '../../hooks/useSuivisApi'
 import type { VehiculeSuivi, VehiculeSuiviInput } from '../../types'
 import SuiviForm from './SuiviForm'
-import { buildSuiviDocumentHtml } from './suiviTemplate'
+import {
+  buildSuiviDocumentHtml,
+  exportSuiviPdf,
+  suiviFromForm,
+} from './suiviTemplate'
 
 interface Props {
   vehiculeId: number
@@ -45,6 +49,7 @@ export default function VehiculeSuivis({ vehiculeId, vehiculeModele = '', vehicu
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState<number | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   const [mode, setMode] = useState<Mode>('list')
   const [selected, setSelected] = useState<VehiculeSuivi | null>(null)
@@ -156,6 +161,22 @@ export default function VehiculeSuivis({ vehiculeId, vehiculeModele = '', vehicu
     }
   }
 
+  const handleExportPdf = async (data: VehiculeSuivi | VehiculeSuiviInput, numero?: string) => {
+    try {
+      setExporting(true)
+      const saved = data as VehiculeSuivi
+      const doc =
+        typeof saved.id === 'number' && typeof saved.numero === 'string'
+          ? saved
+          : suiviFromForm(data as VehiculeSuiviInput, numero ?? selected?.numero)
+      await exportSuiviPdf(doc)
+    } catch (e) {
+      alert((e as Error).message || 'Erreur export PDF')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   // ──────────────────────────────────────────────────────────
   // RENDER: view (read-only aperçu)
   // ──────────────────────────────────────────────────────────
@@ -177,6 +198,13 @@ export default function VehiculeSuivis({ vehiculeId, vehiculeModele = '', vehicu
               className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700"
             >
               <Eye size={14} /> Aperçu
+            </button>
+            <button
+              onClick={() => void handleExportPdf(selected)}
+              disabled={exporting}
+              className="flex items-center gap-1 px-3 py-1.5 bg-violet-600 text-white rounded text-sm hover:bg-violet-700 disabled:opacity-50"
+            >
+              <FileDown size={14} /> {exporting ? 'Export…' : 'Exporter PDF'}
             </button>
             <button
               onClick={() => handleExcel(selected)}
@@ -204,7 +232,7 @@ export default function VehiculeSuivis({ vehiculeId, vehiculeModele = '', vehicu
           </span>
         </div>
         <SuiviForm data={formData} setData={setFormData} numero={mode === 'edit' ? selected?.numero : undefined} />
-        <div className="flex gap-3 mt-4">
+        <div className="flex gap-3 mt-4 flex-wrap">
           <button
             onClick={handleSave}
             disabled={saving}
@@ -214,6 +242,15 @@ export default function VehiculeSuivis({ vehiculeId, vehiculeModele = '', vehicu
           </button>
           <button onClick={goBack} className="px-5 py-2 bg-gray-200 rounded hover:bg-gray-300">
             Annuler
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleExportPdf(formData, mode === 'edit' ? selected?.numero : undefined)}
+            disabled={exporting}
+            className="px-5 py-2 bg-violet-600 text-white rounded font-medium hover:bg-violet-700 disabled:opacity-50 flex items-center gap-1.5"
+          >
+            <FileDown size={16} />
+            {exporting ? 'Export…' : 'Exporter PDF'}
           </button>
         </div>
       </div>
@@ -276,6 +313,10 @@ export default function VehiculeSuivis({ vehiculeId, vehiculeModele = '', vehicu
                       <button onClick={() => handlePrint(s)} title="Imprimer"
                         className="p-1 rounded hover:bg-blue-100 text-blue-600">
                         <Printer size={14} />
+                      </button>
+                      <button onClick={() => void handleExportPdf(s)} title="Exporter PDF"
+                        className="p-1 rounded hover:bg-violet-100 text-violet-600">
+                        <FileDown size={14} />
                       </button>
                       <button onClick={() => handleExcel(s)} title="Télécharger Excel"
                         className="p-1 rounded hover:bg-emerald-100 text-emerald-600">

@@ -36,23 +36,61 @@ const tdData: React.CSSProperties = {
   height: 22, verticalAlign: 'middle',
 }
 
-const ROWS = 12
+type LineField = 'travauxEffectues' | 'travauxProchains' | 'produitsUtilises'
+
+function linesOf(value: string | undefined): string[] {
+  const parts = (value ?? '').split('\n')
+  return parts.length === 0 ? [''] : parts
+}
+
+function padTo(lines: string[], n: number): string[] {
+  const copy = [...lines]
+  while (copy.length < n) copy.push('')
+  return copy
+}
 
 export default function SuiviForm({ data, setData, readOnly = false, numero }: Props) {
   const set = <K extends keyof VehiculeSuiviInput>(k: K) =>
     (e: React.ChangeEvent<HTMLInputElement>) =>
       setData(prev => ({ ...prev, [k]: e.target.value }))
 
-  const travEff   = (data.travauxEffectues  ?? '').split('\n')
-  const travProch = (data.travauxProchains  ?? '').split('\n')
-  const produits  = (data.produitsUtilises  ?? '').split('\n')
-  const maxRows   = Math.max(ROWS, travEff.length, travProch.length, produits.length)
+  const travEff   = linesOf(data.travauxEffectues)
+  const travProch = linesOf(data.travauxProchains)
+  const produits  = linesOf(data.produitsUtilises)
+  const rowCount  = Math.max(1, travEff.length, travProch.length, produits.length)
 
-  const setLine = (field: 'travauxEffectues' | 'travauxProchains' | 'produitsUtilises', lines: string[], i: number, val: string) => {
-    const copy = [...lines]
-    while (copy.length <= i) copy.push('')
+  const eff   = padTo(travEff, rowCount)
+  const proch = padTo(travProch, rowCount)
+  const prod  = padTo(produits, rowCount)
+
+  const setLine = (field: LineField, lines: string[], i: number, val: string) => {
+    const copy = padTo(lines, rowCount)
     copy[i] = val
     setData(prev => ({ ...prev, [field]: copy.join('\n') }))
+  }
+
+  const addRow = () => {
+    setData(prev => ({
+      ...prev,
+      travauxEffectues: padTo(linesOf(prev.travauxEffectues), rowCount).concat('').join('\n'),
+      travauxProchains: padTo(linesOf(prev.travauxProchains), rowCount).concat('').join('\n'),
+      produitsUtilises: padTo(linesOf(prev.produitsUtilises), rowCount).concat('').join('\n'),
+    }))
+  }
+
+  const removeRow = (i: number) => {
+    if (rowCount <= 1) return
+    const next = (lines: string[]) => {
+      const copy = padTo(lines, rowCount)
+      copy.splice(i, 1)
+      return (copy.length ? copy : ['']).join('\n')
+    }
+    setData(prev => ({
+      ...prev,
+      travauxEffectues: next(linesOf(prev.travauxEffectues)),
+      travauxProchains: next(linesOf(prev.travauxProchains)),
+      produitsUtilises: next(linesOf(prev.produitsUtilises)),
+    }))
   }
 
   return (
@@ -113,54 +151,67 @@ export default function SuiviForm({ data, setData, readOnly = false, numero }: P
       {/* ── 3 COLONNES ── */}
       <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', marginBottom: 4 }}>
         <colgroup>
-          <col style={{ width: '41%' }} />
-          <col style={{ width: '36%' }} />
-          <col style={{ width: '23%' }} />
+          <col style={{ width: readOnly ? '41%' : '39%' }} />
+          <col style={{ width: readOnly ? '36%' : '34%' }} />
+          <col style={{ width: readOnly ? '23%' : '21%' }} />
+          {!readOnly && <col style={{ width: '6%' }} />}
         </colgroup>
         <thead>
           <tr>
             <th style={thStyle()}>TRAVAUX EFFECTUÉES</th>
             <th style={thStyle()}>TRAVAUX PROCHAINS</th>
             <th style={thStyle()}>PRODUITS UTILISÉS</th>
+            {!readOnly && <th style={thStyle({ padding: '5px 2px', fontSize: 10 })}></th>}
           </tr>
         </thead>
         <tbody>
-          {Array.from({ length: maxRows }, (_, i) => (
+          {Array.from({ length: rowCount }, (_, i) => (
             <tr key={i}>
               <td style={tdData}>
-                {readOnly ? (travEff[i] ?? '') : (
-                  <input type="text" style={input} value={travEff[i] ?? ''}
-                    onChange={e => setLine('travauxEffectues', travEff, i, e.target.value)} />
+                {readOnly ? (eff[i] ?? '') : (
+                  <input type="text" style={input} value={eff[i] ?? ''}
+                    onChange={e => setLine('travauxEffectues', eff, i, e.target.value)} />
                 )}
               </td>
               <td style={tdData}>
-                {readOnly ? (travProch[i] ?? '') : (
-                  <input type="text" style={input} value={travProch[i] ?? ''}
-                    onChange={e => setLine('travauxProchains', travProch, i, e.target.value)} />
+                {readOnly ? (proch[i] ?? '') : (
+                  <input type="text" style={input} value={proch[i] ?? ''}
+                    onChange={e => setLine('travauxProchains', proch, i, e.target.value)} />
                 )}
               </td>
               <td style={tdData}>
-                {readOnly ? (produits[i] ?? '') : (
-                  <input type="text" style={input} value={produits[i] ?? ''}
-                    onChange={e => setLine('produitsUtilises', produits, i, e.target.value)} />
+                {readOnly ? (prod[i] ?? '') : (
+                  <input type="text" style={input} value={prod[i] ?? ''}
+                    onChange={e => setLine('produitsUtilises', prod, i, e.target.value)} />
                 )}
               </td>
+              {!readOnly && (
+                <td style={{ ...tdData, textAlign: 'center', padding: 0 }}>
+                  <button
+                    type="button"
+                    title={rowCount <= 1 ? 'Au moins une ligne requise' : 'Supprimer la ligne'}
+                    disabled={rowCount <= 1}
+                    onClick={() => removeRow(i)}
+                    style={{
+                      border: 'none', background: 'transparent', cursor: rowCount <= 1 ? 'not-allowed' : 'pointer',
+                      color: rowCount <= 1 ? '#ccc' : '#c0392b', fontSize: 14, lineHeight: 1, padding: '4px 6px',
+                      opacity: rowCount <= 1 ? 0.4 : 1,
+                    }}
+                  >
+                    ×
+                  </button>
+                </td>
+              )}
             </tr>
           ))}
-          {/* ligne vide bonus pour saisie rapide */}
           {!readOnly && (
             <tr>
-              <td style={{ ...tdData, cursor: 'pointer', background: '#fafafa' }}
-                  onClick={() => setData(p => ({ ...p, travauxEffectues: (p.travauxEffectues ?? '') + '\n' }))}>
-                <span style={{ color: '#bbb', fontSize: 10 }}>+ ligne</span>
-              </td>
-              <td style={{ ...tdData, cursor: 'pointer', background: '#fafafa' }}
-                  onClick={() => setData(p => ({ ...p, travauxProchains: (p.travauxProchains ?? '') + '\n' }))}>
-                <span style={{ color: '#bbb', fontSize: 10 }}>+ ligne</span>
-              </td>
-              <td style={{ ...tdData, cursor: 'pointer', background: '#fafafa' }}
-                  onClick={() => setData(p => ({ ...p, produitsUtilises: (p.produitsUtilises ?? '') + '\n' }))}>
-                <span style={{ color: '#bbb', fontSize: 10 }}>+ ligne</span>
+              <td
+                colSpan={4}
+                style={{ ...tdData, cursor: 'pointer', background: '#fafafa', textAlign: 'center', height: 28 }}
+                onClick={addRow}
+              >
+                <span style={{ color: '#3b82f6', fontSize: 11, fontWeight: 600 }}>+ Ajouter une ligne</span>
               </td>
             </tr>
           )}

@@ -1,10 +1,9 @@
-import { StyleSheet, Text, TextInput, View } from 'react-native'
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import type { VehiculeSuiviInput } from '../types/vehicule'
 
 const C_GREEN = '#D7E4BD'
 const C_BLUE_H = '#B9CDE5'
 const C_BLUE_F = '#C6D9F1'
-const ROWS = 12
 
 type Props = {
   data: VehiculeSuiviInput
@@ -12,16 +11,29 @@ type Props = {
   numero?: string
 }
 
+type LineField = 'travauxEffectues' | 'travauxProchains' | 'produitsUtilises'
+
+function linesOf(value: string | undefined): string[] {
+  const parts = (value ?? '').split('\n')
+  return parts.length === 0 ? [''] : parts
+}
+
+function padTo(lines: string[], n: number): string[] {
+  const copy = [...lines]
+  while (copy.length < n) copy.push('')
+  return copy
+}
+
 function setLine(
-  field: 'travauxEffectues' | 'travauxProchains' | 'produitsUtilises',
+  field: LineField,
   lines: string[],
+  rowCount: number,
   i: number,
   val: string,
   data: VehiculeSuiviInput,
   onChange: (next: VehiculeSuiviInput) => void
 ) {
-  const copy = [...lines]
-  while (copy.length <= i) copy.push('')
+  const copy = padTo(lines, rowCount)
   copy[i] = val
   onChange({ ...data, [field]: copy.join('\n') })
 }
@@ -30,10 +42,38 @@ export default function SuiviExcelForm({ data, onChange, numero }: Props) {
   const set = <K extends keyof VehiculeSuiviInput>(k: K, v: VehiculeSuiviInput[K]) =>
     onChange({ ...data, [k]: v })
 
-  const travEff = (data.travauxEffectues ?? '').split('\n')
-  const travProch = (data.travauxProchains ?? '').split('\n')
-  const produits = (data.produitsUtilises ?? '').split('\n')
-  const maxRows = Math.max(ROWS, travEff.length, travProch.length, produits.length)
+  const travEff = linesOf(data.travauxEffectues)
+  const travProch = linesOf(data.travauxProchains)
+  const produits = linesOf(data.produitsUtilises)
+  const rowCount = Math.max(1, travEff.length, travProch.length, produits.length)
+
+  const eff = padTo(travEff, rowCount)
+  const proch = padTo(travProch, rowCount)
+  const prod = padTo(produits, rowCount)
+
+  const addRow = () => {
+    onChange({
+      ...data,
+      travauxEffectues: padTo(linesOf(data.travauxEffectues), rowCount).concat('').join('\n'),
+      travauxProchains: padTo(linesOf(data.travauxProchains), rowCount).concat('').join('\n'),
+      produitsUtilises: padTo(linesOf(data.produitsUtilises), rowCount).concat('').join('\n'),
+    })
+  }
+
+  const removeRow = (i: number) => {
+    if (rowCount <= 1) return
+    const next = (lines: string[]) => {
+      const copy = padTo(lines, rowCount)
+      copy.splice(i, 1)
+      return (copy.length ? copy : ['']).join('\n')
+    }
+    onChange({
+      ...data,
+      travauxEffectues: next(linesOf(data.travauxEffectues)),
+      travauxProchains: next(linesOf(data.travauxProchains)),
+      produitsUtilises: next(linesOf(data.produitsUtilises)),
+    })
+  }
 
   return (
     <View style={styles.wrap}>
@@ -84,26 +124,39 @@ export default function SuiviExcelForm({ data, onChange, numero }: Props) {
         <Text style={[styles.th, { flex: 41 }]}>TRAVAUX EFFECTUÉES</Text>
         <Text style={[styles.th, { flex: 36 }]}>TRAVAUX PROCHAINS</Text>
         <Text style={[styles.th, { flex: 23 }]}>PRODUITS UTILISÉS</Text>
+        <View style={styles.thAction} />
       </View>
-      {Array.from({ length: maxRows }, (_, i) => (
+      {Array.from({ length: rowCount }, (_, i) => (
         <View key={i} style={styles.dataRow}>
           <TextInput
             style={[styles.dataCell, { flex: 41 }]}
-            value={travEff[i] ?? ''}
-            onChangeText={(v) => setLine('travauxEffectues', travEff, i, v, data, onChange)}
+            value={eff[i] ?? ''}
+            onChangeText={(v) => setLine('travauxEffectues', eff, rowCount, i, v, data, onChange)}
           />
           <TextInput
             style={[styles.dataCell, { flex: 36 }]}
-            value={travProch[i] ?? ''}
-            onChangeText={(v) => setLine('travauxProchains', travProch, i, v, data, onChange)}
+            value={proch[i] ?? ''}
+            onChangeText={(v) => setLine('travauxProchains', proch, rowCount, i, v, data, onChange)}
           />
           <TextInput
             style={[styles.dataCell, { flex: 23 }]}
-            value={produits[i] ?? ''}
-            onChangeText={(v) => setLine('produitsUtilises', produits, i, v, data, onChange)}
+            value={prod[i] ?? ''}
+            onChangeText={(v) => setLine('produitsUtilises', prod, rowCount, i, v, data, onChange)}
           />
+          <Pressable
+            onPress={() => removeRow(i)}
+            disabled={rowCount <= 1}
+            style={[styles.delBtn, rowCount <= 1 && styles.delBtnDisabled]}
+            hitSlop={6}
+          >
+            <Text style={[styles.delText, rowCount <= 1 && styles.delTextDisabled]}>×</Text>
+          </Pressable>
         </View>
       ))}
+
+      <Pressable onPress={addRow} style={styles.addRow}>
+        <Text style={styles.addText}>+ Ajouter une ligne</Text>
+      </Pressable>
 
       <View style={styles.footerRow}>
         <View style={styles.techBox}>
@@ -167,7 +220,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     paddingVertical: 5,
   },
-  dataRow: { flexDirection: 'row' },
+  thAction: {
+    width: 28,
+    backgroundColor: C_BLUE_H,
+    borderWidth: 1,
+    borderColor: '#888',
+  },
+  dataRow: { flexDirection: 'row', alignItems: 'stretch' },
   dataCell: {
     borderWidth: 1,
     borderColor: '#888',
@@ -177,6 +236,26 @@ const styles = StyleSheet.create({
     minHeight: 28,
     color: '#111',
   },
+  delBtn: {
+    width: 28,
+    borderWidth: 1,
+    borderColor: '#888',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  delBtnDisabled: { opacity: 0.4 },
+  delText: { fontSize: 16, color: '#c0392b', fontWeight: '700' },
+  delTextDisabled: { color: '#ccc' },
+  addRow: {
+    borderWidth: 1,
+    borderColor: '#888',
+    borderTopWidth: 0,
+    paddingVertical: 8,
+    alignItems: 'center',
+    backgroundColor: '#fafafa',
+  },
+  addText: { color: '#3b82f6', fontSize: 12, fontWeight: '600' },
   footerRow: { marginTop: 6, gap: 4 },
   techBox: {
     flexDirection: 'row',
