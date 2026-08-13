@@ -30,6 +30,8 @@ import {
   fetchChatMembers,
   fetchChatMessages,
   hideChatMessageForMe,
+  applyParticipantRead,
+  getMessageReadReceipt,
   markChatRead,
   openDirectChat,
   pinChatMessage,
@@ -243,6 +245,19 @@ export default function ChatPage() {
     window.addEventListener('elmecano:chat_message', onRt)
     return () => window.removeEventListener('elmecano:chat_message', onRt)
   }, [loadConversations, loadMessages, selectedId])
+
+  useEffect(() => {
+    const onRead = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ conversationId: number; userId: number; lastReadAt: string }>)
+        .detail
+      if (!detail?.conversationId || !detail.userId || !detail.lastReadAt) return
+      setConversations(prev =>
+        applyParticipantRead(prev, detail.conversationId, detail.userId, detail.lastReadAt)
+      )
+    }
+    window.addEventListener('elmecano:chat_read', onRead)
+    return () => window.removeEventListener('elmecano:chat_read', onRead)
+  }, [])
 
   useEffect(() => {
     const close = () => setMenuMsgId(null)
@@ -902,6 +917,15 @@ export default function ChatPage() {
                                 )}
                               >
                                 {formatTime(m.createdAt)}
+                                {(() => {
+                                  const receipt = getMessageReadReceipt(m, selected, user?.id)
+                                  if (!receipt) return null
+                                  return (
+                                    <span className="ml-1.5 font-medium opacity-95">
+                                      · {receipt.label}
+                                    </span>
+                                  )
+                                })()}
                               </p>
                             </div>
                             {!m.deleted ? (

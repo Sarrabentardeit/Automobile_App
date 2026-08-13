@@ -157,9 +157,48 @@ export function unpinChatMessage(token: string, conversationId: number) {
 }
 
 export function markChatRead(token: string, conversationId: number) {
-  return apiFetch<{ ok: boolean }>(`/chat/conversations/${conversationId}/read`, {
-    token,
-    method: 'POST',
-    body: JSON.stringify({}),
+  return apiFetch<{ ok: boolean; lastReadAt?: string }>(
+    `/chat/conversations/${conversationId}/read`,
+    {
+      token,
+      method: 'POST',
+      body: JSON.stringify({}),
+    }
+  )
+}
+
+/** Statut de lecture d’un message envoyé (basé sur lastReadAt des autres). */
+export function getMessageReadReceipt(
+  msg: Pick<ChatMessage, 'mine' | 'deleted' | 'createdAt'>,
+  conversation: ChatConversation | null | undefined,
+  myUserId: number | undefined
+): { status: 'sent' | 'read'; label: string } | null {
+  if (!msg.mine || msg.deleted || !conversation || !myUserId) return null
+  const others = conversation.participants.filter(p => p.userId !== myUserId)
+  if (others.length === 0) return { status: 'sent', label: 'Envoyé' }
+  const created = new Date(msg.createdAt).getTime()
+  const times = others.map(p => (p.lastReadAt ? new Date(p.lastReadAt).getTime() : NaN))
+  if (times.some(t => !Number.isFinite(t) || t < created)) {
+    return { status: 'sent', label: 'Envoyé' }
+  }
+  const when = new Date(Math.max(...times))
+  const hhmm = when.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  return { status: 'read', label: `Lu · ${hhmm}` }
+}
+
+export function applyParticipantRead(
+  conversations: ChatConversation[],
+  conversationId: number,
+  userId: number,
+  lastReadAt: string
+): ChatConversation[] {
+  return conversations.map(c => {
+    if (c.id !== conversationId) return c
+    return {
+      ...c,
+      participants: c.participants.map(p =>
+        p.userId === userId ? { ...p, lastReadAt } : p
+      ),
+    }
   })
 }

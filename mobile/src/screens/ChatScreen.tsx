@@ -27,6 +27,8 @@ import {
   fetchChatMembers,
   fetchChatMessages,
   hideChatMessageForMe,
+  applyParticipantRead,
+  getMessageReadReceipt,
   markChatRead,
   openDirectChat,
   pinChatMessage,
@@ -38,7 +40,11 @@ import {
   type ChatMessage,
 } from '../lib/chatApi'
 import { playMessageSound } from '../lib/appSounds'
-import { CHAT_MESSAGE_EVENT, isRealtimeConnected } from '../lib/realtimeClient'
+import {
+  CHAT_MESSAGE_EVENT,
+  CHAT_READ_EVENT,
+  isRealtimeConnected,
+} from '../lib/realtimeClient'
 import { resolveUploadUrl } from '../lib/config'
 import { pickVehiculeImages } from '../lib/imageUpload'
 import { getSheetBottomInset, getStatusBarInset } from '../lib/safeArea'
@@ -240,6 +246,28 @@ export default function ChatScreen({
     )
     return () => sub.remove()
   }, [selected, loadList, pollNewMessages])
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(
+      CHAT_READ_EVENT,
+      (data: { conversationId?: number; userId?: number; lastReadAt?: string }) => {
+        if (!data?.conversationId || !data.userId || !data.lastReadAt) return
+        setConversations((prev) =>
+          applyParticipantRead(prev, data.conversationId!, data.userId!, data.lastReadAt!)
+        )
+        setSelected((prev) => {
+          if (!prev || prev.id !== data.conversationId) return prev
+          return {
+            ...prev,
+            participants: prev.participants.map((p) =>
+              p.userId === data.userId ? { ...p, lastReadAt: data.lastReadAt! } : p
+            ),
+          }
+        })
+      }
+    )
+    return () => sub.remove()
+  }, [])
 
   const openConversation = (c: ChatConversation) => {
     setSelected(c)
@@ -684,6 +712,11 @@ export default function ChatScreen({
                     ]}
                   >
                     {formatTime(item.createdAt)}
+                    {(() => {
+                      const receipt = getMessageReadReceipt(item, selected, userId)
+                      if (!receipt) return ''
+                      return ` · ${receipt.label}`
+                    })()}
                   </Text>
                 </View>
               </Pressable>

@@ -11,6 +11,12 @@ export type RealtimeEvent =
       senderId: number
     }
   | {
+      type: 'chat_read'
+      conversationId: number
+      userId: number
+      lastReadAt: string
+    }
+  | {
       type: 'notification'
       notificationId: number
       notifType: string

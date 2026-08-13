@@ -3,6 +3,7 @@ import { API_BASE } from './config'
 import { playMessageSound, playNotificationSound } from './appSounds'
 
 export const CHAT_MESSAGE_EVENT = 'elmecano:chat_message'
+export const CHAT_READ_EVENT = 'elmecano:chat_read'
 
 export type RealtimeEvent =
   | { type: 'connected'; userId: number }
@@ -12,6 +13,12 @@ export type RealtimeEvent =
       conversationId: number
       messageId: number
       senderId: number
+    }
+  | {
+      type: 'chat_read'
+      conversationId: number
+      userId: number
+      lastReadAt: string
     }
   | {
       type: 'notification'
@@ -106,6 +113,8 @@ export function connectRealtime(token: string, nextHandlers?: Handlers) {
         playMessageSound()
         handlers.onChatMessage?.(data)
         DeviceEventEmitter.emit(CHAT_MESSAGE_EVENT, data)
+      } else if (data.type === 'chat_read') {
+        DeviceEventEmitter.emit(CHAT_READ_EVENT, data)
       } else if (data.type === 'notification') {
         playNotificationSound()
         handlers.onNotification?.(data)

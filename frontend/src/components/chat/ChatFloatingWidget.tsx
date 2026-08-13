@@ -15,10 +15,12 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import {
   addGroupMembers,
+  applyParticipantRead,
   createGroupChat,
   fetchChatConversations,
   fetchChatMembers,
   fetchChatMessages,
+  getMessageReadReceipt,
   markChatRead,
   openDirectChat,
   sendChatMessage,
@@ -53,7 +55,7 @@ type ComposeMode = null | 'dm' | 'group'
 type ListFilter = 'all' | 'unread'
 
 export default function ChatFloatingWidget() {
-  const { getAccessToken } = useAuth()
+  const { getAccessToken, user } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
@@ -190,6 +192,19 @@ export default function ChatFloatingWidget() {
     window.addEventListener('elmecano:chat_message', onRt)
     return () => window.removeEventListener('elmecano:chat_message', onRt)
   }, [open, selectedId, loadConversations, loadMessages])
+
+  useEffect(() => {
+    const onRead = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ conversationId: number; userId: number; lastReadAt: string }>)
+        .detail
+      if (!detail?.conversationId || !detail.userId || !detail.lastReadAt) return
+      setConversations(prev =>
+        applyParticipantRead(prev, detail.conversationId, detail.userId, detail.lastReadAt)
+      )
+    }
+    window.addEventListener('elmecano:chat_read', onRead)
+    return () => window.removeEventListener('elmecano:chat_read', onRead)
+  }, [])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -608,6 +623,11 @@ export default function ChatFloatingWidget() {
                           )}
                         >
                           {formatTime(m.createdAt)}
+                          {(() => {
+                            const receipt = getMessageReadReceipt(m, selected, user?.id)
+                            if (!receipt) return null
+                            return <span className="ml-1 font-medium">· {receipt.label}</span>
+                          })()}
                         </p>
                       </div>
                     </div>

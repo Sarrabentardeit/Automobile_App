@@ -844,11 +844,29 @@ router.post('/conversations/:id/read', authenticate(), async (req: AuthRequest, 
     if (!(await assertParticipant(id, me))) {
       return res.status(403).json({ error: 'Accès refusé' })
     }
+    const lastReadAt = new Date()
     await db.chatParticipant.update({
       where: { conversationId_userId: { conversationId: id, userId: me } },
-      data: { lastReadAt: new Date() },
+      data: { lastReadAt },
     })
-    return res.json({ ok: true })
+    try {
+      const others = (await db.chatParticipant.findMany({
+        where: { conversationId: id, userId: { not: me } },
+        select: { userId: true },
+      })) as Array<{ userId: number }>
+      emitToUsers(
+        others.map(p => p.userId),
+        {
+          type: 'chat_read',
+          conversationId: id,
+          userId: me,
+          lastReadAt: lastReadAt.toISOString(),
+        }
+      )
+    } catch {
+      /* ignore */
+    }
+    return res.json({ ok: true, lastReadAt: lastReadAt.toISOString() })
   } catch (err) {
     console.error(err)
     return res.status(500).json({ error: 'Internal server error' })

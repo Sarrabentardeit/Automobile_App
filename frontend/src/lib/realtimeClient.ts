@@ -12,6 +12,12 @@ export type RealtimeEvent =
       senderId: number
     }
   | {
+      type: 'chat_read'
+      conversationId: number
+      userId: number
+      lastReadAt: string
+    }
+  | {
       type: 'notification'
       notificationId: number
       notifType: string
@@ -105,6 +111,8 @@ export function connectRealtime(token: string, nextHandlers?: Handlers) {
         window.dispatchEvent(
           new CustomEvent('elmecano:chat_message', { detail: data })
         )
+      } else if (data.type === 'chat_read') {
+        window.dispatchEvent(new CustomEvent('elmecano:chat_read', { detail: data }))
       } else if (data.type === 'notification') {
         playNotificationSound()
         handlers.onNotification?.(data)
