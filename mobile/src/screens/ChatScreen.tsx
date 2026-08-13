@@ -46,6 +46,7 @@ import {
   isRealtimeConnected,
 } from '../lib/realtimeClient'
 import { resolveUploadUrl } from '../lib/config'
+import { downloadChatFile } from '../lib/downloadChatFile'
 import { pickVehiculeImages } from '../lib/imageUpload'
 import { getSheetBottomInset, getStatusBarInset } from '../lib/safeArea'
 import { theme } from '../theme/appTheme'
@@ -680,7 +681,15 @@ export default function ChatScreen({
                         return (
                           <Pressable
                             key={a.id}
-                            onPress={() => void Linking.openURL(url)}
+                            onPress={() => {
+                              void downloadChatFile(
+                                a.url_path,
+                                a.original_name || 'fichier.pdf'
+                              ).catch(() => {
+                                Alert.alert('Téléchargement', 'Impossible de télécharger le fichier')
+                                void Linking.openURL(url)
+                              })
+                            }}
                             style={[styles.fileChip, item.mine && styles.fileChipMine]}
                           >
                             <Ionicons
@@ -694,6 +703,11 @@ export default function ChatScreen({
                             >
                               {a.original_name || 'Fichier'}
                             </Text>
+                            <Ionicons
+                              name="download-outline"
+                              size={14}
+                              color={item.mine ? '#fff' : theme.text}
+                            />
                           </Pressable>
                         )
                       })}

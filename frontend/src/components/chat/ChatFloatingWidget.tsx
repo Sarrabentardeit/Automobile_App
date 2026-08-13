@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   ChevronLeft,
+  Download,
+  FileText,
   Filter,
   Maximize2,
   MessageSquare,
@@ -28,6 +30,7 @@ import {
   type ChatMember,
   type ChatMessage,
 } from '@/lib/chatApi'
+import { downloadUploadFile, resolveUploadUrl } from '@/lib/api'
 import { playMessageSound } from '@/lib/appSounds'
 import { isRealtimeConnected } from '@/lib/realtimeClient'
 import { cn } from '@/lib/utils'
@@ -72,6 +75,7 @@ export default function ChatFloatingWidget() {
   const [showAdd, setShowAdd] = useState(false)
   const [addPick, setAddPick] = useState<number[]>([])
   const [loadingMsgs, setLoadingMsgs] = useState(false)
+  const [lightbox, setLightbox] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<number | null>(null)
   const lastMsgIdRef = useRef(0)
@@ -602,16 +606,69 @@ export default function ChatFloatingWidget() {
                             {m.senderNom}
                           </p>
                         ) : null}
-                        <p className="whitespace-pre-wrap break-words text-[13px] leading-snug">
-                          {m.deleted
-                            ? 'Message supprimé'
-                            : m.body?.trim() ||
-                              (m.attachments?.some(a => a.kind === 'image')
-                                ? '📷 Photo'
-                                : m.attachments?.length
-                                  ? '📎 Pièce jointe'
-                                  : '')}
-                        </p>
+                        {m.deleted ? (
+                          <p className="whitespace-pre-wrap break-words text-[13px] leading-snug">
+                            Message supprimé
+                          </p>
+                        ) : (
+                          <>
+                            {(m.attachments ?? []).length > 0 ? (
+                              <div className="space-y-1.5 mb-1">
+                                {(m.attachments ?? []).map(a => {
+                                  const url = resolveUploadUrl(a.url_path)
+                                  if (a.kind === 'image') {
+                                    return (
+                                      <button
+                                        key={a.id}
+                                        type="button"
+                                        onClick={() => setLightbox(url)}
+                                        className="block overflow-hidden rounded-lg max-w-full"
+                                      >
+                                        <img
+                                          src={url}
+                                          alt={a.original_name || 'Photo'}
+                                          className="max-h-40 max-w-full object-cover rounded-lg"
+                                        />
+                                      </button>
+                                    )
+                                  }
+                                  return (
+                                    <button
+                                      key={a.id}
+                                      type="button"
+                                      onClick={() => {
+                                        void downloadUploadFile(
+                                          a.url_path,
+                                          a.original_name || 'fichier.pdf'
+                                        ).catch(() => {
+                                          window.open(url, '_blank', 'noopener,noreferrer')
+                                        })
+                                      }}
+                                      className={cn(
+                                        'inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-semibold max-w-full',
+                                        m.mine
+                                          ? 'bg-orange-600/40 text-white hover:bg-orange-600/55'
+                                          : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                                      )}
+                                      title="Télécharger"
+                                    >
+                                      <FileText className="w-3 h-3 shrink-0" />
+                                      <span className="truncate max-w-[120px] text-left">
+                                        {a.original_name || 'Fichier'}
+                                      </span>
+                                      <Download className="w-3 h-3 shrink-0 opacity-90" />
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            ) : null}
+                            {m.body?.trim() ? (
+                              <p className="whitespace-pre-wrap break-words text-[13px] leading-snug">
+                                {m.body}
+                              </p>
+                            ) : null}
+                          </>
+                        )}
                         <p
                           className={cn(
                             'text-[9px] mt-1',
@@ -658,6 +715,20 @@ export default function ChatFloatingWidget() {
               </form>
             </div>
           )}
+        </div>
+      ) : null}
+
+      {lightbox ? (
+        <div
+          className="fixed inset-0 z-[80] bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <img
+            src={lightbox}
+            alt="Aperçu"
+            className="max-h-[90vh] max-w-[95vw] object-contain rounded-lg"
+            onClick={e => e.stopPropagation()}
+          />
         </div>
       ) : null}
     </>

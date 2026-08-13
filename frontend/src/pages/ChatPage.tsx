@@ -16,10 +16,11 @@ import {
   Trash2,
   EyeOff,
   FileText,
+  Download,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { resolveUploadUrl } from '@/lib/api'
+import { downloadUploadFile, resolveUploadUrl } from '@/lib/api'
 import { playMessageSound } from '@/lib/appSounds'
 import { isRealtimeConnected } from '@/lib/realtimeClient'
 import {
@@ -472,19 +473,29 @@ export default function ChatPage() {
             )
           }
           return (
-            <a
+            <button
               key={a.id}
-              href={url}
-              target="_blank"
-              rel="noreferrer"
+              type="button"
+              onClick={() => {
+                void downloadUploadFile(a.url_path, a.original_name || 'fichier.pdf').catch(() => {
+                  // fallback : ouvrir l’URL
+                  window.open(url, '_blank', 'noopener,noreferrer')
+                })
+              }}
               className={cn(
-                'inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-semibold',
-                mine ? 'bg-orange-600/40 text-white' : 'bg-gray-100 text-gray-800'
+                'inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-semibold max-w-full',
+                mine
+                  ? 'bg-orange-600/40 text-white hover:bg-orange-600/55'
+                  : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
               )}
+              title="Télécharger"
             >
-              <FileText className="w-3.5 h-3.5" />
-              <span className="truncate max-w-[180px]">{a.original_name || 'Fichier'}</span>
-            </a>
+              <FileText className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate max-w-[160px] text-left">
+                {a.original_name || 'Fichier'}
+              </span>
+              <Download className="w-3.5 h-3.5 shrink-0 opacity-90" />
+            </button>
           )
         })}
       </div>

@@ -27,6 +27,27 @@ export function resolveUploadUrl(path: string | null | undefined, cacheBust?: st
   return `${url}${url.includes('?') ? '&' : '?'}t=${encodeURIComponent(String(cacheBust))}`
 }
 
+/** Télécharge un fichier chat (PDF, etc.) — force le save même si le navigateur prévisualise. */
+export async function downloadUploadFile(
+  pathOrUrl: string,
+  fileName = 'fichier.pdf'
+): Promise<void> {
+  const url = resolveUploadUrl(pathOrUrl)
+  if (!url) throw new Error('Fichier introuvable')
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Erreur ${res.status}`)
+  const blob = await res.blob()
+  const obj = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = obj
+  a.download = fileName || 'fichier.pdf'
+  a.rel = 'noopener'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(obj)
+}
+
 /** Permet à l'app d'enregistrer le refresh token pour réessayer après 401 */
 export interface AuthBridge {
   refresh: () => Promise<string | null>
