@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
+import { useLazyLoader } from '@/lib/useLazyLoader'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import type { TeamMember } from '@/types'
@@ -28,9 +29,7 @@ export function useTeamMembersApi() {
     }
   }, [getAccessToken])
 
-  useEffect(() => {
-    if (isAuthenticated) fetchMembers()
-  }, [isAuthenticated, fetchMembers])
+  const ensureLoaded = useLazyLoader(isAuthenticated, fetchMembers)
 
   const addMember = useCallback(
     async (name: string, phone = ''): Promise<void> => {
@@ -71,6 +70,7 @@ export function useTeamMembersApi() {
   )
 
   return {
+    ensureLoaded,
     members,
     loading,
     fetchMembers,

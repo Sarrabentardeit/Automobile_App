@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
+import { useLazyLoader } from '@/lib/useLazyLoader'
 import type { Facture, FactureStatut } from '@/types'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
@@ -45,9 +46,7 @@ export function useFacturationApi() {
     [getAccessToken]
   )
 
-  useEffect(() => {
-    if (isAuthenticated) fetchFactures()
-  }, [isAuthenticated, fetchFactures])
+  const ensureLoaded = useLazyLoader(isAuthenticated, fetchFactures)
 
   const getNextNumero = useCallback(() => {
     const year = new Date().getFullYear().toString().slice(-2)
@@ -134,6 +133,7 @@ export function useFacturationApi() {
   )
 
   return {
+    ensureLoaded,
     factures,
     loading,
     fetchFactures,

@@ -1006,10 +1006,32 @@ router.get('/dashboard-summary', authenticate(), async (req: AuthRequest, res) =
 
     const techWhere = scoped ? whereUserAssignedToVehicule(techId) : {}
 
-    const [urgents, anciens, recentRaw] = await Promise.all([
+    const briefSelect = {
+      id: true,
+      immatriculation: true,
+      modele: true,
+      type: true,
+      etat_actuel: true,
+      service_type: true,
+      technicien_id: true,
+      responsable_id: true,
+      defaut: true,
+      client_telephone: true,
+      date_entree: true,
+      date_sortie: true,
+      notes: true,
+      derniere_mise_a_jour: true,
+    }
+
+    const [urgentsCount, urgents, anciens, recentRaw] = await Promise.all([
+      db.vehicule.count({
+        where: { etat_actuel: 'rouge', ...techWhere },
+      }),
       db.vehicule.findMany({
         where: { etat_actuel: 'rouge', ...techWhere },
         orderBy: { id: 'desc' },
+        take: 30,
+        select: briefSelect,
       }),
       db.vehicule.findMany({
         where: {
@@ -1018,6 +1040,8 @@ router.get('/dashboard-summary', authenticate(), async (req: AuthRequest, res) =
           ...techWhere,
         },
         orderBy: { date_entree: 'asc' },
+        take: 30,
+        select: briefSelect,
       }),
       db.vehiculeHistorique.findMany({
         where: scoped ? { vehicule: whereUserAssignedToVehicule(techId) } : undefined,
@@ -1043,34 +1067,13 @@ router.get('/dashboard-summary', authenticate(), async (req: AuthRequest, res) =
         total: number
         byEtat: Record<string, number>
         urgents: number
-        vehicules: Array<{
-          id: number
-          immatriculation: string
-          modele: string
-          etat_actuel: string
-        }>
       }
     > = {}
 
     if (!scoped) {
       const activeVehicles = await db.vehicule.findMany({
         where: { etat_actuel: { not: 'vert' } },
-        select: {
-          id: true,
-          immatriculation: true,
-          modele: true,
-          type: true,
-          etat_actuel: true,
-          service_type: true,
-          technicien_id: true,
-          responsable_id: true,
-          defaut: true,
-          client_telephone: true,
-          date_entree: true,
-          date_sortie: true,
-          notes: true,
-          derniere_mise_a_jour: true,
-        },
+        select: briefSelect,
       })
 
       for (const raw of activeVehicles as Array<{
@@ -1095,33 +1098,22 @@ router.get('/dashboard-summary', authenticate(), async (req: AuthRequest, res) =
         for (const id of mapped.responsable_ids ?? []) addId(id)
 
         const etat = mapped.etat_actuel
-        const vehicleBrief = {
-          id: mapped.id,
-          immatriculation: mapped.immatriculation,
-          modele: mapped.modele,
-          etat_actuel: etat,
-        }
         for (const tid of assigneeIds) {
           const key = String(tid)
           teamLoadByTechnicien[key] = (teamLoadByTechnicien[key] ?? 0) + 1
           if (!teamLoadDetailByTechnicien[key]) {
-            teamLoadDetailByTechnicien[key] = { total: 0, byEtat: {}, urgents: 0, vehicules: [] }
+            teamLoadDetailByTechnicien[key] = { total: 0, byEtat: {}, urgents: 0 }
           }
           const detail = teamLoadDetailByTechnicien[key]
           detail.total += 1
           detail.byEtat[etat] = (detail.byEtat[etat] ?? 0) + 1
           if (etat === 'rouge') detail.urgents += 1
-          detail.vehicules.push(vehicleBrief)
         }
-      }
-
-      for (const detail of Object.values(teamLoadDetailByTechnicien)) {
-        detail.vehicules.sort((a, b) => a.immatriculation.localeCompare(b.immatriculation, 'fr'))
       }
     }
 
     return res.json({
-      problemsCount: (urgents as any[]).length,
+      problemsCount: Number(urgentsCount) || 0,
       urgents: (urgents as any[]).map(toVehicule),
       anciens: (anciens as any[]).map(toVehicule),
       recentActivity: (recentRaw as any[]).map(h => ({

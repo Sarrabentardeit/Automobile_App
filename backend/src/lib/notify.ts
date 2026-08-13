@@ -1,4 +1,5 @@
 import { prisma } from './prisma'
+import { emitToUser } from './realtime'
 
 const db = prisma as any
 
@@ -86,6 +87,21 @@ export async function createAndPush(input: NotifyInput): Promise<CreatedNotif> {
     message: created.message,
     date: created.createdAt.toISOString(),
     read: created.read,
+  }
+
+  // Temps réel in-app (hors chat : le chat émet déjà chat_message)
+  const isChat = dto.type === 'chat_message' || dto.conversationId != null
+  if (!isChat) {
+    try {
+      emitToUser(dto.userId, {
+        type: 'notification',
+        notificationId: dto.id,
+        notifType: dto.type,
+        conversationId: dto.conversationId ?? null,
+      })
+    } catch {
+      /* ignore */
+    }
   }
 
   try {

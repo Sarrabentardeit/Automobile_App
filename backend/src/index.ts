@@ -3,8 +3,10 @@ import cors from 'cors'
 import helmet from 'helmet'
 import morgan from 'morgan'
 import path from 'path'
+import http from 'http'
 import jwt from 'jsonwebtoken'
 import { env } from './config/env'
+import { attachRealtime } from './lib/realtime'
 import authRouter from './routes/auth'
 import usersRouter from './routes/users'
 import vehiculesRouter from './routes/vehicules'
@@ -123,7 +125,9 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 
 void ensureDocumentTemplates()
   .then(() => {
-    app.listen(env.PORT, () => {
+    const server = http.createServer(app)
+    attachRealtime(server)
+    server.listen(env.PORT, () => {
       console.log(`Backend listening on http://localhost:${env.PORT}`)
     })
   })

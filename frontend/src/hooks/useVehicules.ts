@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import type {
   Vehicule,
   VehiculeFormData,
@@ -118,16 +118,33 @@ export function useVehicules() {
     [getAccessToken]
   )
 
+  const statsFetchedAt = useRef(0)
+  const summaryFetchedAt = useRef(0)
+  const STATS_TTL_MS = 20_000
+
   const fetchStats = useCallback(
-    async (month?: number, year?: number) => {
+    async (month?: number, year?: number, opts?: { force?: boolean }) => {
       const token = getAccessToken()
       if (!token) return
+      const isDefault = month == null && year == null
+      if (
+        isDefault &&
+        !opts?.force &&
+        statsFetchedAt.current > 0 &&
+        Date.now() - statsFetchedAt.current < STATS_TTL_MS
+      ) {
+        return
+      }
       try {
         const params: Record<string, number> = {}
         if (month) params.month = month
         if (year) params.year = year
-        const s = await apiFetch<VehiculeStats>('/vehicules/stats', { token, params: Object.keys(params).length ? params : undefined })
+        const s = await apiFetch<VehiculeStats>('/vehicules/stats', {
+          token,
+          params: Object.keys(params).length ? params : undefined,
+        })
         setStats(s)
+        if (isDefault) statsFetchedAt.current = Date.now()
       } catch {
         setStats(null)
       }
@@ -135,18 +152,32 @@ export function useVehicules() {
     [getAccessToken]
   )
 
-  const fetchDashboardSummary = useCallback(async () => {
-    const token = getAccessToken()
-    if (!token) return
-    const ownOnly = user?.permissions?.vehiculeVisibility === 'own'
-    try {
-      const params = ownOnly && user ? { technicien_id: user.id } : undefined
-      const data = await apiFetch<DashboardSummary>('/vehicules/dashboard-summary', { token, params })
-      setDashboardSummary(data)
-    } catch {
-      setDashboardSummary(null)
-    }
-  }, [getAccessToken, user])
+  const fetchDashboardSummary = useCallback(
+    async (opts?: { force?: boolean }) => {
+      const token = getAccessToken()
+      if (!token) return
+      if (
+        !opts?.force &&
+        summaryFetchedAt.current > 0 &&
+        Date.now() - summaryFetchedAt.current < STATS_TTL_MS
+      ) {
+        return
+      }
+      const ownOnly = user?.permissions?.vehiculeVisibility === 'own'
+      try {
+        const params = ownOnly && user ? { technicien_id: user.id } : undefined
+        const data = await apiFetch<DashboardSummary>('/vehicules/dashboard-summary', {
+          token,
+          params,
+        })
+        setDashboardSummary(data)
+        summaryFetchedAt.current = Date.now()
+      } catch {
+        setDashboardSummary(null)
+      }
+    },
+    [getAccessToken, user]
+  )
 
   const fetchFilteredCounts = useCallback(
     async (filters?: VehiculesFilters, includeEtat = false) => {
@@ -181,15 +212,13 @@ export function useVehicules() {
         { responsable_id: user.id }
       ]
     } : {}
-    fetchVehicules({
+    // Liste légère uniquement — summary/stats chargés à la demande (Dashboard / Statistiques)
+    void fetchVehicules({
       page: 1,
       limit: 20,
       ...filterParam,
     })
-
-    fetchStats()
-    fetchDashboardSummary()
-  }, [fetchVehicules, fetchStats, fetchDashboardSummary, user])
+  }, [fetchVehicules, user])
 
   useEffect(() => {
     if (user?.permissions?.vehiculeVisibility !== 'own') {

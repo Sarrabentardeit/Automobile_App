@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  DeviceEventEmitter,
   Dimensions,
   FlatList,
   Image,
@@ -37,6 +38,7 @@ import {
   type ChatMessage,
 } from '../lib/chatApi'
 import { playMessageSound } from '../lib/appSounds'
+import { CHAT_MESSAGE_EVENT, isRealtimeConnected } from '../lib/realtimeClient'
 import { resolveUploadUrl } from '../lib/config'
 import { pickVehiculeImages } from '../lib/imageUpload'
 import { getSheetBottomInset, getStatusBarInset } from '../lib/safeArea'
@@ -153,7 +155,7 @@ export default function ChatScreen({
       setPinnedMessage(pinned)
       if (newer.length === 0) return
       const fromOthers = newer.filter((m) => !m.mine && !m.deleted)
-      if (fromOthers.length > 0) playMessageSound()
+      if (fromOthers.length > 0 && !isRealtimeConnected()) playMessageSound()
       setMessages((prev) => {
         const ids = new Set(prev.map((m) => m.id))
         const add = newer.filter((m) => !ids.has(m.id))
@@ -225,6 +227,19 @@ export default function ChatScreen({
     // Recharger le fil uniquement au changement de conversation
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id])
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(
+      CHAT_MESSAGE_EVENT,
+      (data: { conversationId?: number }) => {
+        void loadList().catch(() => undefined)
+        if (selected && data?.conversationId === selected.id) {
+          void pollNewMessages(selected).catch(() => undefined)
+        }
+      }
+    )
+    return () => sub.remove()
+  }, [selected, loadList, pollNewMessages])
 
   const openConversation = (c: ChatConversation) => {
     setSelected(c)

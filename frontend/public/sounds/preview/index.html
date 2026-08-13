@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Choix des sons — EL MECANO</title>
+  <style>
+    body { font-family: system-ui, Segoe UI, sans-serif; margin: 0; background: #f4f5f7; color: #111827; }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+    h1 { font-size: 1.35rem; margin: 0 0 6px; }
+    p { color: #6b7280; margin: 0 0 20px; font-size: 0.95rem; }
+    h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: .06em; color: #6b7280; margin: 28px 0 10px; }
+    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; overflow: hidden; }
+    .row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-top: 1px solid #f3f4f6; }
+    .row:first-child { border-top: 0; }
+    .code { font-weight: 800; min-width: 2.6rem; color: #ea580c; }
+    .meta { flex: 1; min-width: 0; }
+    .meta strong { display: block; font-size: 0.95rem; }
+    .meta span { font-size: 0.8rem; color: #6b7280; }
+    button { border: 0; background: #111827; color: #fff; border-radius: 10px; padding: 8px 12px; font-weight: 700; cursor: pointer; }
+    button:hover { background: #ea580c; }
+    .pick { margin-top: 20px; padding: 14px; background: #fff7ed; border: 1px solid #fdba74; border-radius: 12px; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Écoute des sons (liste élargie)</h1>
+    <p>12 notifications + 12 messages. Dites-moi ensuite votre choix (ex. <strong>N7 + M10</strong>).</p>
+    <h2>Notifications</h2>
+    <div class="card" id="notif"></div>
+    <h2>Messages</h2>
+    <div class="card" id="msg"></div>
+    <div class="pick">Répondez dans Cursor avec la combinaison voulue.</div>
+  </div>
+  <script>
+    const notifs = [["N1","Ding clair","Note brillante type cloche"],["N2","Double bip","Deux bips rapides"],["N3","Chime","3 notes montantes"],["N4","Soft ping","Ping doux"],["N5","Pop alerte","Pop sec type badge"],["N6","Glass","Accord cristallin"],["N7","Marimba","3 notes type xylo"],["N8","Drop","Descente rapide"],["N9","Doorbell","2 notes style sonnette"],["N10","Soft chord","Accord doux prolongé"],["N11","Triple tick","3 ticks secs"],["N12","Bell long","Cloche plus longue"]];
+    const msgs = [["M1","Bubble pop","Pop de bulle"],["M2","Soft whoosh","Whoosh léger"],["M3","Two-tone","2 notes descendantes"],["M4","Click soft","Clic très court"],["M5","Chirp","Petit gazouillis"],["M6","Wood knock","Toc bois court"],["M7","Messenger-ish","Style chat classique"],["M8","Rise","Montée rapide"],["M9","Water drop","Goutte"],["M10","SMS short","Très court type SMS"],["M11","Low thump","Basse douce"],["M12","Playful","3 notes ludiques"]];
+    function render(el, list) {
+      el.innerHTML = list.map(([id, title, desc]) => `
+        <div class="row">
+          <div class="code">${id}</div>
+          <div class="meta"><strong>${title}</strong><span>${desc}</span></div>
+          <button type="button" data-src="./${id}.wav">Lecture</button>
+        </div>`).join('');
+      el.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const a = new Audio(btn.dataset.src + '?t=' + Date.now());
+          a.play().catch(() => alert('Impossible de lire le son'));
+        });
+      });
+    }
+    render(document.getElementById('notif'), notifs);
+    render(document.getElementById('msg'), msgs);
+  </script>
+</body>
+</html>

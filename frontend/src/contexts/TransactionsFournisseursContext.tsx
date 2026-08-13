@@ -2,10 +2,12 @@ import { createContext, useContext, useState, useCallback, useEffect, type React
 import type { TransactionFournisseur } from '@/types'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
+import { useLazyLoader } from '@/lib/useLazyLoader'
 
 interface TransactionsFournisseursContextValue {
   transactions: TransactionFournisseur[]
   loading: boolean
+  ensureLoaded: () => void
   addTransaction: (t: Omit<TransactionFournisseur, 'id'>) => Promise<TransactionFournisseur>
   updateTransaction: (id: number, t: Partial<TransactionFournisseur>) => Promise<TransactionFournisseur>
   removeTransaction: (id: number) => Promise<boolean>
@@ -16,7 +18,7 @@ const TransactionsFournisseursContext = createContext<TransactionsFournisseursCo
 export function TransactionsFournisseursProvider({ children }: { children: ReactNode }) {
   const { getAccessToken, isAuthenticated } = useAuth()
   const [transactions, setTransactions] = useState<TransactionFournisseur[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
 
   const fetchTransactions = useCallback(async () => {
     const token = getAccessToken()
@@ -37,12 +39,13 @@ export function TransactionsFournisseursProvider({ children }: { children: React
   }, [getAccessToken])
 
   useEffect(() => {
-    if (isAuthenticated) fetchTransactions()
-    else {
+    if (!isAuthenticated) {
       setTransactions([])
       setLoading(false)
     }
-  }, [isAuthenticated, fetchTransactions])
+  }, [isAuthenticated])
+
+  const ensureLoaded = useLazyLoader(isAuthenticated, fetchTransactions)
 
   const addTransaction = useCallback(
     async (t: Omit<TransactionFournisseur, 'id'>): Promise<TransactionFournisseur> => {
@@ -94,6 +97,7 @@ export function TransactionsFournisseursProvider({ children }: { children: React
       value={{
         transactions,
         loading,
+        ensureLoaded,
         addTransaction,
         updateTransaction,
         removeTransaction,
@@ -106,5 +110,8 @@ export function TransactionsFournisseursProvider({ children }: { children: React
 export function useTransactionsFournisseurs() {
   const ctx = useContext(TransactionsFournisseursContext)
   if (!ctx) throw new Error('useTransactionsFournisseurs must be used within TransactionsFournisseursProvider')
+  useEffect(() => {
+    ctx.ensureLoaded()
+  }, [ctx.ensureLoaded])
   return ctx
 }

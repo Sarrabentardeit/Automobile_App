@@ -7,7 +7,10 @@ import { ETAT_CONFIG, type EtatVehicule, type Vehicule } from '@/types'
 import Card from '@/components/ui/Card'
 import Modal from '@/components/ui/Modal'
 import DashboardMonthlyStats from '@/components/dashboard/DashboardMonthlyStats'
-import DashboardInsights, { DashboardAlertsPanel } from '@/components/dashboard/DashboardInsights'
+import DashboardInsights, {
+  DashboardAlertsPanel,
+  DashboardInsightsProvider,
+} from '@/components/dashboard/DashboardInsights'
 import DashboardTodayStrip from '@/components/dashboard/DashboardTodayStrip'
 import { AlertTriangle, Clock, Users, ArrowRight, LayoutDashboard } from 'lucide-react'
 import { daysSince, getActiveEquipeUsers, cn, stripVehiculeAssigneesMeta } from '@/lib/utils'
@@ -99,16 +102,16 @@ export default function DashboardPage() {
   }, [equipeUsers, dashboardSummary, isGlobalView, myVehicules])
 
   useEffect(() => {
-    void fetchDashboardSummary()
-    void fetchStats()
+    void fetchDashboardSummary({ force: true })
+    void fetchStats(undefined, undefined, { force: true })
     const id = window.setInterval(() => {
-      void fetchDashboardSummary()
-      void fetchStats()
-    }, 45_000)
+      void fetchDashboardSummary({ force: true })
+      void fetchStats(undefined, undefined, { force: true })
+    }, 90_000)
     const onVis = () => {
       if (document.visibilityState === 'visible') {
-        void fetchDashboardSummary()
-        void fetchStats()
+        void fetchDashboardSummary({ force: true })
+        void fetchStats(undefined, undefined, { force: true })
       }
     }
     document.addEventListener('visibilitychange', onVis)
@@ -186,6 +189,7 @@ export default function DashboardPage() {
   }
 
   return (
+    <DashboardInsightsProvider>
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
@@ -561,5 +565,6 @@ export default function DashboardPage() {
         )}
       </Modal>
     </div>
+    </DashboardInsightsProvider>
   )
 }

@@ -128,7 +128,7 @@ export default function DashboardTodayStrip() {
 
   useEffect(() => {
     void load()
-    const id = window.setInterval(() => void load(), 60_000)
+    const id = window.setInterval(() => void load(), 90_000)
     return () => window.clearInterval(id)
   }, [load])
 

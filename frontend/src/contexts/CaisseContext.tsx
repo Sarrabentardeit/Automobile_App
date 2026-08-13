@@ -2,12 +2,14 @@ import { createContext, useContext, useState, useCallback, useEffect, useRef, ty
 import type { TeamMoneyDayEntry } from '@/types'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
+import { useLazyLoader } from '@/lib/useLazyLoader'
 
 interface CaisseContextValue {
   days: TeamMoneyDayEntry[]
   loading: boolean
   setDays: React.Dispatch<React.SetStateAction<TeamMoneyDayEntry[]>>
   refetchDays: () => Promise<void>
+  ensureLoaded: () => void
 }
 
 const Context = createContext<CaisseContextValue | null>(null)
@@ -15,7 +17,7 @@ const Context = createContext<CaisseContextValue | null>(null)
 export function CaisseProvider({ children }: { children: ReactNode }) {
   const { getAccessToken, isAuthenticated } = useAuth()
   const [days, setDaysState] = useState<TeamMoneyDayEntry[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [serverUpdatedAt, setServerUpdatedAt] = useState<string | null>(null)
   const persistQueueRef = useRef<Promise<void>>(Promise.resolve())
 
@@ -40,8 +42,13 @@ export function CaisseProvider({ children }: { children: ReactNode }) {
   }, [getAccessToken])
 
   useEffect(() => {
-    if (isAuthenticated) fetchDays()
-  }, [isAuthenticated, fetchDays])
+    if (!isAuthenticated) {
+      setDaysState([])
+      setLoading(false)
+    }
+  }, [isAuthenticated])
+
+  const ensureLoaded = useLazyLoader(isAuthenticated, fetchDays)
 
   const persistDays = useCallback(
     async (next: TeamMoneyDayEntry[]) => {
@@ -75,7 +82,7 @@ export function CaisseProvider({ children }: { children: ReactNode }) {
   )
 
   return (
-    <Context.Provider value={{ days, loading, setDays, refetchDays: fetchDays }}>
+    <Context.Provider value={{ days, loading, setDays, refetchDays: fetchDays, ensureLoaded }}>
       {children}
     </Context.Provider>
   )
@@ -84,5 +91,8 @@ export function CaisseProvider({ children }: { children: ReactNode }) {
 export function useCaisse() {
   const ctx = useContext(Context)
   if (!ctx) throw new Error('useCaisse must be used within CaisseProvider')
+  useEffect(() => {
+    ctx.ensureLoaded()
+  }, [ctx.ensureLoaded])
   return ctx
 }

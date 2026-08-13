@@ -463,7 +463,7 @@ export default function AdminEspacePage() {
     if (!permissions?.canManageUsers) return
     const id = window.setInterval(() => {
       void loadTechTemps({ silent: true })
-    }, 60_000)
+    }, 120_000)
     return () => window.clearInterval(id)
   }, [loadTechTemps, permissions?.canManageUsers])
 

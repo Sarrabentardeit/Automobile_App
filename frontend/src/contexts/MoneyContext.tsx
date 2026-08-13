@@ -2,11 +2,13 @@ import { createContext, useContext, useState, useCallback, useEffect, type React
 import type { MoneyIn, MoneyOut } from '@/types'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
+import { useLazyLoader } from '@/lib/useLazyLoader'
 
 interface MoneyContextValue {
   ins: MoneyIn[]
   outs: MoneyOut[]
   loading: boolean
+  ensureLoaded: () => void
   refetchMoney: () => Promise<void>
   addIn: (m: Omit<MoneyIn, 'id'>) => Promise<MoneyIn>
   updateIn: (id: number, m: Partial<MoneyIn>) => Promise<MoneyIn>
@@ -22,7 +24,7 @@ export function MoneyProvider({ children }: { children: ReactNode }) {
   const { getAccessToken, isAuthenticated } = useAuth()
   const [ins, setIns] = useState<MoneyIn[]>([])
   const [outs, setOuts] = useState<MoneyOut[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
 
   const fetchMoney = useCallback(async () => {
     const token = getAccessToken()
@@ -49,13 +51,14 @@ export function MoneyProvider({ children }: { children: ReactNode }) {
   }, [getAccessToken])
 
   useEffect(() => {
-    if (isAuthenticated) fetchMoney()
-    else {
+    if (!isAuthenticated) {
       setIns([])
       setOuts([])
       setLoading(false)
     }
-  }, [isAuthenticated, fetchMoney])
+  }, [isAuthenticated])
+
+  const ensureLoaded = useLazyLoader(isAuthenticated, fetchMoney)
 
   const addIn = useCallback(async (m: Omit<MoneyIn, 'id'>): Promise<MoneyIn> => {
     const token = getAccessToken()
@@ -131,7 +134,19 @@ export function MoneyProvider({ children }: { children: ReactNode }) {
 
   return (
     <Context.Provider
-      value={{ ins, outs, loading, refetchMoney: fetchMoney, addIn, updateIn, removeIn, addOut, updateOut, removeOut }}
+      value={{
+        ins,
+        outs,
+        loading,
+        ensureLoaded,
+        refetchMoney: fetchMoney,
+        addIn,
+        updateIn,
+        removeIn,
+        addOut,
+        updateOut,
+        removeOut,
+      }}
     >
       {children}
     </Context.Provider>
@@ -141,5 +156,8 @@ export function MoneyProvider({ children }: { children: ReactNode }) {
 export function useMoney() {
   const ctx = useContext(Context)
   if (!ctx) throw new Error('useMoney must be used within MoneyProvider')
+  useEffect(() => {
+    ctx.ensureLoaded()
+  }, [ctx.ensureLoaded])
   return ctx
 }

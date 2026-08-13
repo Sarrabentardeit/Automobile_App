@@ -1,8 +1,9 @@
-import { createContext, useContext, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, type ReactNode } from 'react'
 import { useDemandesDevisApi } from '@/hooks/useDemandesDevisApi'
 import type { DemandeDevis } from '@/types'
 
 interface DemandesDevisContextValue {
+  ensureLoaded: () => void
   demandes: DemandeDevis[]
   loading: boolean
   fetchDemandes: () => Promise<void>
@@ -14,9 +15,19 @@ interface DemandesDevisContextValue {
 const Context = createContext<DemandesDevisContextValue | null>(null)
 
 export function DemandesDevisProvider({ children }: { children: ReactNode }) {
-  const { demandes, loading, fetchDemandes, addDemande, updateDemande, removeDemande } = useDemandesDevisApi()
+  const api = useDemandesDevisApi()
   return (
-    <Context.Provider value={{ demandes, loading, fetchDemandes, addDemande, updateDemande, removeDemande }}>
+    <Context.Provider
+      value={{
+        ensureLoaded: api.ensureLoaded,
+        demandes: api.demandes,
+        loading: api.loading,
+        fetchDemandes: api.fetchDemandes,
+        addDemande: api.addDemande,
+        updateDemande: api.updateDemande,
+        removeDemande: api.removeDemande,
+      }}
+    >
       {children}
     </Context.Provider>
   )
@@ -25,5 +36,8 @@ export function DemandesDevisProvider({ children }: { children: ReactNode }) {
 export function useDemandesDevis() {
   const ctx = useContext(Context)
   if (!ctx) throw new Error('useDemandesDevis must be used within DemandesDevisProvider')
+  useEffect(() => {
+    ctx.ensureLoaded()
+  }, [ctx.ensureLoaded])
   return ctx
 }

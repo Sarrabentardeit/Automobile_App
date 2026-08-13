@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, type ReactNode } from 'react'
 import { useAchatsApi } from '@/hooks/useAchatsApi'
 
 interface AchatsContextValue extends ReturnType<typeof useAchatsApi> {}
@@ -13,5 +13,8 @@ export function AchatsProvider({ children }: { children: ReactNode }) {
 export function useAchats() {
   const ctx = useContext(Context)
   if (!ctx) throw new Error('useAchats must be used within AchatsProvider')
+  useEffect(() => {
+    ctx.ensureLoaded()
+  }, [ctx.ensureLoaded])
   return ctx
 }

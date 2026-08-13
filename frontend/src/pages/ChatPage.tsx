@@ -21,6 +21,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { resolveUploadUrl } from '@/lib/api'
 import { playMessageSound } from '@/lib/appSounds'
+import { isRealtimeConnected } from '@/lib/realtimeClient'
 import {
   addGroupMembers,
   createGroupChat,
@@ -167,7 +168,7 @@ export default function ChatPage() {
           token,
           conversationId
         )
-        if (opts?.silent && threadReadyRef.current) {
+        if (opts?.silent && threadReadyRef.current && !isRealtimeConnected()) {
           const incoming = list.filter(m => !m.mine && m.id > lastMsgIdRef.current)
           if (incoming.length > 0) playMessageSound()
         }
@@ -229,6 +230,18 @@ export default function ChatPage() {
     return () => {
       if (pollRef.current) window.clearInterval(pollRef.current)
     }
+  }, [loadConversations, loadMessages, selectedId])
+
+  useEffect(() => {
+    const onRt = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ conversationId?: number }>).detail
+      void loadConversations()
+      if (selectedId != null && detail?.conversationId === selectedId) {
+        void loadMessages(selectedId, { silent: true })
+      }
+    }
+    window.addEventListener('elmecano:chat_message', onRt)
+    return () => window.removeEventListener('elmecano:chat_message', onRt)
   }, [loadConversations, loadMessages, selectedId])
 
   useEffect(() => {

@@ -5,6 +5,7 @@ import Sidebar from './Sidebar'
 import Header from './Header'
 import ChatFloatingWidget from '@/components/chat/ChatFloatingWidget'
 import IncomingAlertsWatcher from '@/components/IncomingAlertsWatcher'
+import RealtimeBridge from '@/components/RealtimeBridge'
 
 export default function AppLayout() {
   const { isAuthenticated } = useAuth()
@@ -14,6 +15,7 @@ export default function AppLayout() {
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
+      <RealtimeBridge />
       <IncomingAlertsWatcher />
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">

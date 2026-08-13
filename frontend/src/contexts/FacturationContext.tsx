@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, type ReactNode } from 'react'
 import { useFacturationApi } from '@/hooks/useFacturationApi'
 
 interface FacturationContextValue extends ReturnType<typeof useFacturationApi> {}
@@ -13,6 +13,9 @@ export function FacturationProvider({ children }: { children: ReactNode }) {
 export function useFacturation() {
   const ctx = useContext(Context)
   if (!ctx) throw new Error('useFacturation must be used within FacturationProvider')
+  useEffect(() => {
+    ctx.ensureLoaded()
+  }, [ctx.ensureLoaded])
   return ctx
 }
 

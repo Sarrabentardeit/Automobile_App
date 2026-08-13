@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
+import { useLazyLoader } from '@/lib/useLazyLoader'
 import type { Fournisseur, FournisseurTopItem, FournisseurFiche } from '@/types'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
@@ -34,9 +35,7 @@ export function useFournisseursApi() {
     [getAccessToken]
   )
 
-  useEffect(() => {
-    if (isAuthenticated) fetchFournisseurs()
-  }, [isAuthenticated, fetchFournisseurs])
+  const ensureLoaded = useLazyLoader(isAuthenticated, fetchFournisseurs)
 
   const addFournisseur = useCallback(
     async (f: Omit<Fournisseur, 'id'>): Promise<Fournisseur> => {
@@ -124,6 +123,7 @@ export function useFournisseursApi() {
   )
 
   return {
+    ensureLoaded,
     fournisseurs,
     loading,
     fetchFournisseurs,

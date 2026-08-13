@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
+import { useLazyLoader } from '@/lib/useLazyLoader'
 import type { CalendarAssignment } from '@/types'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
@@ -27,13 +28,13 @@ export function useCalendarApi() {
   }, [getAccessToken])
 
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchAssignments()
-    } else {
+    if (!isAuthenticated) {
       setAssignments([])
       setLoading(false)
     }
-  }, [isAuthenticated, fetchAssignments])
+  }, [isAuthenticated])
+
+  const ensureLoaded = useLazyLoader(isAuthenticated, fetchAssignments)
 
   const addAssignment = useCallback(
     async (a: Omit<CalendarAssignment, 'id'>): Promise<CalendarAssignment> => {
@@ -99,6 +100,7 @@ export function useCalendarApi() {
   )
 
   return {
+    ensureLoaded,
     assignments,
     loading,
     fetchAssignments,

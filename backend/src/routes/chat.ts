@@ -3,6 +3,7 @@ import fs from 'fs/promises'
 import path from 'path'
 import { prisma } from '../lib/prisma'
 import { notifyMany } from '../lib/notify'
+import { emitToUsers } from '../lib/realtime'
 import { authenticate, type AuthRequest } from '../middleware/auth'
 
 const router = Router()
@@ -677,18 +678,22 @@ router.post('/conversations/:id/messages', authenticate(), async (req: AuthReque
         where: { conversationId: id, userId: { not: me } },
         select: { userId: true },
       })) as Array<{ userId: number }>
+      const otherIds = others.map((p) => p.userId)
+      emitToUsers(otherIds, {
+        type: 'chat_message',
+        conversationId: id,
+        messageId: msg.id,
+        senderId: me,
+      })
       const preview = previewBody({ body, attachments: savedAtts })
       const short = preview.length > 120 ? `${preview.slice(0, 117)}…` : preview
       const senderName = userLabel(msg.sender)
-      void notifyMany(
-        others.map((p) => p.userId),
-        {
-          type: 'chat_message',
-          title: 'Nouveau message',
-          message: `${senderName}: ${short}`,
-          conversationId: id,
-        }
-      )
+      void notifyMany(otherIds, {
+        type: 'chat_message',
+        title: 'Nouveau message',
+        message: `${senderName}: ${short}`,
+        conversationId: id,
+      })
     } catch (e) {
       console.warn('[chat] notify participants failed', e)
     }

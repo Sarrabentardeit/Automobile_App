@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
+import { useLazyLoader } from '@/lib/useLazyLoader'
 import type { DemandeDevis } from '@/types'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
@@ -26,9 +27,7 @@ export function useDemandesDevisApi() {
     }
   }, [getAccessToken])
 
-  useEffect(() => {
-    if (isAuthenticated) fetchDemandes()
-  }, [isAuthenticated, fetchDemandes])
+  const ensureLoaded = useLazyLoader(isAuthenticated, fetchDemandes)
 
   const addDemande = useCallback(
     async (d: Omit<DemandeDevis, 'id'>): Promise<DemandeDevis> => {
@@ -96,6 +95,7 @@ export function useDemandesDevisApi() {
   )
 
   return {
+    ensureLoaded,
     demandes,
     loading,
     fetchDemandes,

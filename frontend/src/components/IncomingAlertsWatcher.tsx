@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchChatConversations } from '@/lib/chatApi'
 import { playMessageSound, unlockAppSounds } from '@/lib/appSounds'
+import { isRealtimeConnected } from '@/lib/realtimeClient'
 
 /** Son message global quand le total des non-lus chat augmente. */
 export default function IncomingAlertsWatcher() {
@@ -34,7 +35,12 @@ export default function IncomingAlertsWatcher() {
       try {
         const convos = await fetchChatConversations(token)
         const chatUnread = convos.reduce((s, c) => s + (c.unreadCount || 0), 0)
-        if (readyRef.current && chatUnread > chatUnreadRef.current) {
+        // Son via WebSocket en priorité ; polling = secours si WS coupé
+        if (
+          readyRef.current &&
+          chatUnread > chatUnreadRef.current &&
+          !isRealtimeConnected()
+        ) {
           playMessageSound()
         }
         chatUnreadRef.current = chatUnread

@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
+import { useLazyLoader } from '@/lib/useLazyLoader'
 import type { Client } from '@/types'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
@@ -67,12 +68,12 @@ export function useClients() {
     }
   }, [getAccessToken])
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchClients({ page: 1, limit: 50 })
-      fetchStats()
-    }
-  }, [isAuthenticated, fetchClients, fetchStats])
+  const bootstrap = useCallback(() => {
+    void fetchClients({ page: 1, limit: 50 })
+    void fetchStats()
+  }, [fetchClients, fetchStats])
+
+  const ensureLoaded = useLazyLoader(isAuthenticated, bootstrap)
 
   const addClient = useCallback(
     async (c: Omit<Client, 'id'>): Promise<Client> => {
@@ -139,6 +140,7 @@ export function useClients() {
   )
 
   return {
+    ensureLoaded,
     clients,
     loading,
     total,

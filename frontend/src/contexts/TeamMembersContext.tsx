@@ -1,4 +1,4 @@
-import { createContext, useContext, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useCallback, useEffect, type ReactNode } from 'react'
 import type { TeamMember } from '@/types'
 import { useTeamMembersApi } from '@/hooks/useTeamMembersApi'
 
@@ -8,6 +8,7 @@ interface TeamMembersContextValue {
   addMember: (name: string, phone?: string) => Promise<void>
   updateMember: (index: number, payload: { name: string; phone: string }) => Promise<void>
   removeMember: (index: number) => Promise<void>
+  ensureLoaded: () => void
 }
 
 const TeamMembersContext = createContext<TeamMembersContextValue | null>(null)
@@ -38,7 +39,16 @@ export function TeamMembersProvider({ children }: { children: ReactNode }) {
   }, [api])
 
   return (
-    <TeamMembersContext.Provider value={{ members, loading: api.loading, addMember, updateMember, removeMember }}>
+    <TeamMembersContext.Provider
+      value={{
+        members,
+        loading: api.loading,
+        addMember,
+        updateMember,
+        removeMember,
+        ensureLoaded: api.ensureLoaded,
+      }}
+    >
       {children}
     </TeamMembersContext.Provider>
   )
@@ -47,5 +57,8 @@ export function TeamMembersProvider({ children }: { children: ReactNode }) {
 export function useTeamMembers() {
   const ctx = useContext(TeamMembersContext)
   if (!ctx) throw new Error('useTeamMembers must be used within TeamMembersProvider')
+  useEffect(() => {
+    ctx.ensureLoaded()
+  }, [ctx.ensureLoaded])
   return ctx
 }

@@ -1,7 +1,8 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import type { ProduitStock, MouvementStock } from '@/types'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
+import { useLazyLoader } from '@/lib/useLazyLoader'
 
 export function useStockGeneral() {
   const { getAccessToken, isAuthenticated } = useAuth()
@@ -38,13 +39,12 @@ export function useStockGeneral() {
     }
   }, [getAccessToken])
 
-  useEffect(() => {
-    if (isAuthenticated) fetchProduits()
-  }, [isAuthenticated, fetchProduits])
+  const bootstrap = useCallback(() => {
+    void fetchProduits()
+    void fetchMouvements()
+  }, [fetchProduits, fetchMouvements])
 
-  useEffect(() => {
-    if (isAuthenticated) fetchMouvements()
-  }, [isAuthenticated, fetchMouvements])
+  const ensureLoaded = useLazyLoader(isAuthenticated, bootstrap)
 
   const addProduit = useCallback(
     async (p: Omit<ProduitStock, 'id'>): Promise<ProduitStock> => {
@@ -176,6 +176,7 @@ export function useStockGeneral() {
   }, [fetchProduits, fetchMouvements])
 
   return {
+    ensureLoaded,
     produits,
     mouvementsStock,
     loading,

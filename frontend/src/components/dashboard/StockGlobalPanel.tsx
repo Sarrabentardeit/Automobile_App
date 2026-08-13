@@ -32,6 +32,7 @@ export default function StockGlobalPanel({ title = 'Stock global atelier' }: Pro
   const { stats, fetchStats, dashboardSummary, fetchDashboardSummary } = useVehiculesContext()
 
   useEffect(() => {
+    // TTL côté hook : évite un 2e aller-retour si Dashboard vient de charger
     void fetchStats()
     void fetchDashboardSummary()
   }, [fetchStats, fetchDashboardSummary])

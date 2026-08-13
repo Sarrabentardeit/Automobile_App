@@ -100,7 +100,7 @@ export default function DashboardMonthlyStats() {
   }, [load])
 
   useEffect(() => {
-    const id = window.setInterval(() => void load(), 45_000)
+    const id = window.setInterval(() => void load(), 90_000)
     const onVis = () => {
       if (document.visibilityState === 'visible') void load()
     }

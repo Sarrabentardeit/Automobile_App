@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
+import { useLazyLoader } from '@/lib/useLazyLoader'
 import type { Reclamation } from '@/types'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
@@ -26,9 +27,7 @@ export function useReclamationsApi() {
     }
   }, [getAccessToken])
 
-  useEffect(() => {
-    if (isAuthenticated) fetchReclamations()
-  }, [isAuthenticated, fetchReclamations])
+  const ensureLoaded = useLazyLoader(isAuthenticated, fetchReclamations)
 
   const addReclamation = useCallback(
     async (r: Omit<Reclamation, 'id'>): Promise<Reclamation> => {
@@ -98,6 +97,7 @@ export function useReclamationsApi() {
   )
 
   return {
+    ensureLoaded,
     reclamations,
     loading,
     fetchReclamations,

@@ -1,4 +1,4 @@
-import { createContext, useContext, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useCallback, useEffect, type ReactNode } from 'react'
 import type { CalendarAssignment } from '@/types'
 import { useCalendarApi } from '@/hooks/useCalendarApi'
 
@@ -8,6 +8,7 @@ interface CalendarContextValue {
   addAssignment: (a: Omit<CalendarAssignment, 'id'>) => Promise<CalendarAssignment>
   updateAssignment: (id: number, a: Partial<CalendarAssignment>) => Promise<CalendarAssignment>
   removeAssignment: (id: number) => Promise<boolean>
+  ensureLoaded: () => void
 }
 
 const Context = createContext<CalendarContextValue | null>(null)
@@ -35,6 +36,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         addAssignment,
         updateAssignment,
         removeAssignment,
+        ensureLoaded: api.ensureLoaded,
       }}
     >
       {children}
@@ -45,5 +47,8 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
 export function useCalendar() {
   const ctx = useContext(Context)
   if (!ctx) throw new Error('useCalendar must be used within CalendarProvider')
+  useEffect(() => {
+    ctx.ensureLoaded()
+  }, [ctx.ensureLoaded])
   return ctx
 }

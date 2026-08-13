@@ -1,8 +1,9 @@
-import { createContext, useContext, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, type ReactNode } from 'react'
 import { useReclamationsApi } from '@/hooks/useReclamationsApi'
 import type { Reclamation } from '@/types'
 
 interface ReclamationsContextValue {
+  ensureLoaded: () => void
   reclamations: Reclamation[]
   loading: boolean
   fetchReclamations: () => Promise<void>
@@ -21,5 +22,8 @@ export function ReclamationsProvider({ children }: { children: ReactNode }) {
 export function useReclamations() {
   const ctx = useContext(Context)
   if (!ctx) throw new Error('useReclamations must be used within ReclamationsProvider')
+  useEffect(() => {
+    ctx.ensureLoaded()
+  }, [ctx.ensureLoaded])
   return ctx
 }

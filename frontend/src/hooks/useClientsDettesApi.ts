@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
+import { useLazyLoader } from '@/lib/useLazyLoader'
 import type { ClientAvecDette } from '@/types'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
@@ -26,9 +27,7 @@ export function useClientsDettesApi() {
     }
   }, [getAccessToken])
 
-  useEffect(() => {
-    if (isAuthenticated) fetchClients()
-  }, [isAuthenticated, fetchClients])
+  const ensureLoaded = useLazyLoader(isAuthenticated, fetchClients)
 
   const addClient = useCallback(
     async (c: Omit<ClientAvecDette, 'id'>): Promise<ClientAvecDette> => {
@@ -88,6 +87,7 @@ export function useClientsDettesApi() {
   )
 
   return {
+    ensureLoaded,
     clients,
     loading,
     fetchClients,

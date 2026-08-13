@@ -22,6 +22,11 @@ import {
   registerExpoPushToken,
 } from '../lib/pushNotifications'
 import {
+  connectRealtime,
+  disconnectRealtime,
+  isRealtimeConnected,
+} from '../lib/realtimeClient'
+import {
   getDefaultRoute,
   getMenuTitle,
   type MenuRouteId,
@@ -149,6 +154,12 @@ export default function MainApp({
     void registerExpoPushToken(accessToken).catch(() => undefined)
   }, [accessToken])
 
+  /** WebSocket : son immédiat dès l’émission serveur. */
+  useEffect(() => {
+    connectRealtime(accessToken)
+    return () => disconnectRealtime()
+  }, [accessToken])
+
   useEffect(() => {
     const handleResponse = (response: Notifications.NotificationResponse) => {
       if (!claimNotificationResponseId(response.notification.request.identifier)) return
@@ -165,9 +176,10 @@ export default function MainApp({
     return () => sub.remove()
   }, [navigateFromNotification])
 
-  /** Son in-app à l’arrivée d’une push (app ouverte). */
+  /** Push en secours si WebSocket coupé (évite double son si WS actif). */
   useEffect(() => {
     const sub = Notifications.addNotificationReceivedListener((notification) => {
+      if (isRealtimeConnected()) return
       const data = notification.request.content.data as Record<string, unknown> | undefined
       const type = String(data?.type ?? '').toLowerCase()
       if (type.includes('chat') || data?.conversationId != null) {

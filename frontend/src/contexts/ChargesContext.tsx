@@ -2,11 +2,13 @@ import { createContext, useContext, useState, useCallback, useEffect, type React
 import type { ChargeMensuelle } from '@/types'
 import { useAuth } from '@/contexts/AuthContext'
 import { apiFetch } from '@/lib/api'
+import { useLazyLoader } from '@/lib/useLazyLoader'
 
 interface ChargesContextValue {
   charges: ChargeMensuelle[]
   totalCharges: number
   loading: boolean
+  ensureLoaded: () => void
   addCharge: (c: Omit<ChargeMensuelle, 'id'>) => Promise<void>
   updateCharge: (id: number, c: Partial<ChargeMensuelle>) => Promise<void>
   removeCharge: (id: number) => Promise<void>
@@ -17,42 +19,39 @@ const Context = createContext<ChargesContextValue | null>(null)
 export function ChargesProvider({ children }: { children: ReactNode }) {
   const { getAccessToken, isAuthenticated } = useAuth()
   const [charges, setCharges] = useState<ChargeMensuelle[]>([])
-  const [loading, setLoading] = useState<boolean>(true)
+  const [loading, setLoading] = useState(false)
   const totalCharges = charges.reduce((s, c) => s + c.amount, 0)
+
+  const fetchCharges = useCallback(async () => {
+    const token = getAccessToken()
+    if (!token) {
+      setCharges([])
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    try {
+      const data = await apiFetch<ChargeMensuelle[]>('/charges-mensuelles', {
+        method: 'GET',
+        token,
+      })
+      setCharges(data ?? [])
+    } catch (err) {
+      console.error('Erreur chargement charges mensuelles', err)
+      setCharges([])
+    } finally {
+      setLoading(false)
+    }
+  }, [getAccessToken])
 
   useEffect(() => {
     if (!isAuthenticated) {
       setCharges([])
       setLoading(false)
-      return
     }
+  }, [isAuthenticated])
 
-    let active = true
-    const load = async () => {
-      try {
-        const token = (await getAccessToken()) ?? undefined
-        if (!token) {
-          if (active) setCharges([])
-          return
-        }
-        const data = await apiFetch<ChargeMensuelle[]>('/charges-mensuelles', {
-          method: 'GET',
-          token,
-        })
-        if (!active) return
-        setCharges(data ?? [])
-      } catch (err) {
-        console.error('Erreur chargement charges mensuelles', err)
-        if (active) setCharges([])
-      } finally {
-        if (active) setLoading(false)
-      }
-    }
-    void load()
-    return () => {
-      active = false
-    }
-  }, [getAccessToken, isAuthenticated])
+  const ensureLoaded = useLazyLoader(isAuthenticated, fetchCharges)
 
   const addCharge = useCallback(
     async (c: Omit<ChargeMensuelle, 'id'>) => {
@@ -100,7 +99,9 @@ export function ChargesProvider({ children }: { children: ReactNode }) {
   )
 
   return (
-    <Context.Provider value={{ charges, totalCharges, loading, addCharge, updateCharge, removeCharge }}>
+    <Context.Provider
+      value={{ charges, totalCharges, loading, ensureLoaded, addCharge, updateCharge, removeCharge }}
+    >
       {children}
     </Context.Provider>
   )
@@ -109,5 +110,8 @@ export function ChargesProvider({ children }: { children: ReactNode }) {
 export function useCharges() {
   const ctx = useContext(Context)
   if (!ctx) throw new Error('useCharges must be used within ChargesProvider')
+  useEffect(() => {
+    ctx.ensureLoaded()
+  }, [ctx.ensureLoaded])
   return ctx
 }

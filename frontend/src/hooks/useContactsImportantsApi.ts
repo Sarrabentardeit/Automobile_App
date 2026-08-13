@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
+import { useLazyLoader } from '@/lib/useLazyLoader'
 import type { ContactImportant } from '@/types'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
@@ -36,9 +37,7 @@ export function useContactsImportantsApi() {
     [getAccessToken]
   )
 
-  useEffect(() => {
-    if (isAuthenticated) fetchContacts()
-  }, [isAuthenticated, fetchContacts])
+  const ensureLoaded = useLazyLoader(isAuthenticated, fetchContacts)
 
   const addContact = useCallback(
     async (c: Omit<ContactImportant, 'id'>): Promise<ContactImportant> => {
@@ -96,6 +95,7 @@ export function useContactsImportantsApi() {
   )
 
   return {
+    ensureLoaded,
     contacts,
     loading,
     fetchContacts,

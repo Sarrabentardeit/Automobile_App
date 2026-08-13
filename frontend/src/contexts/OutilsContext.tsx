@@ -2,11 +2,13 @@ import { createContext, useContext, useState, useCallback, useEffect, type React
 import type { OutilMohamed, OutilAhmed } from '@/types'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
+import { useLazyLoader } from '@/lib/useLazyLoader'
 
 interface OutilsContextValue {
   outilsMohamed: OutilMohamed[]
   outilsAhmed: OutilAhmed[]
   loading: boolean
+  ensureLoaded: () => void
   addOutilMohamed: (o: Omit<OutilMohamed, 'id'>) => Promise<OutilMohamed>
   updateOutilMohamed: (id: number, o: Partial<OutilMohamed>) => Promise<OutilMohamed>
   removeOutilMohamed: (id: number) => Promise<boolean>
@@ -21,7 +23,7 @@ export function OutilsProvider({ children }: { children: ReactNode }) {
   const { getAccessToken, isAuthenticated } = useAuth()
   const [outilsMohamed, setOutilsMohamed] = useState<OutilMohamed[]>([])
   const [outilsAhmed, setOutilsAhmed] = useState<OutilAhmed[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
 
   const fetchOutils = useCallback(async () => {
     const token = getAccessToken()
@@ -48,13 +50,14 @@ export function OutilsProvider({ children }: { children: ReactNode }) {
   }, [getAccessToken])
 
   useEffect(() => {
-    if (isAuthenticated) fetchOutils()
-    else {
+    if (!isAuthenticated) {
       setOutilsMohamed([])
       setOutilsAhmed([])
       setLoading(false)
     }
-  }, [isAuthenticated, fetchOutils])
+  }, [isAuthenticated])
+
+  const ensureLoaded = useLazyLoader(isAuthenticated, fetchOutils)
 
   const addOutilMohamed = useCallback(async (o: Omit<OutilMohamed, 'id'>): Promise<OutilMohamed> => {
     const token = getAccessToken()
@@ -130,6 +133,7 @@ export function OutilsProvider({ children }: { children: ReactNode }) {
         outilsMohamed,
         outilsAhmed,
         loading,
+        ensureLoaded,
         addOutilMohamed,
         updateOutilMohamed,
         removeOutilMohamed,
@@ -146,5 +150,8 @@ export function OutilsProvider({ children }: { children: ReactNode }) {
 export function useOutils() {
   const ctx = useContext(Context)
   if (!ctx) throw new Error('useOutils must be used within OutilsProvider')
+  useEffect(() => {
+    ctx.ensureLoaded()
+  }, [ctx.ensureLoaded])
   return ctx
 }

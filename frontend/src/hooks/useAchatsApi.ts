@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
+import { useLazyLoader } from '@/lib/useLazyLoader'
 import type { FactureFournisseur, FactureFournisseurStatut } from '@/types'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
@@ -36,9 +37,7 @@ export function useAchatsApi() {
     [getAccessToken]
   )
 
-  useEffect(() => {
-    if (isAuthenticated) fetchAchats()
-  }, [isAuthenticated, fetchAchats])
+  const ensureLoaded = useLazyLoader(isAuthenticated, fetchAchats)
 
   const getNextNumero = useCallback(async (): Promise<string> => {
     const token = getAccessToken()
@@ -136,6 +135,7 @@ export function useAchatsApi() {
   )
 
   return {
+    ensureLoaded,
     factures,
     loading,
     fetchAchats,

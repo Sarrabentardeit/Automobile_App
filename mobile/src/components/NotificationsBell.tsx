@@ -17,6 +17,7 @@ import {
   type AppNotification,
 } from '../lib/notifications'
 import { playMessageSound, playNotificationSound } from '../lib/appSounds'
+import { isRealtimeConnected } from '../lib/realtimeClient'
 import type { MenuRouteId } from '../navigation/menuConfig'
 
 export type NotificationNavigateTarget =
@@ -100,7 +101,7 @@ export default function NotificationsBell({
       })
       const ids = new Set(unreadRows.map((n) => n.id))
 
-      if (readyRef.current) {
+      if (readyRef.current && !isRealtimeConnected()) {
         if (nextChat > chatUnreadRef.current) playMessageSound()
         for (const id of ids) {
           if (!notifIdsRef.current.has(id)) {

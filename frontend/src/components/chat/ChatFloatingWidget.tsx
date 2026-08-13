@@ -27,6 +27,7 @@ import {
   type ChatMessage,
 } from '@/lib/chatApi'
 import { playMessageSound } from '@/lib/appSounds'
+import { isRealtimeConnected } from '@/lib/realtimeClient'
 import { cn } from '@/lib/utils'
 
 function formatTime(iso: string) {
@@ -118,7 +119,7 @@ export default function ChatFloatingWidget() {
       if (!opts?.silent) setLoadingMsgs(true)
       try {
         const { messages: list } = await fetchChatMessages(token, conversationId)
-        if (opts?.silent && threadReadyRef.current) {
+        if (opts?.silent && threadReadyRef.current && !isRealtimeConnected()) {
           const incoming = list.filter(m => !m.mine && m.id > lastMsgIdRef.current)
           if (incoming.length > 0) playMessageSound()
         }
@@ -177,6 +178,18 @@ export default function ChatFloatingWidget() {
     }, 8000)
     return () => window.clearInterval(id)
   }, [open, selectedId, loadMessages, loadConversations])
+
+  useEffect(() => {
+    const onRt = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ conversationId?: number }>).detail
+      void loadConversations()
+      if (open && selectedId != null && detail?.conversationId === selectedId) {
+        void loadMessages(selectedId, { silent: true })
+      }
+    }
+    window.addEventListener('elmecano:chat_message', onRt)
+    return () => window.removeEventListener('elmecano:chat_message', onRt)
+  }, [open, selectedId, loadConversations, loadMessages])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })

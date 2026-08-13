@@ -3,12 +3,14 @@ import type { MouvementProduit, ProduitStock, MouvementStock } from '@/types'
 import { useStockGeneral as useStockGeneralHook } from '@/hooks/useStockGeneral'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
+import { useLazyLoader } from '@/lib/useLazyLoader'
 
 interface StockGeneralContextValue {
   mouvements: MouvementProduit[]
   produits: ProduitStock[]
   mouvementsStock: MouvementStock[]
   loading: boolean
+  ensureLoaded: () => void
   addMouvement: (m: Omit<MouvementProduit, 'id'>) => Promise<MouvementProduit>
   updateMouvement: (id: number, m: Partial<MouvementProduit>) => Promise<MouvementProduit>
   removeMouvement: (id: number) => Promise<boolean>
@@ -42,9 +44,15 @@ export function StockGeneralProvider({ children }: { children: ReactNode }) {
   }, [getAccessToken])
 
   useEffect(() => {
-    if (isAuthenticated) void fetchMouvements()
-    else setMouvements([])
-  }, [isAuthenticated, fetchMouvements])
+    if (!isAuthenticated) setMouvements([])
+  }, [isAuthenticated])
+
+  const bootstrap = useCallback(() => {
+    api.ensureLoaded()
+    void fetchMouvements()
+  }, [api, fetchMouvements])
+
+  const ensureLoaded = useLazyLoader(isAuthenticated, bootstrap)
 
   const addMouvement = useCallback(async (m: Omit<MouvementProduit, 'id'>): Promise<MouvementProduit> => {
     const token = getAccessToken()
@@ -87,6 +95,7 @@ export function StockGeneralProvider({ children }: { children: ReactNode }) {
         produits: api.produits,
         mouvementsStock: api.mouvementsStock,
         loading: api.loading,
+        ensureLoaded,
         addMouvement,
         updateMouvement,
         removeMouvement,
@@ -106,5 +115,8 @@ export function StockGeneralProvider({ children }: { children: ReactNode }) {
 export function useStockGeneral() {
   const ctx = useContext(Context)
   if (!ctx) throw new Error('useStockGeneral must be used within StockGeneralProvider')
+  useEffect(() => {
+    ctx.ensureLoaded()
+  }, [ctx.ensureLoaded])
   return ctx
 }

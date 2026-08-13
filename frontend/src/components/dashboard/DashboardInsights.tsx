@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ResponsiveContainer, AreaChart, Area } from 'recharts'
 import {
@@ -146,19 +146,22 @@ const MOIS_LABELS = [
   'Décembre',
 ]
 
-type Props = {
-  showKpis?: boolean
-  showAlerts?: boolean
-  className?: string
+type InsightsCtl = {
+  data: InsightsResponse | null
+  loading: boolean
+  year: number
+  month: number
+  canGoNext: boolean
+  canGoPrev: boolean
+  shiftMonth: (delta: number) => void
+  moisLabel: string
+  spark: SparkPoint[]
 }
 
-export default function DashboardInsights({
-  showKpis = true,
-  showAlerts = true,
-  className,
-}: Props) {
+const InsightsCtx = createContext<InsightsCtl | null>(null)
+
+export function DashboardInsightsProvider({ children }: { children: ReactNode }) {
   const { getAccessToken, user, permissions } = useAuth()
-  const navigate = useNavigate()
   const now = useMemo(() => new Date(), [])
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
@@ -211,12 +214,117 @@ export default function DashboardInsights({
   }, [load])
 
   useEffect(() => {
-    const id = window.setInterval(() => void load(), 45_000)
+    const id = window.setInterval(() => void load(), 90_000)
     return () => window.clearInterval(id)
   }, [load])
 
-  const spark = data?.sparkline ?? []
-  const moisLabel = `${MOIS_LABELS[month - 1]} ${year}`
+  const value = useMemo<InsightsCtl>(
+    () => ({
+      data,
+      loading,
+      year,
+      month,
+      canGoNext,
+      canGoPrev,
+      shiftMonth,
+      moisLabel: `${MOIS_LABELS[month - 1]} ${year}`,
+      spark: data?.sparkline ?? [],
+    }),
+    [data, loading, year, month, canGoNext, canGoPrev]
+  )
+
+  return <InsightsCtx.Provider value={value}>{children}</InsightsCtx.Provider>
+}
+
+function useInsightsCtl(): InsightsCtl {
+  const shared = useContext(InsightsCtx)
+  const { getAccessToken, user, permissions } = useAuth()
+  const now = useMemo(() => new Date(), [])
+  const [year, setYear] = useState(now.getFullYear())
+  const [month, setMonth] = useState(now.getMonth() + 1)
+  const [data, setData] = useState<InsightsResponse | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const canGoNext = year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1)
+  const canGoPrev = year > now.getFullYear() - 2 || (year === now.getFullYear() - 2 && month > 1)
+
+  const shiftMonth = (delta: number) => {
+    let m = month + delta
+    let y = year
+    if (m < 1) {
+      m = 12
+      y -= 1
+    } else if (m > 12) {
+      m = 1
+      y += 1
+    }
+    if (y > now.getFullYear()) return
+    if (y === now.getFullYear() && m > now.getMonth() + 1) return
+    if (y < now.getFullYear() - 2) return
+    setYear(y)
+    setMonth(m)
+  }
+
+  const load = useCallback(async () => {
+    const token = getAccessToken()
+    if (!token) return
+    try {
+      const params: Record<string, string | number> = { year, month }
+      if (permissions?.vehiculeVisibility === 'own' && user) {
+        params.technicien_id = user.id
+      }
+      const res = await apiFetch<InsightsResponse>('/vehicules/dashboard-insights', {
+        token,
+        params,
+      })
+      setData(res)
+    } catch {
+      setData(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [getAccessToken, permissions?.vehiculeVisibility, user, year, month])
+
+  useEffect(() => {
+    if (shared) return
+    setLoading(true)
+    void load()
+  }, [load, shared])
+
+  useEffect(() => {
+    if (shared) return
+    const id = window.setInterval(() => void load(), 90_000)
+    return () => window.clearInterval(id)
+  }, [load, shared])
+
+  if (shared) return shared
+
+  return {
+    data,
+    loading,
+    year,
+    month,
+    canGoNext,
+    canGoPrev,
+    shiftMonth,
+    moisLabel: `${MOIS_LABELS[month - 1]} ${year}`,
+    spark: data?.sparkline ?? [],
+  }
+}
+
+type Props = {
+  showKpis?: boolean
+  showAlerts?: boolean
+  className?: string
+}
+
+export default function DashboardInsights({
+  showKpis = true,
+  showAlerts = true,
+  className,
+}: Props) {
+  const navigate = useNavigate()
+  const { data, loading, canGoNext, canGoPrev, shiftMonth, moisLabel, spark } = useInsightsCtl()
 
   const cards = useMemo(() => {
     const k = data?.kpis

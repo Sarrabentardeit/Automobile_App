@@ -11,6 +11,7 @@ import type { Notification } from '@/types'
 import { useAuth } from '@/contexts/AuthContext'
 import { apiFetch } from '@/lib/api'
 import { playNotificationSound, unlockAppSounds } from '@/lib/appSounds'
+import { isRealtimeConnected } from '@/lib/realtimeClient'
 
 interface NotificationsContextValue {
   notifications: Notification[]
@@ -60,7 +61,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       >('/notifications', { token })
       const rows = list ?? []
 
-      if (opts?.playSound !== false && readyRef.current) {
+      if (opts?.playSound !== false && readyRef.current && !isRealtimeConnected()) {
         const fresh = rows.filter(
           n => !n.read && !isChatNotifType(n.type) && !seenUnreadIdsRef.current.has(n.id)
         )
