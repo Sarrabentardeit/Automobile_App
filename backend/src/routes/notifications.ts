@@ -71,6 +71,12 @@ router.post('/', authenticate(), async (req: AuthRequest, res) => {
   }
 })
 
+/** Chat = bulle/son dédiés, pas la cloche Notifications. */
+const notChatWhere = {
+  type: { not: 'chat_message' },
+  conversationId: null,
+}
+
 /** GET /notifications - liste des notifications de l'utilisateur connecté */
 router.get('/', authenticate(), async (req: AuthRequest, res) => {
   try {
@@ -78,7 +84,7 @@ router.get('/', authenticate(), async (req: AuthRequest, res) => {
     if (!userId) return res.status(401).json({ error: 'Non authentifié' })
 
     const list = await prisma.notification.findMany({
-      where: { userId },
+      where: { userId, ...notChatWhere },
       orderBy: { createdAt: 'desc' },
       take: 100,
     })
@@ -97,7 +103,7 @@ router.get('/unread-count', authenticate(), async (req: AuthRequest, res) => {
     if (!userId) return res.status(401).json({ error: 'Non authentifié' })
 
     const count = await prisma.notification.count({
-      where: { userId, read: false },
+      where: { userId, read: false, ...notChatWhere },
     })
 
     return res.json({ count })

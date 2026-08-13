@@ -2,7 +2,7 @@ import { Router } from 'express'
 import fs from 'fs/promises'
 import path from 'path'
 import { prisma } from '../lib/prisma'
-import { notifyMany } from '../lib/notify'
+import { pushChatToUsers } from '../lib/notify'
 import { emitToUsers } from '../lib/realtime'
 import { authenticate, type AuthRequest } from '../middleware/auth'
 
@@ -688,8 +688,8 @@ router.post('/conversations/:id/messages', authenticate(), async (req: AuthReque
       const preview = previewBody({ body, attachments: savedAtts })
       const short = preview.length > 120 ? `${preview.slice(0, 117)}…` : preview
       const senderName = userLabel(msg.sender)
-      void notifyMany(otherIds, {
-        type: 'chat_message',
+      // Pas de notif cloche : déjà son + bulle chat (+ push Expo si app fermée)
+      void pushChatToUsers(otherIds, {
         title: 'Nouveau message',
         message: `${senderName}: ${short}`,
         conversationId: id,

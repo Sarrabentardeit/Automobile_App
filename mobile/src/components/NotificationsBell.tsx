@@ -124,7 +124,12 @@ export default function NotificationsBell({
   const refreshList = useCallback(async () => {
     try {
       const rows = await fetchNotifications(accessToken)
-      setList(rows.sort((a, b) => b.date.localeCompare(a.date)))
+      const nonChat = rows.filter((n) => {
+        if (n.conversationId != null) return false
+        const t = (n.type ?? '').toLowerCase()
+        return t !== 'chat_message' && !t.includes('chat_message')
+      })
+      setList(nonChat.sort((a, b) => b.date.localeCompare(a.date)))
     } catch {
       setList([])
     }

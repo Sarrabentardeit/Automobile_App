@@ -25,8 +25,9 @@ interface NotificationsContextValue {
 
 const Context = createContext<NotificationsContextValue | null>(null)
 
-function isChatNotifType(type?: string) {
-  const t = (type ?? '').toLowerCase()
+function isChatNotif(n: { type?: string; conversationId?: number }) {
+  if (n.conversationId != null) return true
+  const t = (n.type ?? '').toLowerCase()
   return t === 'chat_message' || t.includes('chat_message')
 }
 
@@ -61,18 +62,16 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       >('/notifications', { token })
       const rows = list ?? []
 
+      const nonChat = rows.filter(n => !isChatNotif(n))
+
       if (opts?.playSound !== false && readyRef.current && !isRealtimeConnected()) {
-        const fresh = rows.filter(
-          n => !n.read && !isChatNotifType(n.type) && !seenUnreadIdsRef.current.has(n.id)
-        )
+        const fresh = nonChat.filter(n => !n.read && !seenUnreadIdsRef.current.has(n.id))
         if (fresh.length > 0) playNotificationSound()
       }
 
-      seenUnreadIdsRef.current = new Set(
-        rows.filter(n => !n.read && !isChatNotifType(n.type)).map(n => n.id)
-      )
+      seenUnreadIdsRef.current = new Set(nonChat.filter(n => !n.read).map(n => n.id))
       readyRef.current = true
-      setNotifications(rows)
+      setNotifications(nonChat)
     } catch {
       setNotifications([])
     }

@@ -141,3 +141,36 @@ export async function notifyMany(
     )
   )
 }
+
+/**
+ * Push Expo chat uniquement (pas d’entrée dans la cloche Notifications).
+ * Le son / bulle chat passent par le WebSocket + unread chat.
+ */
+export async function pushChatToUsers(
+  userIds: number[],
+  payload: {
+    title: string
+    message: string
+    conversationId: number
+  }
+): Promise<void> {
+  const unique = Array.from(new Set(userIds.filter((id) => Number.isInteger(id) && id > 0)))
+  await Promise.all(
+    unique.map(async (userId) => {
+      try {
+        const user = await db.user.findUnique({
+          where: { id: userId },
+          select: { expoPushToken: true },
+        })
+        const token = typeof user?.expoPushToken === 'string' ? user.expoPushToken.trim() : ''
+        if (!token) return
+        await sendExpoPush(token, payload.title || 'Nouveau message', payload.message, {
+          type: 'chat_message',
+          conversationId: payload.conversationId,
+        })
+      } catch (err) {
+        console.warn('[notify] chat push failed for', userId, err)
+      }
+    })
+  )
+}
