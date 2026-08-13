@@ -21,13 +21,23 @@ import OrdreFormModal from '../components/OrdreFormModal'
 import SuiviFormModal from '../components/SuiviFormModal'
 import VehiculeFicheFinanciereModal from '../components/VehiculeFicheFinanciereModal'
 import VehiculeFormModal from '../components/VehiculeFormModal'
-import NotificationsBell from '../components/NotificationsBell'
+import NotificationsBell, {
+  type NotificationNavigateTarget,
+} from '../components/NotificationsBell'
+import AppToast from '../components/ui/AppToast'
 import VehiculeStats from '../components/VehiculeStats'
 import type { VehiculeOpenOptions } from '../navigation/vehiculeNav'
 import type { StoredUser } from '../lib/authStorage'
+import {
+  enqueueOffline,
+  flushOfflineQueue,
+  getOfflineQueueCount,
+  isNetworkError,
+} from '../lib/offlineQueue'
+import type { MenuRouteId } from '../navigation/menuConfig'
 import { userNames } from '../lib/assignees'
 import { downloadOrdreExcel, downloadSuiviExcel } from '../lib/downloadExcel'
-import { printOrdre, printSuivi } from '../lib/printDocuments'
+import { shareOrdrePdf, shareSuiviPdf } from '../lib/printDocuments'
 import { daysSince, formatDate, formatDuree } from '../lib/format'
 import { getStatusBarInset } from '../lib/safeArea'
 import {
@@ -69,6 +79,8 @@ type Props = {
   initialTab?: VehiculeOpenOptions['initialTab']
   onBack: () => void
   onOpenVehicule?: (vehiculeId: number) => void
+  onNavigateRoute?: (route: MenuRouteId) => void
+  onNavigateNotification?: (target: NotificationNavigateTarget) => void
 }
 
 const TABS: { id: TabId; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -102,6 +114,8 @@ export default function VehiculeDetailScreen({
   initialTab,
   onBack,
   onOpenVehicule,
+  onNavigateRoute,
+  onNavigateNotification,
 }: Props) {
   const [vehicule, setVehicule] = useState<Vehicule | null>(null)
   const [historique, setHistorique] = useState<HistoriqueEtat[]>([])
@@ -119,13 +133,24 @@ export default function VehiculeDetailScreen({
   const [showEdit, setShowEdit] = useState(false)
   const [showOrdreForm, setShowOrdreForm] = useState(false)
   const [editingOrdre, setEditingOrdre] = useState<OrdreReparation | null>(null)
+  const [ordreReadOnly, setOrdreReadOnly] = useState(false)
   const [showSuiviForm, setShowSuiviForm] = useState(false)
   const [editingSuivi, setEditingSuivi] = useState<VehiculeSuivi | null>(null)
+  const [suiviReadOnly, setSuiviReadOnly] = useState(false)
+  const [pdfLoadingId, setPdfLoadingId] = useState<string | null>(null)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [imageCategory, setImageCategory] = useState<VehiculeImageCategory>('etat_exterieur')
   const [imageNote, setImageNote] = useState('')
   const [showFicheFinanciere, setShowFicheFinanciere] = useState(false)
   const [excelLoadingId, setExcelLoadingId] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const [toastError, setToastError] = useState(false)
+  const [pendingOffline, setPendingOffline] = useState(0)
+
+  const showMsg = (msg: string, err = false) => {
+    setToastError(err)
+    setToast(msg)
+  }
 
   const permissions = user.permissions
   const canEditFicheFinanciere =
@@ -173,10 +198,32 @@ export default function VehiculeDetailScreen({
     void load().finally(() => setLoading(false))
   }, [load])
 
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const { done, left } = await flushOfflineQueue(accessToken)
+      if (cancelled) return
+      setPendingOffline(left)
+      if (done > 0) {
+        showMsg(
+          left > 0
+            ? `${done} action(s) synchronisée(s), ${left} en attente`
+            : `${done} action(s) hors-ligne synchronisée(s)`
+        )
+        void load()
+      } else {
+        setPendingOffline(await getOfflineQueueCount())
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken, load])
+
   const callClient = () => {
     const tel = vehicule?.client_telephone?.replace(/\s/g, '')
     if (!tel) {
-      Alert.alert('Téléphone', 'Aucun numéro client')
+      showMsg('Aucun numéro client', true)
       return
     }
     void Linking.openURL(`tel:${tel}`)
@@ -187,15 +234,33 @@ export default function VehiculeDetailScreen({
     commentaire: string,
     pieces: string
   ) => {
-    const updated = await changeEtat(accessToken, vehiculeId, {
-      nouvel_etat: etat,
-      commentaire,
-      pieces_utilisees: pieces,
-    })
-    setVehicule(updated)
-    const h = await fetchHistorique(accessToken, vehiculeId)
-    setHistorique(h)
-    Alert.alert('Succès', 'État mis à jour')
+    try {
+      const updated = await changeEtat(accessToken, vehiculeId, {
+        nouvel_etat: etat,
+        commentaire,
+        pieces_utilisees: pieces,
+      })
+      setVehicule(updated)
+      const h = await fetchHistorique(accessToken, vehiculeId)
+      setHistorique(h)
+      showMsg('État mis à jour')
+    } catch (e) {
+      if (isNetworkError(e)) {
+        await enqueueOffline({
+          kind: 'change_etat',
+          vehiculeId,
+          nouvel_etat: etat,
+          commentaire,
+          pieces_utilisees: pieces,
+        })
+        setPendingOffline(await getOfflineQueueCount())
+        setVehicule((v) => (v ? { ...v, etat_actuel: etat } : v))
+        showMsg('Hors ligne — changement d’état mis en file d’attente')
+        return
+      }
+      showMsg(e instanceof Error ? e.message : 'Changement d’état impossible', true)
+      throw e
+    }
   }
 
   const techDefaut = userName(users, vehicule?.technicien_id ?? null)
@@ -210,17 +275,32 @@ export default function VehiculeDetailScreen({
       })
       if (!prepared.length) {
         if (useCamera) {
-          Alert.alert('Photos', 'Impossible de lire la photo caméra. Réessayez ou choisissez depuis la galerie.')
+          showMsg('Impossible de lire la photo caméra. Réessayez depuis la galerie.', true)
         }
         return
       }
       setUploadingPhoto(true)
-      await uploadVehiculeImage(accessToken, vehiculeId, prepared[0].payload)
-      setImageNote('')
-      const img = await fetchImages(accessToken, vehiculeId)
-      setImages(img)
+      try {
+        await uploadVehiculeImage(accessToken, vehiculeId, prepared[0].payload)
+        setImageNote('')
+        const img = await fetchImages(accessToken, vehiculeId)
+        setImages(img)
+        showMsg('Photo ajoutée')
+      } catch (e) {
+        if (isNetworkError(e)) {
+          await enqueueOffline({
+            kind: 'upload_image',
+            vehiculeId,
+            payload: prepared[0].payload,
+          })
+          setPendingOffline(await getOfflineQueueCount())
+          showMsg('Hors ligne — photo mise en file d’attente')
+          return
+        }
+        showMsg(e instanceof Error ? e.message : 'Upload impossible', true)
+      }
     } catch (e) {
-      Alert.alert('Erreur', e instanceof Error ? e.message : 'Upload impossible')
+      showMsg(e instanceof Error ? e.message : 'Upload impossible', true)
     } finally {
       setUploadingPhoto(false)
     }
@@ -231,11 +311,62 @@ export default function VehiculeDetailScreen({
     setExcelLoadingId(key)
     try {
       await downloadSuiviExcel(accessToken, vehiculeId, s.id, s.numero)
+      showMsg('Excel prêt à partager')
     } catch (e) {
-      Alert.alert('Erreur', e instanceof Error ? e.message : 'Export Excel impossible')
+      showMsg(e instanceof Error ? e.message : 'Export Excel impossible', true)
     } finally {
       setExcelLoadingId(null)
     }
+  }
+
+  const handleSuiviPdf = async (s: VehiculeSuivi) => {
+    const key = `suivi-pdf-${s.id}`
+    setPdfLoadingId(key)
+    try {
+      await shareSuiviPdf(s)
+      showMsg('PDF prêt à partager')
+    } catch (e) {
+      showMsg(e instanceof Error ? e.message : 'Export PDF impossible', true)
+    } finally {
+      setPdfLoadingId(null)
+    }
+  }
+
+  const handleOrdrePdf = async (o: OrdreReparation) => {
+    const key = `ordre-pdf-${o.id}`
+    setPdfLoadingId(key)
+    try {
+      await shareOrdrePdf(o)
+      showMsg('PDF prêt à partager')
+    } catch (e) {
+      showMsg(e instanceof Error ? e.message : 'Export PDF impossible', true)
+    } finally {
+      setPdfLoadingId(null)
+    }
+  }
+
+  const openSuiviView = (s: VehiculeSuivi) => {
+    setEditingSuivi(s)
+    setSuiviReadOnly(true)
+    setShowSuiviForm(true)
+  }
+
+  const openSuiviEdit = (s: VehiculeSuivi | null) => {
+    setEditingSuivi(s)
+    setSuiviReadOnly(false)
+    setShowSuiviForm(true)
+  }
+
+  const openOrdreView = (o: OrdreReparation) => {
+    setEditingOrdre(o)
+    setOrdreReadOnly(true)
+    setShowOrdreForm(true)
+  }
+
+  const openOrdreEdit = (o: OrdreReparation | null) => {
+    setEditingOrdre(o)
+    setOrdreReadOnly(false)
+    setShowOrdreForm(true)
   }
 
   const handleOrdreExcel = async (o: OrdreReparation) => {
@@ -243,8 +374,9 @@ export default function VehiculeDetailScreen({
     setExcelLoadingId(key)
     try {
       await downloadOrdreExcel(accessToken, vehiculeId, o.id, o.numero)
+      showMsg('Excel prêt à partager')
     } catch (e) {
-      Alert.alert('Erreur', e instanceof Error ? e.message : 'Export Excel impossible')
+      showMsg(e instanceof Error ? e.message : 'Export Excel impossible', true)
     } finally {
       setExcelLoadingId(null)
     }
@@ -320,16 +452,47 @@ export default function VehiculeDetailScreen({
         <View style={styles.topBarBell}>
           <NotificationsBell
             accessToken={accessToken}
-            userId={user.id}
             iconColor="#374151"
-            onOpenVehicule={(id) => {
-              if (id === vehiculeId) return
-              if (onOpenVehicule) onOpenVehicule(id)
-              else onBack()
+            onNavigate={(target) => {
+              if (target.kind === 'vehicule') {
+                if (target.vehiculeId === vehiculeId) return
+                if (onOpenVehicule) onOpenVehicule(target.vehiculeId)
+                else onBack()
+                return
+              }
+              if (onNavigateNotification) {
+                onNavigateNotification(target)
+                return
+              }
+              if (target.kind === 'route') onNavigateRoute?.(target.route)
+              else if (target.kind === 'chat') onNavigateRoute?.('chat')
+              else if (target.kind === 'dette') onNavigateRoute?.('clients_dettes')
             }}
           />
         </View>
       </View>
+
+      {pendingOffline > 0 ? (
+        <Pressable
+          style={styles.offlineBanner}
+          onPress={() => {
+            void flushOfflineQueue(accessToken).then(async ({ done, left }) => {
+              setPendingOffline(left)
+              if (done > 0) {
+                showMsg(`${done} action(s) synchronisée(s)`)
+                void load()
+              } else if (left > 0) {
+                showMsg('Toujours hors ligne — réessayez plus tard', true)
+              }
+            })
+          }}
+        >
+          <Ionicons name="cloud-offline-outline" size={16} color="#92400e" />
+          <Text style={styles.offlineBannerText}>
+            {pendingOffline} action(s) en attente — toucher pour sync
+          </Text>
+        </Pressable>
+      ) : null}
 
       <View style={styles.hero}>
         <View style={[styles.heroBar, { backgroundColor: cfg.color }]} />
@@ -549,13 +712,7 @@ export default function VehiculeDetailScreen({
         {tab === 'ordres' && (
           <SectionCard title="Ordres de réparation">
             {canEdit ? (
-              <Pressable
-                style={styles.addRowBtn}
-                onPress={() => {
-                  setEditingOrdre(null)
-                  setShowOrdreForm(true)
-                }}
-              >
+              <Pressable style={styles.addRowBtn} onPress={() => openOrdreEdit(null)}>
                 <Ionicons name="add-circle" size={20} color="#6366f1" />
                 <Text style={styles.addRowBtnText}>Nouvel ordre</Text>
               </Pressable>
@@ -588,30 +745,27 @@ export default function VehiculeDetailScreen({
                       />
                     </Pressable>
                     <View style={styles.itemActions}>
+                      <Pressable onPress={() => openOrdreView(o)} accessibilityLabel="Voir">
+                        <Ionicons name="eye-outline" size={18} color="#2563eb" />
+                      </Pressable>
                       <Pressable
-                        onPress={() => {
-                          void printOrdre(o).catch((e) =>
-                            Alert.alert(
-                              'Impression',
-                              e instanceof Error ? e.message : 'Impression impossible'
-                            )
-                          )
-                        }}
+                        onPress={() => void handleOrdrePdf(o)}
+                        disabled={pdfLoadingId === `ordre-pdf-${o.id}`}
+                        accessibilityLabel="Exporter PDF"
                       >
-                        <Ionicons name="print-outline" size={18} color="#4b5563" />
+                        <Ionicons name="download-outline" size={18} color="#7c3aed" />
                       </Pressable>
                       <Pressable
                         onPress={() => void handleOrdreExcel(o)}
                         disabled={excelLoadingId === `ordre-${o.id}`}
+                        accessibilityLabel="Exporter Excel"
                       >
                         <Ionicons name="document-text-outline" size={18} color="#059669" />
                       </Pressable>
                       {canEdit ? (
                         <Pressable
-                          onPress={() => {
-                            setEditingOrdre(o)
-                            setShowOrdreForm(true)
-                          }}
+                          onPress={() => openOrdreEdit(o)}
+                          accessibilityLabel="Modifier"
                         >
                           <Ionicons name="pencil" size={18} color="#6366f1" />
                         </Pressable>
@@ -632,6 +786,7 @@ export default function VehiculeDetailScreen({
                               },
                             ])
                           }
+                          accessibilityLabel="Supprimer"
                         >
                           <Ionicons name="trash-outline" size={18} color="#dc2626" />
                         </Pressable>
@@ -675,13 +830,7 @@ export default function VehiculeDetailScreen({
         {tab === 'suivis' && (
           <SectionCard title="Fiches suivi">
             {canEdit ? (
-              <Pressable
-                style={styles.addRowBtn}
-                onPress={() => {
-                  setEditingSuivi(null)
-                  setShowSuiviForm(true)
-                }}
-              >
+              <Pressable style={styles.addRowBtn} onPress={() => openSuiviEdit(null)}>
                 <Ionicons name="add-circle" size={20} color="#f97316" />
                 <Text style={styles.addRowBtnText}>Nouvelle fiche</Text>
               </Pressable>
@@ -710,30 +859,27 @@ export default function VehiculeDetailScreen({
                       />
                     </Pressable>
                     <View style={styles.itemActions}>
+                      <Pressable onPress={() => openSuiviView(s)} accessibilityLabel="Voir">
+                        <Ionicons name="eye-outline" size={18} color="#2563eb" />
+                      </Pressable>
                       <Pressable
-                        onPress={() => {
-                          void printSuivi(s).catch((e) =>
-                            Alert.alert(
-                              'Impression',
-                              e instanceof Error ? e.message : 'Impression impossible'
-                            )
-                          )
-                        }}
+                        onPress={() => void handleSuiviPdf(s)}
+                        disabled={pdfLoadingId === `suivi-pdf-${s.id}`}
+                        accessibilityLabel="Exporter PDF"
                       >
-                        <Ionicons name="print-outline" size={18} color="#4b5563" />
+                        <Ionicons name="download-outline" size={18} color="#7c3aed" />
                       </Pressable>
                       <Pressable
                         onPress={() => void handleSuiviExcel(s)}
                         disabled={excelLoadingId === `suivi-${s.id}`}
+                        accessibilityLabel="Exporter Excel"
                       >
                         <Ionicons name="document-text-outline" size={18} color="#059669" />
                       </Pressable>
                       {canEdit ? (
                         <Pressable
-                          onPress={() => {
-                            setEditingSuivi(s)
-                            setShowSuiviForm(true)
-                          }}
+                          onPress={() => openSuiviEdit(s)}
+                          accessibilityLabel="Modifier"
                         >
                           <Ionicons name="pencil" size={18} color="#f97316" />
                         </Pressable>
@@ -754,6 +900,7 @@ export default function VehiculeDetailScreen({
                               },
                             ])
                           }
+                          accessibilityLabel="Supprimer"
                         >
                           <Ionicons name="trash-outline" size={18} color="#dc2626" />
                         </Pressable>
@@ -926,9 +1073,11 @@ export default function VehiculeDetailScreen({
             accessToken={accessToken}
             technicienDefaut={techDefaut}
             userName={user.fullName}
+            readOnly={ordreReadOnly}
             onClose={() => {
               setShowOrdreForm(false)
               setEditingOrdre(null)
+              setOrdreReadOnly(false)
             }}
             onSaved={() => void load()}
           />
@@ -940,9 +1089,11 @@ export default function VehiculeDetailScreen({
             suivi={editingSuivi}
             accessToken={accessToken}
             userName={user.fullName}
+            readOnly={suiviReadOnly}
             onClose={() => {
               setShowSuiviForm(false)
               setEditingSuivi(null)
+              setSuiviReadOnly(false)
             }}
             onSaved={() => void load()}
           />
@@ -962,6 +1113,12 @@ export default function VehiculeDetailScreen({
           </Pressable>
         </View>
       </Modal>
+
+      <AppToast
+        message={toast}
+        type={toastError ? 'error' : 'success'}
+        onDismiss={() => setToast(null)}
+      />
     </View>
   )
 }
@@ -1014,6 +1171,17 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   topBarBell: { marginRight: -8 },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: '#fef3c7',
+    borderBottomWidth: 1,
+    borderBottomColor: '#fde68a',
+  },
+  offlineBannerText: { flex: 1, fontSize: 12, fontWeight: '700', color: '#92400e' },
   photoSectionLabel: {
     fontSize: 12,
     fontWeight: '600',

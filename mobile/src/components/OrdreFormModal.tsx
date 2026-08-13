@@ -10,13 +10,14 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import FullScreenBlurModal from './ui/FullScreenBlurModal'
 import OrdreExcelForm from './OrdreExcelForm'
-import { createOrdre, updateOrdre } from '../lib/vehiculeApi'
 import {
   defaultOrdreForm,
   excelFormToPayload,
   ordreToExcelForm,
   type OrdreExcelFormState,
 } from '../lib/ordreFormHelpers'
+import { getSheetBottomInset } from '../lib/safeArea'
+import { createOrdre, updateOrdre } from '../lib/vehiculeApi'
 import type { OrdreReparation, Vehicule } from '../types/vehicule'
 
 type Props = {
@@ -26,6 +27,8 @@ type Props = {
   accessToken: string
   technicienDefaut: string
   userName: string
+  /** Aperçu lecture seule (bouton Voir) */
+  readOnly?: boolean
   onClose: () => void
   onSaved: () => void
 }
@@ -37,14 +40,16 @@ export default function OrdreFormModal({
   accessToken,
   technicienDefaut,
   userName,
+  readOnly = false,
   onClose,
   onSaved,
 }: Props) {
-  const isEdit = !!ordre
+  const isEdit = !!ordre && !readOnly
   const [form, setForm] = useState<OrdreExcelFormState>(
     defaultOrdreForm(vehicule, technicienDefaut, userName)
   )
   const [saving, setSaving] = useState(false)
+  const footerPaddingBottom = Math.max(16, getSheetBottomInset())
 
   useEffect(() => {
     if (!visible) return
@@ -56,6 +61,7 @@ export default function OrdreFormModal({
   }, [visible, ordre, vehicule, technicienDefaut, userName])
 
   const submit = async () => {
+    if (readOnly) return
     setSaving(true)
     try {
       const payload = excelFormToPayload(form)
@@ -73,6 +79,12 @@ export default function OrdreFormModal({
     }
   }
 
+  const title = readOnly
+    ? `Aperçu ${ordre?.numero ?? ''}`
+    : isEdit
+      ? `Modifier ${ordre?.numero}`
+      : 'Ordre de réparation'
+
   return (
     <FullScreenBlurModal visible={visible} onClose={onClose}>
       <View style={styles.root}>
@@ -80,33 +92,43 @@ export default function OrdreFormModal({
           <Pressable onPress={onClose}>
             <Ionicons name="close" size={26} color="#111827" />
           </Pressable>
-          <Text style={styles.title}>
-            {isEdit ? `Modifier ${ordre?.numero}` : 'Ordre de réparation'}
-          </Text>
+          <Text style={styles.title}>{title}</Text>
           <View style={{ width: 26 }} />
         </View>
-        <Text style={styles.subtitle}>Mise en page identique à la feuille Excel atelier</Text>
+        <Text style={styles.subtitle}>
+          {readOnly
+            ? 'Consultation — aucune modification'
+            : 'Mise en page identique à la feuille Excel atelier'}
+        </Text>
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           nestedScrollEnabled
         >
-          <OrdreExcelForm form={form} onChange={setForm} />
+          <OrdreExcelForm form={form} onChange={setForm} readOnly={readOnly} />
         </ScrollView>
-        <View style={styles.footer}>
-          <Pressable style={styles.btnOutline} onPress={onClose}>
-            <Text style={styles.btnOutlineText}>Annuler</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.btnPrimary, saving && styles.disabled]}
-            disabled={saving}
-            onPress={() => void submit()}
-          >
-            <Text style={styles.btnPrimaryText}>
-              {saving ? 'Enregistrement...' : 'Enregistrer'}
-            </Text>
-          </Pressable>
+        <View style={[styles.footer, { paddingBottom: footerPaddingBottom }]}>
+          {readOnly ? (
+            <Pressable style={styles.btnPrimary} onPress={onClose}>
+              <Text style={styles.btnPrimaryText}>Fermer</Text>
+            </Pressable>
+          ) : (
+            <>
+              <Pressable style={styles.btnOutline} onPress={onClose}>
+                <Text style={styles.btnOutlineText}>Annuler</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.btnPrimary, saving && styles.disabled]}
+                disabled={saving}
+                onPress={() => void submit()}
+              >
+                <Text style={styles.btnPrimaryText}>
+                  {saving ? 'Enregistrement...' : 'Enregistrer'}
+                </Text>
+              </Pressable>
+            </>
+          )}
         </View>
       </View>
     </FullScreenBlurModal>
@@ -138,7 +160,8 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     gap: 10,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',

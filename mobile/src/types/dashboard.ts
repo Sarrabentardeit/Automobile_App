@@ -28,3 +28,21 @@ export type DashboardSummary = {
     }
   >
 }
+
+export type DashboardTodayPeriod = 'day' | 'week' | 'month'
+
+export type DashboardTodayResponse = {
+  period: DashboardTodayPeriod
+  date: string
+  start: string
+  end: string
+  year: number
+  month: number
+  items: {
+    rdv: { count: number }
+    reclamations: { count: number }
+    dettes: { count: number; total: number }
+    devis: { count: number }
+    clients: { count: number }
+  }
+}

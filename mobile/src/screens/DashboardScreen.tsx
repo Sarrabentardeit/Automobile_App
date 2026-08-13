@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -9,20 +8,19 @@ import {
   View,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import type { ComponentProps } from 'react'
+import DashboardPeriodReport from '../components/dashboard/DashboardPeriodReport'
 import DashboardSkeleton from '../components/dashboard/DashboardSkeleton'
 import AppToast from '../components/ui/AppToast'
+import CenteredSheetShell from '../components/ui/CenteredSheetShell'
 import { fetchDashboardCounts, fetchDashboardSummary } from '../lib/dashboardApi'
 import { fetchVehicules } from '../lib/api'
 import { daysSince } from '../lib/format'
 import { fetchUsers, type AppUser } from '../lib/vehiculeApi'
-import { hasMenuAccess, MENU_STRUCTURE, type MenuRouteId } from '../navigation/menuConfig'
+import type { MenuRouteId } from '../navigation/menuConfig'
 import { theme } from '../theme/appTheme'
 import type { DashboardSummary } from '../types/dashboard'
-import { mapRole, type Permissions } from '../types/permissions'
+import type { Permissions } from '../types/permissions'
 import { ETAT_CONFIG, type EtatVehicule, type Vehicule } from '../types/vehicule'
-
-type IonIcon = ComponentProps<typeof Ionicons>['name']
 
 const ETATS: EtatVehicule[] = [
   'orange',
@@ -52,38 +50,6 @@ type TeamMemberDetail = {
   total: number
   byEtat: Record<string, number>
   urgents: number
-}
-
-type QuickAction = {
-  id: MenuRouteId
-  label: string
-  icon: IonIcon
-  color: string
-  bg: string
-}
-
-const QUICK_ACTION_IDS: MenuRouteId[] = [
-  'vehicules',
-  'calendar',
-  'checklists',
-  'reclamation',
-  'stock',
-  'clients_dettes',
-  'devis',
-  'fournisseurs',
-  'clients',
-]
-
-const ACTION_STYLE: Partial<Record<MenuRouteId, { color: string; bg: string; short?: string }>> = {
-  vehicules: { color: '#ea580c', bg: '#fff7ed' },
-  calendar: { color: '#c2410c', bg: '#ffedd5' },
-  checklists: { color: '#0d9488', bg: '#ecfdf5' },
-  reclamation: { color: '#dc2626', bg: '#fef2f2' },
-  stock: { color: '#2563eb', bg: '#eff6ff' },
-  clients_dettes: { color: '#7c3aed', bg: '#f5f3ff', short: 'Dettes' },
-  devis: { color: '#ea580c', bg: '#fff7ed', short: 'Devis' },
-  fournisseurs: { color: '#0891b2', bg: '#ecfeff' },
-  clients: { color: '#4f46e5', bg: '#eef2ff' },
 }
 
 function greeting(): string {
@@ -116,13 +82,11 @@ export default function DashboardScreen({
   accessToken,
   userId,
   userName,
-  userRole,
   permissions,
   onNavigate,
   onOpenVehicule,
   onOpenVehiculesEtat,
 }: Props) {
-  const role = mapRole(userRole)
   const isOwnView = permissions.vehiculeVisibility === 'own'
   const isGlobalView = permissions.vehiculeVisibility === 'all'
   const showVehicules = permissions.vehiculeVisibility !== 'none'
@@ -138,6 +102,7 @@ export default function DashboardScreen({
   const [selectedMember, setSelectedMember] = useState<TeamMemberDetail | null>(null)
   const [memberVehicles, setMemberVehicles] = useState<Vehicule[]>([])
   const [memberVehiclesLoading, setMemberVehiclesLoading] = useState(false)
+  const [reportRefreshKey, setReportRefreshKey] = useState(0)
 
   const showMsg = (msg: string, err = false) => {
     setToastError(err)
@@ -245,26 +210,6 @@ export default function DashboardScreen({
   const problemsCount = summary?.problemsCount ?? 0
   const validatedCount = countByEtat('vert')
 
-  const quickActions = useMemo(() => {
-    const actions: QuickAction[] = []
-    for (const cat of MENU_STRUCTURE) {
-      for (const item of cat.items) {
-        if (!QUICK_ACTION_IDS.includes(item.id)) continue
-        if (!item.implemented) continue
-        if (!hasMenuAccess(permissions, role, item)) continue
-        const style = ACTION_STYLE[item.id] ?? { color: theme.primary, bg: theme.primarySoft }
-        actions.push({
-          id: item.id,
-          label: style.short ?? item.name,
-          icon: item.icon,
-          color: style.color,
-          bg: style.bg,
-        })
-      }
-    }
-    return actions
-  }, [permissions, role])
-
   const urgents = summary?.urgents ?? []
   const anciens = (summary?.anciens ?? []).filter((v) => v.etat_actuel !== 'rouge').slice(0, 4)
   const recentActivity = (summary?.recentActivity ?? []).slice(0, 6)
@@ -279,6 +224,7 @@ export default function DashboardScreen({
             refreshing={refreshing}
             onRefresh={() => {
               setRefreshing(true)
+              setReportRefreshKey((k) => k + 1)
               void load().finally(() => setRefreshing(false))
             }}
             tintColor={theme.primary}
@@ -379,26 +325,12 @@ export default function DashboardScreen({
               </View>
             ) : null}
 
-            {/* Raccourcis */}
-            {quickActions.length > 0 ? (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Accès rapide</Text>
-                <View style={styles.actionGrid}>
-                  {quickActions.map((a) => (
-                    <Pressable
-                      key={a.id}
-                      onPress={() => onNavigate(a.id)}
-                      style={({ pressed }) => [styles.actionTile, pressed && styles.pressed]}
-                    >
-                      <View style={[styles.actionIcon, { backgroundColor: a.bg }]}>
-                        <Ionicons name={a.icon} size={22} color={a.color} />
-                      </View>
-                      <Text style={styles.actionLabel}>{a.label}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-            ) : null}
+            <DashboardPeriodReport
+              accessToken={accessToken}
+              permissions={permissions}
+              onNavigate={onNavigate}
+              refreshKey={reportRefreshKey}
+            />
 
             {/* Alertes */}
             {showVehicules ? (
@@ -613,100 +545,84 @@ export default function DashboardScreen({
         <View style={styles.footerSpacer} />
       </ScrollView>
 
-      <Modal
+      <CenteredSheetShell
         visible={selectedMember != null}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => {
+        onClose={() => {
           setSelectedMember(null)
           setMemberVehicles([])
         }}
+        maxWidth={440}
       >
-        <View style={styles.detailModal}>
-          <View style={styles.detailHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.detailTitle}>{selectedMember?.nom ?? ''}</Text>
-              <Text style={styles.detailSub}>
-                {selectedMember?.total ?? 0} véhicule(s) actif(s) · hors archivés
-              </Text>
+        {selectedMember ? (
+          <>
+            <Text style={styles.detailTitle}>{selectedMember.nom}</Text>
+            <Text style={styles.detailSub}>
+              {selectedMember.total} véhicule(s) actif(s) · hors archivés
+            </Text>
+            <View style={styles.teamChips}>
+              {ETATS_ACTIFS.filter((e) => (selectedMember.byEtat[e] ?? 0) > 0).map((etat) => (
+                <Text
+                  key={etat}
+                  style={[styles.teamChipGeneric, { color: ETAT_CONFIG[etat].color }]}
+                >
+                  {selectedMember.byEtat[etat]} {labelEtatDashboard(etat)}
+                </Text>
+              ))}
             </View>
+            <Text style={styles.detailListTitle}>Véhicules de {selectedMember.nom}</Text>
+            {memberVehiclesLoading ? (
+              <Text style={styles.teamEmptyHint}>Chargement des véhicules…</Text>
+            ) : memberVehicles.length === 0 ? (
+              <Text style={styles.teamEmptyHint}>Aucun véhicule actif trouvé.</Text>
+            ) : (
+              memberVehicles.map((v) => {
+                const etat = v.etat_actuel as EtatVehicule
+                const cfg = ETAT_CONFIG[etat]
+                return (
+                  <Pressable
+                    key={v.id}
+                    style={styles.vehDetailCard}
+                    onPress={() => {
+                      setSelectedMember(null)
+                      setMemberVehicles([])
+                      onOpenVehicule(v.id)
+                    }}
+                  >
+                    <View style={styles.vehDetailTop}>
+                      <Text style={styles.vehModel} numberOfLines={1}>
+                        {v.modele || '—'}
+                      </Text>
+                      <Text style={[styles.vehEtat, { color: cfg?.color ?? theme.textMuted }]}>
+                        {cfg ? labelEtatDashboard(etat) : v.etat_actuel}
+                      </Text>
+                    </View>
+                    <Text style={styles.vehPlate}>{v.immatriculation}</Text>
+                    <Text style={styles.vehMeta}>
+                      Entrée {v.date_entree || '—'} · {daysSince(v.date_entree)} j
+                    </Text>
+                    {v.defaut ? (
+                      <Text style={styles.vehDefaut} numberOfLines={2}>
+                        {v.defaut}
+                      </Text>
+                    ) : null}
+                  </Pressable>
+                )
+              })
+            )}
             <Pressable
+              style={styles.detailCta}
               onPress={() => {
                 setSelectedMember(null)
                 setMemberVehicles([])
+                onNavigate('vehicules')
               }}
-              hitSlop={12}
             >
-              <Ionicons name="close" size={24} color={theme.text} />
+              <Text style={styles.detailCtaText}>Voir dans Véhicules</Text>
+              <Ionicons name="chevron-forward" size={16} color={theme.primary} />
             </Pressable>
-          </View>
-          {selectedMember ? (
-            <ScrollView contentContainerStyle={styles.detailBody}>
-              <View style={styles.teamChips}>
-                {ETATS_ACTIFS.filter((e) => (selectedMember.byEtat[e] ?? 0) > 0).map((etat) => (
-                  <Text
-                    key={etat}
-                    style={[styles.teamChipGeneric, { color: ETAT_CONFIG[etat].color }]}
-                  >
-                    {selectedMember.byEtat[etat]} {labelEtatDashboard(etat)}
-                  </Text>
-                ))}
-              </View>
-              <Text style={styles.detailListTitle}>Véhicules de {selectedMember.nom}</Text>
-              {memberVehiclesLoading ? (
-                <Text style={styles.teamEmptyHint}>Chargement des véhicules…</Text>
-              ) : memberVehicles.length === 0 ? (
-                <Text style={styles.teamEmptyHint}>Aucun véhicule actif trouvé.</Text>
-              ) : (
-                memberVehicles.map((v) => {
-                  const etat = v.etat_actuel as EtatVehicule
-                  const cfg = ETAT_CONFIG[etat]
-                  return (
-                    <Pressable
-                      key={v.id}
-                      style={styles.vehDetailCard}
-                      onPress={() => {
-                        setSelectedMember(null)
-                        setMemberVehicles([])
-                        onOpenVehicule(v.id)
-                      }}
-                    >
-                      <View style={styles.vehDetailTop}>
-                        <Text style={styles.vehModel} numberOfLines={1}>
-                          {v.modele || '—'}
-                        </Text>
-                        <Text style={[styles.vehEtat, { color: cfg?.color ?? theme.textMuted }]}>
-                          {cfg ? labelEtatDashboard(etat) : v.etat_actuel}
-                        </Text>
-                      </View>
-                      <Text style={styles.vehPlate}>{v.immatriculation}</Text>
-                      <Text style={styles.vehMeta}>
-                        Entrée {v.date_entree || '—'} · {daysSince(v.date_entree)} j
-                      </Text>
-                      {v.defaut ? (
-                        <Text style={styles.vehDefaut} numberOfLines={2}>
-                          {v.defaut}
-                        </Text>
-                      ) : null}
-                    </Pressable>
-                  )
-                })
-              )}
-              <Pressable
-                style={styles.detailCta}
-                onPress={() => {
-                  setSelectedMember(null)
-                  setMemberVehicles([])
-                  onNavigate('vehicules')
-                }}
-              >
-                <Text style={styles.detailCtaText}>Voir dans Véhicules</Text>
-                <Ionicons name="chevron-forward" size={16} color={theme.primary} />
-              </Pressable>
-            </ScrollView>
-          ) : null}
-        </View>
-      </Modal>
+          </>
+        ) : null}
+      </CenteredSheetShell>
 
       <AppToast message={toast} type={toastError ? 'error' : 'success'} onDismiss={() => setToast(null)} />
     </View>
@@ -787,28 +703,6 @@ const styles = StyleSheet.create({
   etatDot: { width: 8, height: 8, borderRadius: 4 },
   etatLabel: { fontSize: 9, fontWeight: '800', color: theme.textMuted, flex: 1 },
   etatCount: { fontSize: 26, fontWeight: '800' },
-  actionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  actionTile: {
-    width: '47%',
-    flexGrow: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: theme.surface,
-    borderRadius: theme.radius.md,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: theme.borderLight,
-    ...theme.shadow.sm,
-  },
-  actionIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionLabel: { fontSize: 13, fontWeight: '700', color: theme.text, flex: 1 },
   sectionCard: {
     backgroundColor: theme.surface,
     borderRadius: theme.radius.lg,

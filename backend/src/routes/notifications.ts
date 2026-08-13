@@ -1,8 +1,37 @@
 import { Router } from 'express'
 import { prisma } from '../lib/prisma'
+import { createAndPush } from '../lib/notify'
 import { authenticate, type AuthRequest } from '../middleware/auth'
 
 const router = Router()
+
+function mapNotif(n: {
+  id: number
+  userId: number
+  type: string
+  reclamationId: number | null
+  vehiculeId: number | null
+  conversationId?: number | null
+  clientDetteId?: number | null
+  title: string | null
+  message: string
+  createdAt: Date
+  read: boolean
+}) {
+  return {
+    id: n.id,
+    userId: n.userId,
+    type: n.type,
+    reclamationId: n.reclamationId ?? undefined,
+    vehiculeId: n.vehiculeId ?? undefined,
+    conversationId: n.conversationId ?? undefined,
+    clientDetteId: n.clientDetteId ?? undefined,
+    title: n.title ?? undefined,
+    message: n.message,
+    date: n.createdAt.toISOString(),
+    read: n.read,
+  }
+}
 
 /** POST /notifications - créer une notification pour un utilisateur */
 router.post('/', authenticate(), async (req: AuthRequest, res) => {
@@ -16,35 +45,26 @@ router.post('/', authenticate(), async (req: AuthRequest, res) => {
       type?: string
       reclamationId?: number
       vehiculeId?: number
+      conversationId?: number
+      clientDetteId?: number
       title?: string
     }
     if (!body.userId || !body.message?.trim()) {
       return res.status(400).json({ error: 'userId et message requis' })
     }
 
-    const created = await prisma.notification.create({
-      data: {
-        userId: body.userId,
-        message: body.message.trim(),
-        type: body.type?.trim() || 'manual',
-        reclamationId: body.reclamationId ?? null,
-        vehiculeId: body.vehiculeId ?? null,
-        title: body.title?.trim() || null,
-        read: false,
-      },
+    const created = await createAndPush({
+      userId: body.userId,
+      message: body.message,
+      type: body.type,
+      title: body.title,
+      reclamationId: body.reclamationId,
+      vehiculeId: body.vehiculeId,
+      conversationId: body.conversationId,
+      clientDetteId: body.clientDetteId,
     })
 
-    return res.status(201).json({
-      id: created.id,
-      userId: created.userId,
-      type: created.type,
-      reclamationId: created.reclamationId ?? undefined,
-      vehiculeId: created.vehiculeId ?? undefined,
-      title: created.title ?? undefined,
-      message: created.message,
-      date: created.createdAt.toISOString(),
-      read: created.read,
-    })
+    return res.status(201).json(created)
   } catch (err) {
     console.error(err)
     return res.status(500).json({ error: 'Internal server error' })
@@ -63,19 +83,24 @@ router.get('/', authenticate(), async (req: AuthRequest, res) => {
       take: 100,
     })
 
-    const mapped = list.map((n) => ({
-      id: n.id,
-      userId: n.userId,
-      type: n.type,
-      reclamationId: n.reclamationId ?? undefined,
-      vehiculeId: n.vehiculeId ?? undefined,
-      title: n.title ?? undefined,
-      message: n.message,
-      date: n.createdAt.toISOString(),
-      read: n.read,
-    }))
+    return res.json(list.map(mapNotif))
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
 
-    return res.json(mapped)
+/** GET /notifications/unread-count — total réel (pas limité à 100) */
+router.get('/unread-count', authenticate(), async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.sub
+    if (!userId) return res.status(401).json({ error: 'Non authentifié' })
+
+    const count = await prisma.notification.count({
+      where: { userId, read: false },
+    })
+
+    return res.json({ count })
   } catch (err) {
     console.error(err)
     return res.status(500).json({ error: 'Internal server error' })

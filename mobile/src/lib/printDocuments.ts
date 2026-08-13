@@ -1,5 +1,12 @@
+import * as FileSystem from 'expo-file-system/legacy'
 import * as Print from 'expo-print'
+import * as Sharing from 'expo-sharing'
+import { Alert } from 'react-native'
 import type { OrdreReparation, VehiculeSuivi } from '../types/vehicule'
+
+function safeFilename(value: string): string {
+  return value.replace(/[^\w.-]+/g, '-').slice(0, 60) || 'document'
+}
 
 function esc(s: string): string {
   return s
@@ -84,12 +91,53 @@ th { background:#d9d9d9; }
 </body></html>`
 }
 
-export async function printSuivi(suivi: VehiculeSuivi): Promise<void> {
-  const html = buildSuiviDocumentHtml(suivi)
-  await Print.printAsync({ html })
+async function preparePdfFile(html: string, filename: string): Promise<string> {
+  const { uri: tempUri } = await Print.printToFileAsync({ html })
+  const dir = `${FileSystem.documentDirectory}Documents/`
+  await FileSystem.makeDirectoryAsync(dir, { intermediates: true })
+  const localPath = `${dir}${filename}`
+  await FileSystem.deleteAsync(localPath, { idempotent: true })
+  await FileSystem.copyAsync({ from: tempUri, to: localPath })
+  const info = await FileSystem.getInfoAsync(localPath)
+  if (!info.exists) throw new Error('Échec création du PDF')
+  return localPath
 }
 
-export async function printOrdre(ord: OrdreReparation): Promise<void> {
+/** Génère le PDF et ouvre le menu partager (mobile — pas d’impression). */
+export async function shareSuiviPdf(suivi: VehiculeSuivi): Promise<void> {
+  const html = buildSuiviDocumentHtml(suivi)
+  const localPath = await preparePdfFile(html, `Fiche-suivi-${safeFilename(suivi.numero)}.pdf`)
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(localPath, {
+      mimeType: 'application/pdf',
+      dialogTitle: `Exporter ${suivi.numero}`,
+      UTI: 'com.adobe.pdf',
+    })
+    return
+  }
+  Alert.alert('PDF généré', `Fichier :\n${localPath}`)
+}
+
+export async function shareOrdrePdf(ord: OrdreReparation): Promise<void> {
   const html = buildOrdreDocumentHtml(ord)
-  await Print.printAsync({ html })
+  const localPath = await preparePdfFile(html, `Ordre-${safeFilename(ord.numero)}.pdf`)
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(localPath, {
+      mimeType: 'application/pdf',
+      dialogTitle: `Exporter ${ord.numero}`,
+      UTI: 'com.adobe.pdf',
+    })
+    return
+  }
+  Alert.alert('PDF généré', `Fichier :\n${localPath}`)
+}
+
+/** @deprecated Préférer shareSuiviPdf sur mobile */
+export async function printSuivi(suivi: VehiculeSuivi): Promise<void> {
+  await shareSuiviPdf(suivi)
+}
+
+/** @deprecated Préférer shareOrdrePdf sur mobile */
+export async function printOrdre(ord: OrdreReparation): Promise<void> {
+  await shareOrdrePdf(ord)
 }

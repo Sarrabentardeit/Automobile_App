@@ -83,6 +83,9 @@ export default function App() {
       user={session.user}
       accessToken={session.accessToken}
       onLogout={handleLogout}
+      onUserUpdated={(user) => {
+        setSession((prev) => (prev ? { ...prev, user } : prev))
+      }}
     />
   )
 }

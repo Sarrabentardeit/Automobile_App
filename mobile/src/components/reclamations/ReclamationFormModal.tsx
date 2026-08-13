@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
-  Dimensions,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +10,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import CenteredBlurModal from '../ui/CenteredBlurModal'
+import { getModalLayout } from '../../lib/modalLayout'
 import { formatDateFr } from '../../lib/reclamationDisplay'
 import { createReclamation, updateReclamation } from '../../lib/reclamationApi'
 import { theme } from '../../theme/appTheme'
@@ -61,7 +61,10 @@ export default function ReclamationFormModal({
   const [form, setForm] = useState<ReclamationInput>(emptyForm)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const dialogHeight = Math.min(Dimensions.get('window').height * 0.88, 640)
+  const { cardMaxHeight, scrollMaxHeight, footerPaddingBottom } = getModalLayout({
+    maxCard: 640,
+    chrome: 150,
+  })
 
   useEffect(() => {
     if (!visible) return
@@ -129,7 +132,7 @@ export default function ReclamationFormModal({
 
   return (
     <CenteredBlurModal visible={visible} onClose={onClose}>
-      <View style={[styles.card, { height: dialogHeight }]}>
+      <View style={[styles.card, { maxHeight: cardMaxHeight }]}>
         <View style={styles.accent} />
         <View style={styles.header}>
           <View style={styles.headerText}>
@@ -143,7 +146,7 @@ export default function ReclamationFormModal({
           </Pressable>
         </View>
         <ScrollView
-          style={{ flex: 1 }}
+          style={{ maxHeight: scrollMaxHeight }}
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           nestedScrollEnabled
@@ -275,7 +278,7 @@ export default function ReclamationFormModal({
             ))}
           </View>
         </ScrollView>
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: footerPaddingBottom }]}>
           <Pressable style={styles.cancelBtn} onPress={onClose} disabled={saving}>
             <Text style={styles.cancelText}>Annuler</Text>
           </Pressable>
@@ -348,7 +351,8 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     gap: 10,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: theme.borderLight,
   },

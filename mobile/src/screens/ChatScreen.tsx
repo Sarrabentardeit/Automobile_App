@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
+  Alert,
+  Dimensions,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -27,12 +29,14 @@ import {
   type ChatMember,
   type ChatMessage,
 } from '../lib/chatApi'
-import { getStatusBarInset } from '../lib/safeArea'
+import { getSheetBottomInset, getStatusBarInset } from '../lib/safeArea'
 import { theme } from '../theme/appTheme'
 
 type Props = {
   accessToken: string
   userId: number
+  /** Ouvre directement une conversation (deep-link notif) */
+  initialConversationId?: number | null
 }
 
 type ComposeMode = 'dm' | 'group'
@@ -57,8 +61,16 @@ function initials(name: string) {
   return name.slice(0, 2).toUpperCase()
 }
 
-export default function ChatScreen({ accessToken, userId }: Props) {
+export default function ChatScreen({
+  accessToken,
+  userId,
+  initialConversationId = null,
+}: Props) {
   const topInset = getStatusBarInset()
+  const bottomInset = getSheetBottomInset()
+  const winH = Dimensions.get('window').height
+  const composeCardH = Math.min(winH * 0.78, 560)
+  const composeScrollH = Math.max(180, composeCardH - 160)
   const [conversations, setConversations] = useState<ChatConversation[]>([])
   const [members, setMembers] = useState<ChatMember[]>([])
   const [selected, setSelected] = useState<ChatConversation | null>(null)
@@ -67,6 +79,7 @@ export default function ChatScreen({ accessToken, userId }: Props) {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [sending, setSending] = useState(false)
+  const [openingDm, setOpeningDm] = useState(false)
   const [showCompose, setShowCompose] = useState(false)
   const [composeMode, setComposeMode] = useState<ComposeMode>('dm')
   const [listFilter, setListFilter] = useState<ListFilter>('all')
@@ -74,7 +87,11 @@ export default function ChatScreen({ accessToken, userId }: Props) {
   const [groupPick, setGroupPick] = useState<number[]>([])
   const [showAddMembers, setShowAddMembers] = useState(false)
   const [addPick, setAddPick] = useState<number[]>([])
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const [hasMoreOlder, setHasMoreOlder] = useState(true)
   const listRef = useRef<FlatList<ChatMessage>>(null)
+  const messagesRef = useRef<ChatMessage[]>([])
+  messagesRef.current = messages
 
   const loadList = useCallback(async () => {
     const list = await fetchChatConversations(accessToken)
@@ -83,12 +100,14 @@ export default function ChatScreen({ accessToken, userId }: Props) {
       if (!prev) return prev
       return list.find((c) => c.id === prev.id) ?? prev
     })
+    return list
   }, [accessToken])
 
   const loadThread = useCallback(
     async (conv: ChatConversation) => {
-      const list = await fetchChatMessages(accessToken, conv.id)
+      const list = await fetchChatMessages(accessToken, conv.id, { limit: 40 })
       setMessages(list)
+      setHasMoreOlder(list.length >= 40)
       await markChatRead(accessToken, conv.id)
       setConversations((prev) =>
         prev.map((c) => (c.id === conv.id ? { ...c, unreadCount: 0 } : c))
@@ -96,6 +115,53 @@ export default function ChatScreen({ accessToken, userId }: Props) {
     },
     [accessToken]
   )
+
+  const pollNewMessages = useCallback(
+    async (conv: ChatConversation) => {
+      const newest = messagesRef.current[messagesRef.current.length - 1]?.createdAt
+      if (!newest) {
+        await loadThread(conv)
+        return
+      }
+      const newer = await fetchChatMessages(accessToken, conv.id, {
+        after: newest,
+        limit: 50,
+      })
+      if (newer.length === 0) return
+      setMessages((prev) => {
+        const ids = new Set(prev.map((m) => m.id))
+        const add = newer.filter((m) => !ids.has(m.id))
+        return add.length ? [...prev, ...add] : prev
+      })
+      await markChatRead(accessToken, conv.id)
+    },
+    [accessToken, loadThread]
+  )
+
+  const loadOlder = useCallback(async () => {
+    if (!selected || loadingOlder || !hasMoreOlder) return
+    const oldest = messagesRef.current[0]?.createdAt
+    if (!oldest) return
+    setLoadingOlder(true)
+    try {
+      const older = await fetchChatMessages(accessToken, selected.id, {
+        before: oldest,
+        limit: 40,
+      })
+      if (older.length === 0) {
+        setHasMoreOlder(false)
+        return
+      }
+      setHasMoreOlder(older.length >= 40)
+      setMessages((prev) => {
+        const ids = new Set(prev.map((m) => m.id))
+        const add = older.filter((m) => !ids.has(m.id))
+        return [...add, ...prev]
+      })
+    } finally {
+      setLoadingOlder(false)
+    }
+  }, [accessToken, selected, loadingOlder, hasMoreOlder])
 
   useEffect(() => {
     setLoading(true)
@@ -108,14 +174,31 @@ export default function ChatScreen({ accessToken, userId }: Props) {
   }, [accessToken, loadList])
 
   useEffect(() => {
+    if (!initialConversationId) return
+    void loadList()
+      .then((list) => {
+        const conv = list.find((c) => c.id === initialConversationId)
+        if (conv) {
+          setSelected(conv)
+          setDraft('')
+        }
+      })
+      .catch(() => undefined)
+  }, [initialConversationId, loadList])
+
+  useEffect(() => {
     if (!selected) return
-    void loadThread(selected).catch(() => setMessages([]))
+    const conv = selected
+    setHasMoreOlder(true)
+    void loadThread(conv).catch(() => setMessages([]))
     const id = setInterval(() => {
-      void loadThread(selected).catch(() => undefined)
+      void pollNewMessages(conv).catch(() => undefined)
       void loadList().catch(() => undefined)
-    }, 8000)
+    }, 10000)
     return () => clearInterval(id)
-  }, [selected?.id, loadThread, loadList])
+    // Recharger le fil uniquement au changement de conversation
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id])
 
   const openConversation = (c: ChatConversation) => {
     setSelected(c)
@@ -142,13 +225,21 @@ export default function ChatScreen({ accessToken, userId }: Props) {
   }
 
   const handleNewDm = async (memberId: number) => {
+    if (openingDm) return
+    setOpeningDm(true)
     try {
       const conv = await openDirectChat(accessToken, memberId)
+      if (!conv?.id) throw new Error('Conversation introuvable')
       setShowCompose(false)
       await loadList()
       openConversation(conv)
-    } catch {
-      /* ignore */
+    } catch (e) {
+      Alert.alert(
+        'Chat',
+        e instanceof Error ? e.message : 'Impossible d’ouvrir la conversation'
+      )
+    } finally {
+      setOpeningDm(false)
     }
   }
 
@@ -161,13 +252,17 @@ export default function ChatScreen({ accessToken, userId }: Props) {
     if (!title || groupPick.length < 1) return
     try {
       const conv = await createGroupChat(accessToken, title, groupPick)
+      if (!conv?.id) throw new Error('Groupe introuvable')
       setShowCompose(false)
       setGroupTitle('')
       setGroupPick([])
       await loadList()
       openConversation(conv)
-    } catch {
-      /* ignore */
+    } catch (e) {
+      Alert.alert(
+        'Chat',
+        e instanceof Error ? e.message : 'Impossible de créer le groupe'
+      )
     }
   }
 
@@ -342,10 +437,27 @@ export default function ChatScreen({ accessToken, userId }: Props) {
 
           <FlatList
             ref={listRef}
+            style={{ flex: 1 }}
             data={messages}
             keyExtractor={(m) => String(m.id)}
             contentContainerStyle={styles.msgPad}
-            onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+            onContentSizeChange={() => {
+              if (loadingOlder) return
+              listRef.current?.scrollToEnd({ animated: false })
+            }}
+            ListHeaderComponent={
+              hasMoreOlder && messages.length > 0 ? (
+                <Pressable
+                  style={styles.loadOlderBtn}
+                  onPress={() => void loadOlder()}
+                  disabled={loadingOlder}
+                >
+                  <Text style={styles.loadOlderText}>
+                    {loadingOlder ? 'Chargement…' : 'Messages plus anciens'}
+                  </Text>
+                </Pressable>
+              ) : null
+            }
             ListEmptyComponent={<Text style={styles.empty}>Écrivez le premier message</Text>}
             renderItem={({ item }) => (
               <View style={[styles.bubbleWrap, item.mine ? styles.mineWrap : styles.theirsWrap]}>
@@ -362,7 +474,7 @@ export default function ChatScreen({ accessToken, userId }: Props) {
             )}
           />
 
-          <View style={styles.composer}>
+          <View style={[styles.composer, { paddingBottom: Math.max(10, bottomInset) }]}>
             <TextInput
               style={styles.input}
               value={draft}
@@ -382,17 +494,23 @@ export default function ChatScreen({ accessToken, userId }: Props) {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Composer DM / Groupe */}
+      {/* Composer DM / Groupe — centré */}
       <Modal
         visible={showCompose}
         transparent
         animationType="fade"
         onRequestClose={() => setShowCompose(false)}
       >
-        <View style={styles.sheetOverlay}>
-          <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setShowCompose(false)} />
-          <View style={styles.sheet}>
-            <Text style={styles.sheetTitle}>Nouvelle conversation</Text>
+        <View style={styles.centerOverlay}>
+          <Pressable style={styles.backdropTap} onPress={() => setShowCompose(false)} />
+          <View style={[styles.composeCard, { height: composeCardH }]}>
+            <View style={styles.composeAccent} />
+            <View style={styles.composeHeader}>
+              <Text style={styles.sheetTitle}>Nouvelle conversation</Text>
+              <Pressable onPress={() => setShowCompose(false)} hitSlop={10}>
+                <Ionicons name="close" size={22} color={theme.textSecondary} />
+              </Pressable>
+            </View>
             <View style={styles.tabs}>
               <Pressable
                 style={[styles.tab, composeMode === 'dm' && styles.tabActive]}
@@ -414,17 +532,22 @@ export default function ChatScreen({ accessToken, userId }: Props) {
 
             {composeMode === 'dm' ? (
               <ScrollView
-                style={{ maxHeight: 360 }}
+                style={{ maxHeight: composeScrollH }}
                 keyboardShouldPersistTaps="handled"
                 nestedScrollEnabled
+                showsVerticalScrollIndicator
               >
+                {openingDm ? (
+                  <ActivityIndicator color={theme.primary} style={{ marginVertical: 24 }} />
+                ) : null}
                 {members.length === 0 ? (
                   <Text style={styles.empty}>Aucun autre utilisateur</Text>
                 ) : (
                   members.map((m) => (
                     <Pressable
                       key={m.id}
-                      style={styles.memberRow}
+                      style={[styles.memberRow, openingDm && { opacity: 0.5 }]}
+                      disabled={openingDm}
                       onPress={() => void handleNewDm(m.id)}
                     >
                       <View style={[styles.avatar, styles.avatarDm]}>
@@ -437,15 +560,17 @@ export default function ChatScreen({ accessToken, userId }: Props) {
                           {m.email ? ` · ${m.email}` : ''}
                         </Text>
                       </View>
+                      <Ionicons name="chevron-forward" size={18} color={theme.textSubtle} />
                     </Pressable>
                   ))
                 )}
               </ScrollView>
             ) : (
               <ScrollView
-                style={{ maxHeight: 400 }}
+                style={{ maxHeight: composeScrollH }}
                 keyboardShouldPersistTaps="handled"
                 nestedScrollEnabled
+                showsVerticalScrollIndicator
               >
                 <TextInput
                   style={styles.groupInput}
@@ -454,7 +579,9 @@ export default function ChatScreen({ accessToken, userId }: Props) {
                   placeholder="Nom du groupe"
                   placeholderTextColor={theme.textSubtle}
                 />
-                <Text style={styles.sheetHint}>Sélectionnez les membres</Text>
+                <Text style={[styles.sheetHint, { paddingHorizontal: 16 }]}>
+                  Sélectionnez les membres
+                </Text>
                 {members.map((m) => {
                   const on = groupPick.includes(m.id)
                   return (
@@ -493,18 +620,22 @@ export default function ChatScreen({ accessToken, userId }: Props) {
         animationType="fade"
         onRequestClose={() => setShowAddMembers(false)}
       >
-        <View style={styles.sheetOverlay}>
-          <Pressable
-            style={StyleSheet.absoluteFillObject}
-            onPress={() => setShowAddMembers(false)}
-          />
-          <View style={styles.sheet}>
-            <Text style={styles.sheetTitle}>Ajouter des membres</Text>
-            <Text style={styles.sheetHint}>
+        <View style={styles.centerOverlay}>
+          <Pressable style={styles.backdropTap} onPress={() => setShowAddMembers(false)} />
+          <View style={[styles.composeCard, { maxHeight: composeCardH, height: undefined }]}>
+            <View style={styles.composeAccent} />
+            <View style={styles.composeHeader}>
+              <Text style={styles.sheetTitle}>Ajouter des membres</Text>
+              <Pressable onPress={() => setShowAddMembers(false)} hitSlop={10}>
+                <Ionicons name="close" size={22} color={theme.textSecondary} />
+              </Pressable>
+            </View>
+            <Text style={[styles.sheetHint, { paddingHorizontal: 16 }]}>
               {selected?.participants.map((p) => p.nom).join(', ')}
             </Text>
             <ScrollView
-              style={{ maxHeight: 360 }}
+              style={{ maxHeight: composeScrollH }}
+              contentContainerStyle={{ paddingHorizontal: 16 }}
               keyboardShouldPersistTaps="handled"
               nestedScrollEnabled
             >
@@ -529,13 +660,15 @@ export default function ChatScreen({ accessToken, userId }: Props) {
               )}
             </ScrollView>
             {membersNotInSelected.length > 0 ? (
-              <Pressable
-                style={[styles.createBtn, addPick.length === 0 && styles.sendDisabled]}
-                disabled={addPick.length === 0}
-                onPress={() => void handleAddMembers()}
-              >
-                <Text style={styles.createBtnText}>Ajouter ({addPick.length})</Text>
-              </Pressable>
+              <View style={{ padding: 16, paddingBottom: Math.max(16, bottomInset) }}>
+                <Pressable
+                  style={[styles.createBtn, addPick.length === 0 && styles.sendDisabled]}
+                  disabled={addPick.length === 0}
+                  onPress={() => void handleAddMembers()}
+                >
+                  <Text style={styles.createBtnText}>Ajouter ({addPick.length})</Text>
+                </Pressable>
+              </View>
             ) : null}
           </View>
         </View>
@@ -593,6 +726,15 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   listPad: { padding: 12, paddingBottom: 40 },
   empty: { textAlign: 'center', color: theme.textSubtle, marginTop: 24, fontSize: 13 },
+  loadOlderBtn: {
+    alignSelf: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    marginBottom: 8,
+    borderRadius: 8,
+    backgroundColor: theme.surfaceMuted,
+  },
+  loadOlderText: { fontSize: 12, fontWeight: '600', color: theme.textSecondary },
   row: {
     flexDirection: 'row',
     gap: 12,
@@ -690,21 +832,46 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sendDisabled: { opacity: 0.4 },
-  sheetOverlay: {
+  centerOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 24,
   },
-  sheet: {
+  backdropTap: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
+  },
+  composeCard: {
+    width: '100%',
+    maxWidth: 420,
     backgroundColor: theme.surface,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    padding: 16,
-    paddingBottom: 28,
+    borderRadius: 20,
+    overflow: 'hidden',
+    zIndex: 2,
+    elevation: 12,
+    paddingBottom: 8,
   },
-  sheetTitle: { fontSize: 16, fontWeight: '800', color: theme.text, marginBottom: 4 },
+  composeAccent: { height: 3, backgroundColor: theme.primary },
+  composeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 4,
+  },
+  sheetTitle: { fontSize: 16, fontWeight: '800', color: theme.text },
   sheetHint: { fontSize: 12, color: theme.textMuted, marginBottom: 10 },
-  tabs: { flexDirection: 'row', gap: 8, marginBottom: 12, marginTop: 6 },
+  tabs: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+    marginTop: 8,
+    paddingHorizontal: 16,
+  },
   tab: {
     flex: 1,
     height: 36,
@@ -723,7 +890,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: theme.borderLight,
   },
@@ -736,6 +904,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: theme.text,
     marginBottom: 8,
+    marginHorizontal: 16,
     backgroundColor: theme.surfaceMuted,
   },
   check: {
@@ -750,6 +919,7 @@ const styles = StyleSheet.create({
   checkOn: { backgroundColor: theme.primary, borderColor: theme.primary },
   createBtn: {
     marginTop: 12,
+    marginHorizontal: 16,
     height: 44,
     borderRadius: 12,
     backgroundColor: theme.primary,

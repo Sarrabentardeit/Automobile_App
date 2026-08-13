@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
-  Dimensions,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,7 +12,7 @@ import {
   View,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import CenteredBlurModal from '../ui/CenteredBlurModal'
+import ModalBlurBackdrop from '../ui/ModalBlurBackdrop'
 import CalendarMemberPicker, { buildMemberRows } from './CalendarMemberPicker'
 import CalendarVehiclePicker, { type VehiclePickerValue } from './CalendarVehiclePicker'
 import { createClient, fetchClients } from '../../lib/clientApi'
@@ -20,6 +22,7 @@ import {
 } from '../../lib/calendarApi'
 import { formatDateFr } from '../../lib/calendarGrid'
 import { createNotification } from '../../lib/notifications'
+import { getModalLayout } from '../../lib/modalLayout'
 import { buildModeleLabel, parseMarqueModele } from '../../lib/vehiculeBrands'
 import type { AppUser } from '../../lib/vehiculeApi'
 import { theme } from '../../theme/appTheme'
@@ -85,7 +88,10 @@ export default function CalendarAssignmentFormModal({
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const dialogHeight = Math.min(Dimensions.get('window').height * 0.9, 680)
+  const { cardMaxHeight, scrollMaxHeight, cardWidth, footerPaddingBottom } = getModalLayout({
+    maxCard: 640,
+    chrome: 150,
+  })
 
   useEffect(() => {
     if (!visible) return
@@ -226,6 +232,10 @@ export default function CalendarAssignmentFormModal({
               message: `Affectation le ${formatDateFr(form.date)} : ${resolvedLabel} — ${form.description || 'Travail'}`,
               type: 'calendar_assignment',
               title: 'Calendrier',
+              vehiculeId:
+                typeof form.vehicleId === 'number' && form.vehicleId > 0
+                  ? form.vehicleId
+                  : undefined,
             }).catch(() => {})
           }
         }
@@ -240,103 +250,129 @@ export default function CalendarAssignmentFormModal({
   }
 
   return (
-    <CenteredBlurModal visible={visible} onClose={onClose}>
-      <View style={[styles.card, { maxHeight: dialogHeight }]}>
-        <View style={styles.accent} />
-        <View style={styles.header}>
-          <View style={styles.headerText}>
-            <Text style={styles.title}>
-              {editing ? 'Modifier affectation' : 'Nouvelle affectation'}
-            </Text>
-            <Text style={styles.subtitle}>{formatDateFr(form.date)}</Text>
-          </View>
-          <Pressable onPress={onClose} hitSlop={10}>
-            <Ionicons name="close" size={22} color={theme.textSecondary} />
-          </Pressable>
-        </View>
-
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-          nestedScrollEnabled
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.overlay}>
+        <ModalBlurBackdrop onPress={onClose} />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.centerWrap}
+          pointerEvents="box-none"
         >
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          <View style={[styles.card, { width: cardWidth, maxHeight: cardMaxHeight }]}>
+            <View style={styles.accent} />
+            <View style={styles.header}>
+              <View style={styles.headerText}>
+                <Text style={styles.title}>
+                  {editing ? 'Modifier affectation' : 'Nouvelle affectation'}
+                </Text>
+                <Text style={styles.subtitle}>{formatDateFr(form.date)}</Text>
+              </View>
+              <Pressable onPress={onClose} hitSlop={10}>
+                <Ionicons name="close" size={22} color={theme.textSecondary} />
+              </Pressable>
+            </View>
 
-          <Text style={styles.label}>Équipe *</Text>
-          <CalendarMemberPicker
-            members={memberRows}
-            principal={form.memberName}
-            extraMembers={form.extraMembers}
-            onPrincipalChange={setPrincipal}
-            onExtraToggle={toggleExtraMember}
-            showExtra={!editing}
-          />
+            <ScrollView
+              style={{ maxHeight: scrollMaxHeight }}
+              contentContainerStyle={styles.scroll}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+            >
+              {error ? <Text style={styles.error}>{error}</Text> : null}
 
-          <Text style={styles.label}>Véhicule</Text>
-          <CalendarVehiclePicker
-            vehicules={vehicules}
-            value={vehiclePicker}
-            onChange={handleVehicleChange}
-          />
+              <Text style={styles.label}>Équipe *</Text>
+              {memberRows.length === 0 ? (
+                <Text style={styles.hint}>Aucun membre d’équipe disponible</Text>
+              ) : (
+                <CalendarMemberPicker
+                  members={memberRows}
+                  principal={form.memberName}
+                  extraMembers={form.extraMembers}
+                  onPrincipalChange={setPrincipal}
+                  onExtraToggle={toggleExtraMember}
+                  showExtra={!editing}
+                />
+              )}
 
-          <Text style={styles.label}>Travail à faire</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            value={form.description}
-            onChangeText={(description) => setForm((f) => ({ ...f, description }))}
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-            placeholder="Ex. JOINT CULASSE, DIAG, 4 AMORTISSEURS…"
-            placeholderTextColor={theme.textSubtle}
-          />
+              <Text style={styles.label}>Véhicule</Text>
+              <CalendarVehiclePicker
+                vehicules={vehicules}
+                value={vehiclePicker}
+                onChange={handleVehicleChange}
+              />
 
-          <Text style={styles.label}>Client (optionnel)</Text>
-          <TextInput
-            style={styles.input}
-            value={form.clientName}
-            onChangeText={(clientName) => setForm((f) => ({ ...f, clientName }))}
-            placeholder="Nom du client"
-            placeholderTextColor={theme.textSubtle}
-          />
-          <TextInput
-            style={[styles.input, { marginTop: 8 }]}
-            value={form.clientTelephone}
-            onChangeText={(clientTelephone) => setForm((f) => ({ ...f, clientTelephone }))}
-            keyboardType="phone-pad"
-            placeholder="Téléphone"
-            placeholderTextColor={theme.textSubtle}
-          />
-        </ScrollView>
+              <Text style={styles.label}>Travail à faire</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={form.description}
+                onChangeText={(description) => setForm((f) => ({ ...f, description }))}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+                placeholder="Ex. JOINT CULASSE, DIAG, 4 AMORTISSEURS…"
+                placeholderTextColor={theme.textSubtle}
+              />
 
-        <View style={styles.footer}>
-          <Pressable style={styles.cancelBtn} onPress={onClose} disabled={saving}>
-            <Text style={styles.cancelText}>Annuler</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.saveBtn, (!canSave || saving) && styles.disabled]}
-            onPress={() => void submit()}
-            disabled={!canSave || saving}
-          >
-            {saving ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={styles.saveText}>{editing ? 'Mettre à jour' : 'Enregistrer'}</Text>
-            )}
-          </Pressable>
-        </View>
+              <Text style={styles.label}>Client (optionnel)</Text>
+              <TextInput
+                style={styles.input}
+                value={form.clientName}
+                onChangeText={(clientName) => setForm((f) => ({ ...f, clientName }))}
+                placeholder="Nom du client"
+                placeholderTextColor={theme.textSubtle}
+              />
+              <TextInput
+                style={[styles.input, { marginTop: 8 }]}
+                value={form.clientTelephone}
+                onChangeText={(clientTelephone) => setForm((f) => ({ ...f, clientTelephone }))}
+                keyboardType="phone-pad"
+                placeholder="Téléphone"
+                placeholderTextColor={theme.textSubtle}
+              />
+            </ScrollView>
+
+            <View style={[styles.footer, { paddingBottom: footerPaddingBottom }]}>
+              <Pressable style={styles.cancelBtn} onPress={onClose} disabled={saving}>
+                <Text style={styles.cancelText}>Annuler</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.saveBtn, (!canSave || saving) && styles.disabled]}
+                onPress={() => void submit()}
+                disabled={!canSave || saving}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.saveText}>{editing ? 'Mettre à jour' : 'Enregistrer'}</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </View>
-    </CenteredBlurModal>
+    </Modal>
   )
 }
 
 const styles = StyleSheet.create({
-  card: {
+  overlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  centerWrap: {
     width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    zIndex: 2,
+  },
+  card: {
     backgroundColor: theme.surface,
     borderRadius: 20,
     overflow: 'hidden',
+    ...theme.shadow.sm,
     elevation: 16,
   },
   accent: { height: 3, backgroundColor: theme.primary },
@@ -353,7 +389,7 @@ const styles = StyleSheet.create({
   headerText: { flex: 1 },
   title: { fontSize: 17, fontWeight: '800', color: theme.text },
   subtitle: { fontSize: 12, color: theme.textMuted, marginTop: 2 },
-  scroll: { padding: 16, paddingBottom: 8 },
+  scroll: { padding: 16, paddingBottom: 20 },
   label: {
     fontSize: 11,
     fontWeight: '700',
@@ -362,6 +398,14 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     marginBottom: 8,
     marginTop: 10,
+  },
+  hint: {
+    fontSize: 13,
+    color: theme.textMuted,
+    backgroundColor: theme.bg,
+    padding: 12,
+    borderRadius: theme.radius.sm,
+    marginBottom: 4,
   },
   input: {
     borderWidth: 1,
@@ -378,7 +422,8 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     gap: 10,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: theme.borderLight,
   },

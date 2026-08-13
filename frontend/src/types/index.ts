@@ -97,6 +97,7 @@ export interface User {
   role: Role
   permissions: Permissions
   statut: 'actif' | 'inactif'
+  avatarUrl?: string | null
   date_creation: string
   derniere_connexion: string | null
 }

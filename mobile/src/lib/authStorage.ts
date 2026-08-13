@@ -11,6 +11,8 @@ export type StoredUser = {
   fullName: string
   role: string
   permissions: Permissions
+  avatarUrl?: string | null
+  telephone?: string
 }
 
 /** Garantit les permissions (sessions enregistrées avant la mise à jour mobile). */
@@ -26,7 +28,13 @@ export function normalizeStoredUser(raw: Partial<StoredUser> & {
     fullName: raw.fullName,
     role: raw.role || 'technicien',
     permissions: raw.permissions ?? mergePermissions(raw.role || 'technicien', undefined),
+    avatarUrl: raw.avatarUrl ?? null,
+    telephone: raw.telephone ?? '',
   }
+}
+
+export async function updateStoredUser(user: StoredUser): Promise<void> {
+  await SecureStore.setItemAsync(KEY_USER, JSON.stringify(user))
 }
 
 export async function saveSession(

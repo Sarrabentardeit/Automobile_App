@@ -10,6 +10,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import FullScreenBlurModal from './ui/FullScreenBlurModal'
 import SuiviExcelForm from './SuiviExcelForm'
+import { getSheetBottomInset } from '../lib/safeArea'
 import { createSuivi, updateSuivi } from '../lib/vehiculeApi'
 import type { VehiculeSuivi, VehiculeSuiviInput } from '../types/vehicule'
 
@@ -23,6 +24,8 @@ type Props = {
   suivi: VehiculeSuivi | null
   accessToken: string
   userName: string
+  /** Aperçu lecture seule (bouton Voir) */
+  readOnly?: boolean
   onClose: () => void
   onSaved: () => void
 }
@@ -49,14 +52,16 @@ export default function SuiviFormModal({
   suivi,
   accessToken,
   userName,
+  readOnly = false,
   onClose,
   onSaved,
 }: Props) {
-  const isEdit = !!suivi
+  const isEdit = !!suivi && !readOnly
   const [form, setForm] = useState<VehiculeSuiviInput>(
     emptyInput(vehiculeModele, vehiculeImmat, userName)
   )
   const [saving, setSaving] = useState(false)
+  const footerPaddingBottom = Math.max(16, getSheetBottomInset())
 
   useEffect(() => {
     if (!visible) return
@@ -78,6 +83,7 @@ export default function SuiviFormModal({
   }, [visible, suivi, vehiculeModele, vehiculeImmat, userName])
 
   const submit = async () => {
+    if (readOnly) return
     setSaving(true)
     try {
       if (isEdit && suivi) {
@@ -94,6 +100,12 @@ export default function SuiviFormModal({
     }
   }
 
+  const title = readOnly
+    ? `Aperçu ${suivi?.numero ?? ''}`
+    : isEdit
+      ? `Modifier ${suivi?.numero}`
+      : 'Nouvelle fiche suivi'
+
   return (
     <FullScreenBlurModal visible={visible} onClose={onClose}>
       <View style={styles.root}>
@@ -101,9 +113,7 @@ export default function SuiviFormModal({
           <Pressable onPress={onClose}>
             <Ionicons name="close" size={26} color="#111827" />
           </Pressable>
-          <Text style={styles.title}>
-            {isEdit ? `Modifier ${suivi?.numero}` : 'Nouvelle fiche suivi'}
-          </Text>
+          <Text style={styles.title}>{title}</Text>
           <View style={{ width: 26 }} />
         </View>
         <ScrollView
@@ -115,22 +125,31 @@ export default function SuiviFormModal({
           <SuiviExcelForm
             data={form}
             onChange={setForm}
-            numero={isEdit ? suivi?.numero : undefined}
+            numero={suivi?.numero}
+            readOnly={readOnly}
           />
         </ScrollView>
-        <View style={styles.footer}>
-          <Pressable style={styles.btnOutline} onPress={onClose}>
-            <Text style={styles.btnOutlineText}>Annuler</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.btnPrimary, saving && styles.disabled]}
-            disabled={saving}
-            onPress={() => void submit()}
-          >
-            <Text style={styles.btnPrimaryText}>
-              {saving ? 'Enregistrement...' : 'Enregistrer'}
-            </Text>
-          </Pressable>
+        <View style={[styles.footer, { paddingBottom: footerPaddingBottom }]}>
+          {readOnly ? (
+            <Pressable style={styles.btnPrimary} onPress={onClose}>
+              <Text style={styles.btnPrimaryText}>Fermer</Text>
+            </Pressable>
+          ) : (
+            <>
+              <Pressable style={styles.btnOutline} onPress={onClose}>
+                <Text style={styles.btnOutlineText}>Annuler</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.btnPrimary, saving && styles.disabled]}
+                disabled={saving}
+                onPress={() => void submit()}
+              >
+                <Text style={styles.btnPrimaryText}>
+                  {saving ? 'Enregistrement...' : 'Enregistrer'}
+                </Text>
+              </Pressable>
+            </>
+          )}
         </View>
       </View>
     </FullScreenBlurModal>
@@ -149,7 +168,14 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 17, fontWeight: '700' },
   scroll: { padding: 16, paddingBottom: 24 },
-  footer: { flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: '#e5e7eb' },
+  footer: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
   btnOutline: {
     flex: 1,
     paddingVertical: 14,

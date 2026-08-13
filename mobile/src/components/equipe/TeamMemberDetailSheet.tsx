@@ -1,8 +1,7 @@
-import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import ModalBlurBackdrop from '../ui/ModalBlurBackdrop'
-import { getStatusBarInset } from '../../lib/safeArea'
+import CenteredSheetShell from '../ui/CenteredSheetShell'
 import { theme } from '../../theme/appTheme'
 import type { TeamMember } from '../../types/teamMember'
 
@@ -42,83 +41,13 @@ export default function TeamMemberDetailSheet({
 
   const tel = member.phone?.replace(/\s/g, '') ?? ''
   const [c1, c2] = avatarGradient(member.name)
-  const bottomPad = Math.max(20, getStatusBarInset() > 40 ? 12 : 20)
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <ModalBlurBackdrop onPress={onClose} />
-        <View style={[styles.sheet, { paddingBottom: bottomPad }]}>
-        <View style={styles.handle} />
-        <Pressable onPress={onClose} hitSlop={12} style={styles.closeFab}>
-          <Ionicons name="close" size={22} color={theme.textSecondary} />
-        </Pressable>
-
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-          <View style={styles.profile}>
-            <LinearGradient colors={[c1, c2]} style={styles.avatarLg}>
-              <Text style={styles.avatarLgText}>{initial(member.name)}</Text>
-            </LinearGradient>
-            <Text style={styles.profileName}>{member.name}</Text>
-          </View>
-
-          {tel ? (
-            <Pressable
-              style={({ pressed }) => [styles.callBtn, pressed && styles.pressed]}
-              onPress={() => void Linking.openURL(`tel:${tel}`)}
-            >
-              <Ionicons name="call" size={22} color="#fff" />
-              <Text style={styles.callBtnText}>Appeler</Text>
-            </Pressable>
-          ) : (
-            <View style={styles.noPhoneBox}>
-              <Ionicons name="call-outline" size={20} color={theme.textMuted} />
-              <Text style={styles.noPhoneText}>Aucun numéro enregistré</Text>
-            </View>
-          )}
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Coordonnées</Text>
-            <View style={styles.sectionCard}>
-              <View style={styles.infoRow}>
-                <View style={styles.infoIcon}>
-                  <Ionicons name="person-outline" size={18} color={theme.primary} />
-                </View>
-                <View style={styles.infoText}>
-                  <Text style={styles.infoLabel}>Nom</Text>
-                  <Text style={styles.infoValue}>{member.name}</Text>
-                </View>
-              </View>
-              <View style={styles.divider} />
-              <Pressable
-                disabled={!tel}
-                onPress={() => tel && void Linking.openURL(`tel:${tel}`)}
-                style={({ pressed }) => pressed && tel && { opacity: 0.88 }}
-              >
-                <View style={styles.infoRow}>
-                  <View style={[styles.infoIcon, tel && styles.infoIconAccent]}>
-                    <Ionicons
-                      name="call-outline"
-                      size={18}
-                      color={tel ? theme.primary : theme.textMuted}
-                    />
-                  </View>
-                  <View style={styles.infoText}>
-                    <Text style={styles.infoLabel}>Téléphone</Text>
-                    <Text style={[styles.infoValue, tel && styles.infoValueAccent]}>
-                      {member.phone || '—'}
-                    </Text>
-                  </View>
-                  {tel ? (
-                    <Ionicons name="chevron-forward" size={18} color={theme.textSubtle} />
-                  ) : null}
-                </View>
-              </Pressable>
-            </View>
-          </View>
-        </ScrollView>
-
-        <View style={styles.footer}>
+    <CenteredSheetShell
+      visible={visible}
+      onClose={onClose}
+      footer={
+        <>
           <Pressable
             style={({ pressed }) => [styles.footerBtn, styles.footerEdit, pressed && styles.pressed]}
             onPress={onEdit}
@@ -133,49 +62,75 @@ export default function TeamMemberDetailSheet({
             <Ionicons name="trash-outline" size={20} color={theme.danger} />
             <Text style={styles.footerDeleteText}>Supprimer</Text>
           </Pressable>
+        </>
+      }
+    >
+      <View style={styles.profile}>
+        <LinearGradient colors={[c1, c2]} style={styles.avatarLg}>
+          <Text style={styles.avatarLgText}>{initial(member.name)}</Text>
+        </LinearGradient>
+        <Text style={styles.profileName}>{member.name}</Text>
+      </View>
+
+      {tel ? (
+        <Pressable
+          style={({ pressed }) => [styles.callBtn, pressed && styles.pressed]}
+          onPress={() => void Linking.openURL(`tel:${tel}`)}
+        >
+          <Ionicons name="call" size={22} color="#fff" />
+          <Text style={styles.callBtnText}>Appeler</Text>
+        </Pressable>
+      ) : (
+        <View style={styles.noPhoneBox}>
+          <Ionicons name="call-outline" size={20} color={theme.textMuted} />
+          <Text style={styles.noPhoneText}>Aucun numéro enregistré</Text>
         </View>
+      )}
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Coordonnées</Text>
+        <View style={styles.sectionCard}>
+          <View style={styles.infoRow}>
+            <View style={styles.infoIcon}>
+              <Ionicons name="person-outline" size={18} color={theme.primary} />
+            </View>
+            <View style={styles.infoText}>
+              <Text style={styles.infoLabel}>Nom</Text>
+              <Text style={styles.infoValue}>{member.name}</Text>
+            </View>
+          </View>
+          <View style={styles.divider} />
+          <Pressable
+            disabled={!tel}
+            onPress={() => tel && void Linking.openURL(`tel:${tel}`)}
+            style={({ pressed }) => pressed && tel && { opacity: 0.88 }}
+          >
+            <View style={styles.infoRow}>
+              <View style={[styles.infoIcon, tel && styles.infoIconAccent]}>
+                <Ionicons
+                  name="call-outline"
+                  size={18}
+                  color={tel ? theme.primary : theme.textMuted}
+                />
+              </View>
+              <View style={styles.infoText}>
+                <Text style={styles.infoLabel}>Téléphone</Text>
+                <Text style={[styles.infoValue, tel && styles.infoValueAccent]}>
+                  {member.phone || '—'}
+                </Text>
+              </View>
+              {tel ? (
+                <Ionicons name="chevron-forward" size={18} color={theme.textSubtle} />
+              ) : null}
+            </View>
+          </Pressable>
         </View>
       </View>
-    </Modal>
+    </CenteredSheetShell>
   )
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    maxHeight: '88%',
-    backgroundColor: theme.surface,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    zIndex: 1,
-    ...theme.shadow.sm,
-    elevation: 12,
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: theme.border,
-    marginTop: 10,
-    marginBottom: 4,
-  },
-  closeFab: {
-    position: 'absolute',
-    top: 12,
-    right: 16,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: theme.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
-  },
-  scroll: { paddingHorizontal: 20, paddingBottom: 8 },
   profile: { alignItems: 'center', paddingTop: 8, paddingBottom: 16 },
   avatarLg: {
     width: 72,
@@ -192,6 +147,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: theme.text,
     textAlign: 'center',
+    paddingHorizontal: 36,
   },
   callBtn: {
     flexDirection: 'row',
@@ -251,15 +207,6 @@ const styles = StyleSheet.create({
   infoValue: { fontSize: 15, fontWeight: '600', color: theme.text },
   infoValueAccent: { color: theme.primary },
   divider: { height: 1, backgroundColor: theme.borderLight, marginLeft: 62 },
-  footer: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 8,
-    borderTopWidth: 1,
-    borderTopColor: theme.borderLight,
-  },
   footerBtn: {
     flex: 1,
     flexDirection: 'row',

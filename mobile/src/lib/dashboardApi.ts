@@ -1,6 +1,11 @@
 import { apiFetch, fetchVehiculeCounts } from './api'
 import type { VehiculeFilteredCounts } from './vehiculeFilters'
-import type { DashboardSummary, VehiculeStats } from '../types/dashboard'
+import type {
+  DashboardSummary,
+  DashboardTodayPeriod,
+  DashboardTodayResponse,
+  VehiculeStats,
+} from '../types/dashboard'
 
 export function fetchVehiculeStats(
   token: string,
@@ -26,5 +31,19 @@ export function fetchDashboardCounts(
   return fetchVehiculeCounts(token, {
     technicien_id: technicienId,
     includeEtat: true,
+  })
+}
+
+export function fetchDashboardToday(
+  token: string,
+  params: { period: DashboardTodayPeriod; year?: number; month?: number }
+): Promise<DashboardTodayResponse> {
+  return apiFetch<DashboardTodayResponse>('/vehicules/dashboard-today', {
+    token,
+    params: {
+      period: params.period,
+      year: params.year,
+      month: params.month,
+    },
   })
 }

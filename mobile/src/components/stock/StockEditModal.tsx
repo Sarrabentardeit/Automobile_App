@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
-  Dimensions,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import CenteredBlurModal from '../ui/CenteredBlurModal'
 import { updateProduit } from '../../lib/produitApi'
+import { getModalLayout } from '../../lib/modalLayout'
 import { theme } from '../../theme/appTheme'
 import { PRODUIT_CATEGORIES_PRESET, type ProduitStock } from '../../types/produitStock'
 
@@ -39,7 +39,10 @@ export default function StockEditModal({
   const [valeur, setValeur] = useState('0')
   const [saving, setSaving] = useState(false)
   const lastUnitRef = useRef(0)
-  const dialogHeight = Math.min(Dimensions.get('window').height * 0.72, 480)
+  const { cardMaxHeight, scrollMaxHeight, footerPaddingBottom } = getModalLayout({
+    maxCard: 480,
+    chrome: 130,
+  })
 
   useEffect(() => {
     if (!visible || !produit) return
@@ -97,7 +100,7 @@ export default function StockEditModal({
 
   return (
     <CenteredBlurModal visible={visible} onClose={onClose}>
-      <View style={[styles.card, { height: dialogHeight }]}>
+      <View style={[styles.card, { maxHeight: cardMaxHeight }]}>
         <View style={styles.accent} />
         <View style={styles.header}>
           <Text style={styles.title}>Modifier le produit</Text>
@@ -105,7 +108,11 @@ export default function StockEditModal({
             <Ionicons name="close" size={22} color={theme.textSecondary} />
           </Pressable>
         </View>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={{ maxHeight: scrollMaxHeight }}
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+        >
           <Text style={styles.label}>Nom</Text>
           <TextInput style={styles.input} value={nom} onChangeText={setNom} />
           <Text style={styles.label}>Catégorie</Text>
@@ -147,7 +154,7 @@ export default function StockEditModal({
             </View>
           </View>
         </ScrollView>
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: footerPaddingBottom }]}>
           {onDelete ? (
             <Pressable style={styles.deleteBtn} onPress={onDelete} disabled={saving}>
               <Ionicons name="trash-outline" size={20} color={theme.danger} />

@@ -13,6 +13,12 @@ interface AuthContextType {
   permissions: Permissions | null
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   register: (email: string, password: string, fullName: string) => Promise<{ success: boolean; error?: string }>
+  updateProfile: (data: {
+    fullName: string
+    telephone?: string
+    avatarDataUrl?: string | null
+    removeAvatar?: boolean
+  }) => Promise<{ success: boolean; error?: string }>
   logout: () => void
   getAccessToken: () => string | null
   isAuthenticated: boolean
@@ -57,6 +63,7 @@ function backendUserToFrontend(res: LoginResponse['user']): User {
     telephone: res.telephone ?? '',
     role,
     permissions,
+    avatarUrl: res.avatarUrl ?? null,
     statut: 'actif',
     date_creation: new Date().toISOString().slice(0, 10),
     derniere_connexion: new Date().toISOString(),
@@ -130,6 +137,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [persistAuth]
   )
 
+  const updateProfile = useCallback(
+    async (data: {
+      fullName: string
+      telephone?: string
+      avatarDataUrl?: string | null
+      removeAvatar?: boolean
+    }): Promise<{ success: boolean; error?: string }> => {
+      const token = localStorage.getItem(STORAGE_ACCESS)
+      if (!token) return { success: false, error: 'Session expirée' }
+      try {
+        const res = await apiFetch<{
+          id: number
+          email: string
+          fullName?: string
+          nom_complet?: string
+          telephone?: string
+          avatarUrl?: string | null
+          role: string
+          permissions?: Record<string, unknown>
+        }>('/users/me', {
+          method: 'PATCH',
+          token,
+          body: JSON.stringify({
+            fullName: data.fullName.trim(),
+            telephone: data.telephone ?? '',
+            avatarDataUrl: data.avatarDataUrl,
+            removeAvatar: data.removeAvatar,
+          }),
+        })
+        setUser((prev) => {
+          if (!prev) return prev
+          const next: User = {
+            ...prev,
+            nom_complet: res.fullName ?? res.nom_complet ?? data.fullName.trim(),
+            telephone: res.telephone ?? data.telephone ?? '',
+            avatarUrl: data.removeAvatar
+              ? null
+              : (res.avatarUrl ?? prev.avatarUrl ?? null),
+          }
+          localStorage.setItem(STORAGE_USER, JSON.stringify(next))
+          return next
+        })
+        return { success: true }
+      } catch (err) {
+        return {
+          success: false,
+          error: err instanceof Error ? err.message : 'Erreur enregistrement',
+        }
+      }
+    },
+    []
+  )
+
   const logout = useCallback(() => {
     setUser(null)
     localStorage.removeItem(STORAGE_USER)
@@ -186,6 +246,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         permissions,
         login,
         register,
+        updateProfile,
         logout,
         getAccessToken,
         isAuthenticated: !!user,

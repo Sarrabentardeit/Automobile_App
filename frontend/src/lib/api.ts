@@ -11,6 +11,22 @@ export function getApiUrl(path: string, params?: Record<string, string | number 
   return qs ? `${base}?${qs}` : base
 }
 
+/**
+ * URL publique d'un fichier /uploads/... (même host que l'API).
+ * Ne pas utiliser `/api${path}` en relatif : en local ça sert souvent le HTML Vite → image cassée.
+ */
+export function resolveUploadUrl(path: string | null | undefined, cacheBust?: string | number): string {
+  if (!path) return ''
+  if (path.startsWith('data:') || path.startsWith('http://') || path.startsWith('https://')) {
+    return path
+  }
+  const base = API_BASE.replace(/\/$/, '')
+  const p = path.startsWith('/') ? path : `/${path}`
+  const url = `${base}${p}`
+  if (cacheBust == null || cacheBust === '') return url
+  return `${url}${url.includes('?') ? '&' : '?'}t=${encodeURIComponent(String(cacheBust))}`
+}
+
 /** Permet à l'app d'enregistrer le refresh token pour réessayer après 401 */
 export interface AuthBridge {
   refresh: () => Promise<string | null>
@@ -59,6 +75,7 @@ export interface LoginResponse {
     fullName: string
     role: string
     telephone?: string
+    avatarUrl?: string | null
     permissions?: Record<string, unknown>
   }
   accessToken: string

@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { prisma } from '../lib/prisma'
+import { notifyMany } from '../lib/notify'
 import { authenticate, type AuthRequest } from '../middleware/auth'
 
 const router = Router()
@@ -395,12 +396,14 @@ router.get('/conversations/:id/messages', authenticate(), async (req: AuthReques
     }
 
     const before = typeof req.query.before === 'string' ? req.query.before : undefined
+    const after = typeof req.query.after === 'string' ? req.query.after : undefined
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || LIST_LIMIT))
 
     const messages = await db.chatMessage.findMany({
       where: {
         conversationId: id,
         ...(before ? { createdAt: { lt: new Date(before) } } : {}),
+        ...(after ? { createdAt: { gt: new Date(after) } } : {}),
       },
       orderBy: { createdAt: 'desc' },
       take: limit,
@@ -463,6 +466,27 @@ router.post('/conversations/:id/messages', authenticate(), async (req: AuthReque
       where: { conversationId_userId: { conversationId: id, userId: me } },
       data: { lastReadAt: new Date() },
     })
+
+    // Notifs deep-link + push pour les autres participants
+    try {
+      const others = (await db.chatParticipant.findMany({
+        where: { conversationId: id, userId: { not: me } },
+        select: { userId: true },
+      })) as Array<{ userId: number }>
+      const preview = body.length > 120 ? `${body.slice(0, 117)}…` : body
+      const senderName = userLabel(msg.sender)
+      void notifyMany(
+        others.map((p) => p.userId),
+        {
+          type: 'chat_message',
+          title: 'Nouveau message',
+          message: `${senderName}: ${preview}`,
+          conversationId: id,
+        }
+      )
+    } catch (e) {
+      console.warn('[chat] notify participants failed', e)
+    }
 
     return res.status(201).json({
       data: {

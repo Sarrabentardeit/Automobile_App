@@ -99,6 +99,8 @@ export default function LoginScreen({ onSuccess }: Props) {
         fullName: res.user.fullName,
         role: res.user.role,
         permissions: mergePermissions(res.user.role, res.user.permissions),
+        avatarUrl: res.user.avatarUrl ?? null,
+        telephone: res.user.telephone ?? '',
       })
       await saveSession(user, res.accessToken, res.refreshToken)
       onSuccess(user)

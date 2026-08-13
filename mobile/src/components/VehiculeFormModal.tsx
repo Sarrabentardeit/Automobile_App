@@ -16,7 +16,8 @@ import CenteredBlurModal from './ui/CenteredBlurModal'
 import ModalBlurBackdrop from './ui/ModalBlurBackdrop'
 import { BRAND_OPTIONS, parseMarqueModele } from '../constants/brands'
 import { pickVehiculeImages } from '../lib/imageUpload'
-import { getStatusBarInset } from '../lib/safeArea'
+import { getModalLayout } from '../lib/modalLayout'
+import { getSheetBottomInset, getStatusBarInset } from '../lib/safeArea'
 import { notifyAssignedUsers } from '../lib/notifications'
 import {
   createVehicule,
@@ -98,7 +99,13 @@ export default function VehiculeFormModal({
   const [imageNote, setImageNote] = useState('')
   const [showMarquePicker, setShowMarquePicker] = useState(false)
   const statusBarInset = getStatusBarInset()
+  const bottomInset = getSheetBottomInset()
   const dialogHeight = Math.min(Dimensions.get('window').height * 0.88, 680)
+  const {
+    cardMaxHeight: pickerMaxHeight,
+    scrollMaxHeight: pickerScrollMaxHeight,
+    cardWidth: pickerWidth,
+  } = getModalLayout({ maxCard: 520, chrome: 72 })
 
   useEffect(() => {
     if (!visible) return
@@ -409,7 +416,7 @@ export default function VehiculeFormModal({
           </View>
         </ScrollView>
 
-        <View style={[styles.footer, { paddingBottom: Math.max(16, statusBarInset > 20 ? 8 : 16) }]}>
+        <View style={[styles.footer, { paddingBottom: Math.max(16, bottomInset) }]}>
           <Pressable style={styles.btnOutline} onPress={onClose}>
             <Text style={styles.btnOutlineText}>Annuler</Text>
           </Pressable>
@@ -433,14 +440,17 @@ export default function VehiculeFormModal({
       >
         <View style={styles.pickerOverlay}>
           <ModalBlurBackdrop onPress={() => setShowMarquePicker(false)} />
-          <View style={styles.pickerSheet}>
+          <View style={[styles.pickerSheet, { width: pickerWidth, maxHeight: pickerMaxHeight }]}>
             <View style={styles.pickerHeader}>
               <Text style={styles.pickerTitle}>Choisir une marque</Text>
               <Pressable onPress={() => setShowMarquePicker(false)} hitSlop={8}>
                 <Ionicons name="close" size={24} color="#6b7280" />
               </Pressable>
             </View>
-            <ScrollView style={styles.pickerScroll} keyboardShouldPersistTaps="handled">
+            <ScrollView
+              style={{ maxHeight: pickerScrollMaxHeight }}
+              keyboardShouldPersistTaps="handled"
+            >
               <Pressable
                 style={[styles.pickerItem, !marque && styles.pickerItemActive]}
                 onPress={() => {
@@ -605,14 +615,14 @@ const styles = StyleSheet.create({
   selectPlaceholder: { color: '#9ca3af' },
   pickerOverlay: {
     flex: 1,
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 16,
   },
   pickerSheet: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '70%',
-    paddingBottom: 24,
+    borderRadius: 20,
+    overflow: 'hidden',
     zIndex: 1,
     elevation: 12,
   },
@@ -626,7 +636,6 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e5e7eb',
   },
   pickerTitle: { fontSize: 17, fontWeight: '700', color: '#111827' },
-  pickerScroll: { maxHeight: 400 },
   pickerItem: {
     flexDirection: 'row',
     alignItems: 'center',

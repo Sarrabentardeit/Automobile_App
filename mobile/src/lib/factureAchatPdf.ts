@@ -232,7 +232,15 @@ export async function downloadFactureAchatPdf(
     await openPdfFile(localPath)
     return 'opened_viewer'
   } catch {
-    await Print.printAsync({ html: buildFactureAchatPdfHtml(facture) })
-    return 'opened_viewer'
+    // Mobile : pas d'impression système — fallback partage PDF
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(localPath, {
+        mimeType: 'application/pdf',
+        dialogTitle: `Exporter facture ${facture.numero}`,
+        UTI: 'com.adobe.pdf',
+      })
+      return 'opened_viewer'
+    }
+    throw new Error('Impossible d\'ouvrir ou partager le PDF')
   }
 }

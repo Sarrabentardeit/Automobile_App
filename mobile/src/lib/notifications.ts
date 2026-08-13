@@ -4,6 +4,7 @@ import type { AppUser } from './vehiculeApi'
 export type { AppNotification } from './notificationsApi'
 export {
   fetchNotifications,
+  fetchNotificationsUnreadCount,
   markAllNotificationsRead,
   markNotificationRead,
 } from './notificationsApi'

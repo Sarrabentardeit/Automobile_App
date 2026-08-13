@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
-  Dimensions,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,6 +17,7 @@ import {
   completion,
   formatDateFr,
 } from '../../lib/checklistHelpers'
+import { getModalLayout } from '../../lib/modalLayout'
 import { theme } from '../../theme/appTheme'
 import type { ChecklistAuditLog, DailyChecklist } from '../../types/checklist'
 
@@ -43,7 +43,12 @@ export default function ChecklistDetailModal({
   const [loading, setLoading] = useState(false)
   const [checklist, setChecklist] = useState<DailyChecklist | null>(null)
   const [audit, setAudit] = useState<ChecklistAuditLog[]>([])
-  const dialogHeight = Math.min(Dimensions.get('window').height * 0.9, 640)
+  const showReview =
+    checklist?.status === 'submitted' && canReview
+  const { cardMaxHeight, scrollMaxHeight, footerPaddingBottom } = getModalLayout({
+    maxCard: 640,
+    chrome: showReview ? 160 : 100,
+  })
 
   useEffect(() => {
     if (!visible || !checklistId) {
@@ -71,7 +76,7 @@ export default function ChecklistDetailModal({
 
   return (
     <CenteredBlurModal visible={visible} onClose={onClose}>
-      <View style={[styles.card, { maxHeight: dialogHeight }]}>
+      <View style={[styles.card, { maxHeight: cardMaxHeight }]}>
         <View style={styles.accent} />
         <View style={styles.header}>
           <View style={styles.headerText}>
@@ -101,7 +106,7 @@ export default function ChecklistDetailModal({
         ) : (
           <>
             <ScrollView
-              style={{ flex: 1 }}
+              style={{ maxHeight: scrollMaxHeight }}
               contentContainerStyle={styles.scroll}
               bounces={false}
               keyboardShouldPersistTaps="handled"
@@ -144,8 +149,8 @@ export default function ChecklistDetailModal({
               )}
             </ScrollView>
 
-            {checklist.status === 'submitted' && canReview ? (
-              <View style={styles.footer}>
+            {showReview ? (
+              <View style={[styles.footer, { paddingBottom: footerPaddingBottom }]}>
                 <Pressable
                   style={[styles.btn, styles.btnValidate]}
                   onPress={() => onValidate?.(checklist.id)}
@@ -228,7 +233,8 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     gap: 10,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: theme.borderLight,
   },

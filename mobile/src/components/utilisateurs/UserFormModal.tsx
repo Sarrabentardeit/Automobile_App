@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
-  Dimensions,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,6 +16,7 @@ import {
   createAppAccount,
   updateAppAccount,
 } from '../../lib/userApi'
+import { getModalLayout } from '../../lib/modalLayout'
 import { theme } from '../../theme/appTheme'
 import type { AppAccount } from '../../types/appUser'
 import {
@@ -71,7 +71,10 @@ export default function UserFormModal({
   const [form, setForm] = useState<FormState>(emptyForm)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const dialogHeight = Math.min(Dimensions.get('window').height * 0.92, 720)
+  const { cardMaxHeight, scrollMaxHeight, footerPaddingBottom } = getModalLayout({
+    maxCard: 680,
+    chrome: 150,
+  })
 
   useEffect(() => {
     if (!visible) return
@@ -157,7 +160,7 @@ export default function UserFormModal({
 
   return (
     <CenteredBlurModal visible={visible} onClose={onClose} maxWidth={440}>
-      <View style={[styles.card, { maxHeight: dialogHeight }]}>
+      <View style={[styles.card, { maxHeight: cardMaxHeight }]}>
         <View style={styles.accent} />
         <View style={styles.header}>
           <View style={styles.headerText}>
@@ -172,9 +175,11 @@ export default function UserFormModal({
         </View>
 
         <ScrollView
+          style={{ maxHeight: scrollMaxHeight }}
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator
+          nestedScrollEnabled
         >
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -291,7 +296,7 @@ export default function UserFormModal({
           })}
         </ScrollView>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: footerPaddingBottom }]}>
           <Pressable style={styles.cancelBtn} onPress={onClose} disabled={saving}>
             <Text style={styles.cancelText}>Annuler</Text>
           </Pressable>
@@ -483,7 +488,8 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     gap: 10,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: theme.borderLight,
   },

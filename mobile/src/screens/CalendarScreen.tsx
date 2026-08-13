@@ -322,16 +322,6 @@ export default function CalendarScreen({
         <View style={styles.footerSpacer} />
       </ScrollView>
 
-      {canManage && !showForm && !detailAssignment && !drawerOpen ? (
-        <Pressable
-          style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
-          onPress={openAdd}
-          accessibilityLabel="Nouvelle affectation"
-        >
-          <Ionicons name="add" size={28} color="#fff" />
-        </Pressable>
-      ) : null}
-
       <CalendarAssignmentDetailModal
         visible={!!detailAssignment}
         assignment={detailAssignment}
@@ -469,19 +459,5 @@ const styles = StyleSheet.create({
     borderColor: '#fed7aa',
   },
   emptyCtaText: { fontWeight: '700', color: theme.primaryDark },
-  footerSpacer: { height: 88 },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: theme.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
-    ...theme.shadow.fab,
-  },
-  fabPressed: { transform: [{ scale: 0.94 }], opacity: 0.95 },
+  footerSpacer: { height: 24 },
 })

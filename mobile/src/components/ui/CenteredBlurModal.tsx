@@ -30,22 +30,33 @@ export default function CenteredBlurModal({
 }: Props) {
   if (!visible) return null
 
-  const bottomExtend = Platform.OS === 'android' ? getSheetBottomInset() : 0
+  const bottomInset = getSheetBottomInset()
+  const topPad = 24
+  const bottomPad = Math.max(24, bottomInset + 8)
+  const maxDialogH = Math.max(280, SCREEN_H - topPad - bottomPad)
 
   return (
-    <View style={styles.portal} pointerEvents="box-none">
-      <View style={[styles.backdropLayer, bottomExtend > 0 && { bottom: -bottomExtend }]}>
+    <View
+      style={[styles.portal, { paddingTop: topPad, paddingBottom: bottomPad }]}
+      pointerEvents="box-none"
+    >
+      <View
+        style={[
+          styles.backdropLayer,
+          Platform.OS === 'android' && bottomInset > 0 && { bottom: -bottomInset },
+        ]}
+      >
         <ModalBlurBackdrop onPress={onClose} />
       </View>
       <KeyboardAvoidingView
         style={[
           styles.dialog,
-          { width: Math.min(SCREEN_W - 32, maxWidth), maxHeight: SCREEN_H * 0.88 },
+          { width: Math.min(SCREEN_W - 32, maxWidth), maxHeight: maxDialogH },
         ]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         pointerEvents="box-none"
       >
-        <View style={[styles.dialogInner, { maxHeight: SCREEN_H * 0.88 }]}>{children}</View>
+        <View style={[styles.dialogInner, { maxHeight: maxDialogH }]}>{children}</View>
       </KeyboardAvoidingView>
     </View>
   )
@@ -59,7 +70,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 24,
   },
   backdropLayer: {
     ...StyleSheet.absoluteFillObject,
@@ -74,5 +84,6 @@ const styles = StyleSheet.create({
     width: '100%',
     overflow: 'hidden',
     borderRadius: 20,
+    flexShrink: 1,
   },
 })

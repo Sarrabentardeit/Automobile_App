@@ -43,9 +43,24 @@ const toMoneyOutDto = (m: MoneyOutRow) => ({
   sourceRef: m.source_ref ?? undefined,
 })
 
-router.get('/in', authenticate(), async (_req, res) => {
+function periodWhere(req: { query: Record<string, unknown> }) {
+  const year = Number(req.query.year)
+  const month = Number(req.query.month)
+  if (!Number.isInteger(year) || year < 2000 || !Number.isInteger(month) || month < 1 || month > 12) {
+    return undefined
+  }
+  const mm = String(month).padStart(2, '0')
+  const start = `${year}-${mm}-01`
+  const lastDay = new Date(year, month, 0).getDate()
+  const end = `${year}-${mm}-${String(lastDay).padStart(2, '0')}`
+  return { date: { gte: start, lte: end } }
+}
+
+router.get('/in', authenticate(), async (req, res) => {
   try {
+    const where = periodWhere(req)
     const rows = (await db.moneyIn.findMany({
+      where,
       orderBy: [{ date: 'desc' }, { id: 'desc' }],
     })) as MoneyInRow[]
     return res.json(rows.map(toMoneyInDto))
@@ -124,9 +139,11 @@ router.delete('/in/:id', authenticate(), async (req, res) => {
   }
 })
 
-router.get('/out', authenticate(), async (_req, res) => {
+router.get('/out', authenticate(), async (req, res) => {
   try {
+    const where = periodWhere(req)
     const rows = (await db.moneyOut.findMany({
+      where,
       orderBy: [{ date: 'desc' }, { id: 'desc' }],
     })) as MoneyOutRow[]
     return res.json(rows.map(toMoneyOutDto))

@@ -13,6 +13,7 @@ import CenteredBlurModal from '../ui/CenteredBlurModal'
 import { formatMontant } from '../../lib/formatMoney'
 import { addPaiementFacture } from '../../lib/factureVenteApi'
 import { factureResteTTC } from '../../lib/factureVenteHelpers'
+import { getSheetBottomInset } from '../../lib/safeArea'
 import { theme } from '../../theme/appTheme'
 import {
   MODE_PAIEMENT_OPTIONS,
@@ -42,6 +43,7 @@ export default function FactureVentePaiementModal({
   const [mode, setMode] = useState<ModePaiement | ''>('especes')
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
+  const footerPad = Math.max(14, getSheetBottomInset())
 
   useEffect(() => {
     if (!visible || !facture) return
@@ -149,7 +151,7 @@ export default function FactureVentePaiementModal({
           />
         </ScrollView>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: footerPad }]}>
           <Pressable
             style={({ pressed }) => [styles.btn, styles.btnCancel, pressed && styles.pressed]}
             onPress={onClose}

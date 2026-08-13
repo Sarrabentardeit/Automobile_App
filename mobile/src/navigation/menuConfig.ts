@@ -44,16 +44,43 @@ export type MenuItem = {
   implemented?: boolean
 }
 
-export type MenuCategory = {
-  label: string | null
+export type MenuGroup = {
+  title: string
   items: MenuItem[]
+}
+
+export type MenuCategory = {
+  id: string
+  label: string | null
+  icon?: IonIcon
+  collapsible?: boolean
+  defaultOpen?: boolean
+  matchRoutes?: MenuRouteId[]
+  items?: MenuItem[]
+  groups?: MenuGroup[]
+}
+
+export function categoryMenuItems(category: MenuCategory): MenuItem[] {
+  if (category.groups?.length) return category.groups.flatMap((g) => g.items)
+  return category.items ?? []
 }
 
 export const MENU_STRUCTURE: MenuCategory[] = [
   {
-    label: null,
+    id: 'accueil',
+    label: 'Accueil',
+    icon: 'home-outline',
+    collapsible: true,
+    defaultOpen: true,
+    matchRoutes: ['dashboard', 'admin', 'calendar', 'chat'],
     items: [
-      { id: 'dashboard', name: 'Dashboard', icon: 'grid-outline', requiredPermission: 'canViewDashboard', implemented: true },
+      {
+        id: 'dashboard',
+        name: 'Dashboard',
+        icon: 'grid-outline',
+        requiredPermission: 'canViewDashboard',
+        implemented: true,
+      },
       {
         id: 'admin',
         name: 'Statistiques',
@@ -62,14 +89,50 @@ export const MENU_STRUCTURE: MenuCategory[] = [
         implemented: true,
       },
       { id: 'calendar', name: 'Calendrier', icon: 'calendar-outline', implemented: true },
+      { id: 'chat', name: 'Chat', icon: 'chatbubbles-outline', implemented: true },
     ],
   },
   {
-    label: 'INVENTAIRE',
+    id: 'atelier',
+    label: 'Atelier',
+    icon: 'car-outline',
+    collapsible: true,
+    defaultOpen: true,
+    matchRoutes: ['vehicules', 'vehicules_archives', 'clients', 'reclamation'],
+    items: [
+      {
+        id: 'vehicules',
+        name: 'Véhicules',
+        icon: 'car-outline',
+        requireVehiculeAccess: true,
+        implemented: true,
+      },
+      {
+        id: 'vehicules_archives',
+        name: 'Archives',
+        icon: 'archive-outline',
+        requireVehiculeAccess: true,
+        implemented: true,
+      },
+      { id: 'clients', name: 'Clients', icon: 'person-circle-outline', implemented: true },
+      {
+        id: 'reclamation',
+        name: 'Réclamations',
+        icon: 'alert-circle-outline',
+        implemented: true,
+      },
+    ],
+  },
+  {
+    id: 'inventaire',
+    label: 'Inventaire',
+    icon: 'cube-outline',
+    collapsible: true,
+    matchRoutes: ['stock', 'produits'],
     items: [
       {
         id: 'stock',
-        name: 'Stock Général',
+        name: 'Stock',
         icon: 'cube-outline',
         requiredPermission: 'canViewInventory',
         implemented: true,
@@ -84,113 +147,133 @@ export const MENU_STRUCTURE: MenuCategory[] = [
     ],
   },
   {
-    label: 'HISTORIQUE OPÉRATION',
-    items: [
+    id: 'finance',
+    label: 'Finance',
+    icon: 'cash-outline',
+    collapsible: true,
+    matchRoutes: [
+      'facturation_vente',
+      'paiements_vente',
+      'facturation_achat',
+      'paiements_achat',
+      'caisse',
+      'money',
+      'clients_dettes',
+      'fournisseurs',
+      'fournisseurs_transactions',
+      'devis',
+    ],
+    groups: [
       {
-        id: 'clients',
-        name: 'Clients',
-        icon: 'person-circle-outline',
-        implemented: true,
+        title: 'Vente',
+        items: [
+          {
+            id: 'facturation_vente',
+            name: 'Factures',
+            icon: 'document-text-outline',
+            requiredPermission: 'canViewFinance',
+            implemented: true,
+          },
+          {
+            id: 'paiements_vente',
+            name: 'Paiements',
+            icon: 'wallet-outline',
+            requiredPermission: 'canViewFinance',
+            implemented: true,
+          },
+          {
+            id: 'devis',
+            name: 'Devis',
+            icon: 'clipboard-outline',
+            requiredPermission: 'canViewFinance',
+            implemented: true,
+          },
+        ],
       },
       {
-        id: 'reclamation',
-        name: 'Réclamations',
-        icon: 'alert-circle-outline',
-        implemented: true,
+        title: 'Achat',
+        items: [
+          {
+            id: 'facturation_achat',
+            name: 'Factures',
+            icon: 'download-outline',
+            requiredPermission: 'canViewFinance',
+            implemented: true,
+          },
+          {
+            id: 'paiements_achat',
+            name: 'Paiements',
+            icon: 'wallet-outline',
+            requiredPermission: 'canViewFinance',
+            implemented: true,
+          },
+        ],
       },
       {
-        id: 'vehicules',
-        name: 'Véhicules',
-        icon: 'car-outline',
-        requireVehiculeAccess: true,
-        implemented: true,
+        title: 'Trésorerie',
+        items: [
+          {
+            id: 'caisse',
+            name: 'Caisse équipe',
+            icon: 'cash-outline',
+            requiredPermission: 'canViewFinance',
+            implemented: true,
+          },
+          {
+            id: 'money',
+            name: 'Money',
+            icon: 'wallet-outline',
+            requiredPermission: 'canViewFinance',
+            implemented: true,
+          },
+          {
+            id: 'clients_dettes',
+            name: 'Dettes clients',
+            icon: 'card-outline',
+            requiredPermission: 'canViewFinance',
+            implemented: true,
+          },
+        ],
       },
       {
-        id: 'vehicules_archives',
-        name: 'Archives véhicules',
-        icon: 'archive-outline',
-        requireVehiculeAccess: true,
-        implemented: true,
+        title: 'Fournisseurs',
+        items: [
+          {
+            id: 'fournisseurs',
+            name: 'Liste',
+            icon: 'storefront-outline',
+            requiredPermission: 'canViewFinance',
+            implemented: true,
+          },
+          {
+            id: 'fournisseurs_transactions',
+            name: 'Transactions',
+            icon: 'receipt-outline',
+            requiredPermission: 'canViewFinance',
+            implemented: true,
+          },
+        ],
       },
     ],
   },
   {
-    label: 'FINANCES',
+    id: 'equipe',
+    label: 'Équipe',
+    icon: 'people-outline',
+    collapsible: true,
+    matchRoutes: ['equipe_membres', 'utilisateurs', 'outils_ahmed'],
     items: [
       {
-        id: 'facturation_vente',
-        name: 'Facturation vente',
-        icon: 'document-text-outline',
-        requiredPermission: 'canViewFinance',
-        implemented: true,
-      },
-      {
-        id: 'paiements_vente',
-        name: 'Paiement partiel vente',
-        icon: 'wallet-outline',
-        requiredPermission: 'canViewFinance',
-        implemented: true,
-      },
-      {
-        id: 'facturation_achat',
-        name: 'Facturation achat',
-        icon: 'download-outline',
-        requiredPermission: 'canViewFinance',
-        implemented: true,
-      },
-      {
-        id: 'paiements_achat',
-        name: 'Paiement partiel achat',
-        icon: 'wallet-outline',
-        requiredPermission: 'canViewFinance',
-        implemented: true,
-      },
-      { id: 'caisse', name: 'Suivi Argent Équipe', icon: 'cash-outline', requiredPermission: 'canViewFinance', implemented: true },
-      { id: 'fournisseurs_transactions', name: 'Transactions Fournisseurs', icon: 'receipt-outline', requiredPermission: 'canViewFinance', implemented: true },
-      {
-        id: 'fournisseurs',
-        name: 'Fournisseurs',
-        icon: 'storefront-outline',
-        requiredPermission: 'canViewFinance',
-        implemented: true,
-      },
-      {
-        id: 'devis',
-        name: 'Demandes Devis',
-        icon: 'clipboard-outline',
-        requiredPermission: 'canViewFinance',
-        implemented: true,
-      },
-      { id: 'money', name: 'Détails Money', icon: 'wallet-outline', requiredPermission: 'canViewFinance', implemented: true },
-      {
-        id: 'clients_dettes',
-        name: 'Clients avec Dettes',
-        icon: 'card-outline',
-        requiredPermission: 'canViewFinance',
-        implemented: true,
-      },
-    ],
-  },
-  {
-    label: 'ÉQUIPE',
-    items: [
-      {
-        id: 'chat',
-        name: 'Chat équipe',
-        icon: 'chatbubbles-outline',
-        implemented: true,
-      },
-      {
-        id: 'utilisateurs',
-        name: 'Utilisateurs',
-        icon: 'people-outline',
+        id: 'equipe_membres',
+        name: 'Membres',
+        icon: 'people-circle-outline',
         requiredPermission: 'canManageUsers',
         implemented: true,
       },
       {
-        id: 'equipe_membres',
-        name: 'Membres équipe',
-        icon: 'people-circle-outline',
+        id: 'utilisateurs',
+        name: 'Comptes',
+        icon: 'people-outline',
         requiredPermission: 'canManageUsers',
         implemented: true,
       },
@@ -204,18 +287,22 @@ export const MENU_STRUCTURE: MenuCategory[] = [
     ],
   },
   {
-    label: 'AUTRES',
+    id: 'outils',
+    label: 'Outils',
+    icon: 'settings-outline',
+    collapsible: true,
+    matchRoutes: ['checklists', 'checklists_modeles', 'documents', 'contacts'],
     items: [
       { id: 'checklists', name: 'Checklists', icon: 'checkbox-outline', implemented: true },
       {
         id: 'checklists_modeles',
-        name: 'Modèles checklists',
+        name: 'Modèles checklist',
         icon: 'options-outline',
         requireAdmin: true,
         implemented: true,
       },
       { id: 'documents', name: 'Documents', icon: 'folder-open-outline', implemented: true },
-      { id: 'contacts', name: 'Contacts Importants', icon: 'call-outline', implemented: true },
+      { id: 'contacts', name: 'Contacts', icon: 'call-outline', implemented: true },
     ],
   },
 ]
@@ -233,11 +320,24 @@ export function hasMenuAccess(
 
 export function getMenuTitle(route: MenuRouteId): string {
   for (const cat of MENU_STRUCTURE) {
-    const found = cat.items.find((i) => i.id === route)
+    const found = categoryMenuItems(cat).find((i) => i.id === route)
     if (found) return found.name
   }
   return 'EL MECANO'
 }
+
+export function initialOpenMenuSections(route: MenuRouteId): Record<string, boolean> {
+  const open: Record<string, boolean> = {}
+  for (const cat of MENU_STRUCTURE) {
+    if (!cat.collapsible) continue
+    open[cat.id] = Boolean(cat.defaultOpen || cat.matchRoutes?.includes(route))
+  }
+  return open
+}
+
+/** @deprecated use matchRoutes on categories — kept for any old imports */
+export const FINANCE_ROUTE_IDS: MenuRouteId[] =
+  MENU_STRUCTURE.find((c) => c.id === 'finance')?.matchRoutes ?? []
 
 export function getDefaultRoute(permissions: Permissions, _role: Role): MenuRouteId {
   if (permissions.canViewDashboard) return 'dashboard'

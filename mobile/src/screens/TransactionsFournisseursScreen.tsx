@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,11 +12,13 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import AppToast from '../components/ui/AppToast'
+import CenteredBlurModal from '../components/ui/CenteredBlurModal'
 import {
   addTransactionFournisseur,
   deleteTransactionFournisseur,
   fetchTransactionsFournisseurs,
 } from '../lib/moneyApi'
+import { getModalLayout } from '../lib/modalLayout'
 import { theme } from '../theme/appTheme'
 import type { TransactionFournisseur, TransactionFournisseurType } from '../types/money'
 
@@ -72,16 +73,20 @@ export default function TransactionsFournisseursScreen({ accessToken, canViewFin
   })
 
   const showMsg = (msg: string, err = false) => { setToastError(err); setToast(msg) }
+  const { cardMaxHeight, scrollMaxHeight, footerPaddingBottom } = getModalLayout({
+    maxCard: 560,
+    chrome: 150,
+  })
 
   const load = useCallback(async () => {
     setError(null)
     try {
-      const data = await fetchTransactionsFournisseurs(accessToken)
+      const data = await fetchTransactionsFournisseurs(accessToken, period)
       setTransactions(data)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur chargement')
     }
-  }, [accessToken])
+  }, [accessToken, period])
 
   useEffect(() => {
     if (!canViewFinance) return
@@ -289,8 +294,8 @@ export default function TransactionsFournisseursScreen({ accessToken, canViewFin
       />
 
       {/* Modal ajout */}
-      <Modal visible={showForm} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowForm(false)}>
-        <View style={styles.modalRoot}>
+      <CenteredBlurModal visible={showForm} onClose={() => setShowForm(false)} maxWidth={440}>
+        <View style={[styles.modalCard, { maxHeight: cardMaxHeight }]}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Nouvelle transaction</Text>
             <Pressable onPress={() => setShowForm(false)} style={styles.modalClose} hitSlop={10}>
@@ -298,7 +303,12 @@ export default function TransactionsFournisseursScreen({ accessToken, canViewFin
             </Pressable>
           </View>
 
-          <ScrollView contentContainerStyle={styles.formScroll} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            style={{ maxHeight: scrollMaxHeight }}
+            contentContainerStyle={styles.formScroll}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             {/* Type */}
             <Text style={styles.formLabel}>Type</Text>
             <View style={styles.typeRow}>
@@ -379,7 +389,7 @@ export default function TransactionsFournisseursScreen({ accessToken, canViewFin
             )}
           </ScrollView>
 
-          <View style={styles.formFooter}>
+          <View style={[styles.formFooter, { paddingBottom: footerPaddingBottom }]}>
             <Pressable style={[styles.formBtn, styles.formBtnCancel]} onPress={() => setShowForm(false)}>
               <Text style={styles.formBtnCancelText}>Annuler</Text>
             </Pressable>
@@ -388,7 +398,7 @@ export default function TransactionsFournisseursScreen({ accessToken, canViewFin
             </Pressable>
           </View>
         </View>
-      </Modal>
+      </CenteredBlurModal>
 
       <AppToast message={toast} type={toastError ? 'error' : 'success'} onDismiss={() => setToast(null)} />
     </View>
@@ -449,11 +459,15 @@ const styles = StyleSheet.create({
   emptySub: { fontSize: 14, color: theme.textSubtle, textAlign: 'center' },
   retryBtn: { paddingHorizontal: 18, paddingVertical: 10, backgroundColor: theme.primary, borderRadius: 10 },
   retryText: { color: '#fff', fontWeight: '600', fontSize: 14 },
-  modalRoot: { flex: 1, backgroundColor: theme.bg },
+  modalCard: {
+    backgroundColor: theme.surface,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
   modalHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 18, paddingTop: 20, paddingBottom: 14,
-    backgroundColor: theme.surface, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.borderLight,
+    paddingHorizontal: 18, paddingTop: 18, paddingBottom: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.borderLight,
   },
   modalTitle: { fontSize: 18, fontWeight: '700', color: theme.text },
   modalClose: { width: 34, height: 34, borderRadius: 17, backgroundColor: theme.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
@@ -471,8 +485,13 @@ const styles = StyleSheet.create({
   },
   typeChipText: { fontSize: 13, fontWeight: '600', color: theme.textMuted },
   formFooter: {
-    flexDirection: 'row', gap: 10, padding: 16,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.borderLight,
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    backgroundColor: theme.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: theme.borderLight,
   },
   formBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 12 },
   formBtnCancel: { backgroundColor: theme.surfaceMuted },

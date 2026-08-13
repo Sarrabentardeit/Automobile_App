@@ -28,12 +28,15 @@ type Props = {
   accessToken: string
   canViewFinance: boolean
   drawerOpen?: boolean
+  /** Ouvre la fiche dette (deep-link notif) */
+  initialDetteId?: number | null
 }
 
 export default function ClientsDettesScreen({
   accessToken,
   canViewFinance,
   drawerOpen = false,
+  initialDetteId = null,
 }: Props) {
   const [clients, setClients] = useState<ClientAvecDette[]>([])
   const [loading, setLoading] = useState(true)
@@ -72,6 +75,12 @@ export default function ClientsDettesScreen({
     setLoading(true)
     void load().finally(() => setLoading(false))
   }, [load, canViewFinance])
+
+  useEffect(() => {
+    if (!initialDetteId || clients.length === 0) return
+    const found = clients.find((c) => c.id === initialDetteId)
+    if (found) setDetailClient(found)
+  }, [initialDetteId, clients])
 
   const filtered = useMemo(() => {
     let list = clients

@@ -16,6 +16,8 @@ model User {
   role          String         @default("technicien")
   permissions   Json           @default("{}") // Permissions personnalisées (visibilité véhicules, accès)
   statut        String         @default("actif") // actif | inactif
+  expoPushToken String?
+  avatarUrl     String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   refreshTokens RefreshToken[]
@@ -29,13 +31,14 @@ model User {
 
 /// Conversation : groupe ou message privé (direct)
 model ChatConversation {
-  id           Int               @id @default(autoincrement())
-  type         String            // group | direct
-  title        String            @default("")
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  participants ChatParticipant[]
-  messages     ChatMessage[]
+  id            Int               @id @default(autoincrement())
+  type          String            // group | direct
+  title         String            @default("")
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  participants  ChatParticipant[]
+  messages      ChatMessage[]
+  notifications Notification[]
 }
 
 model ChatParticipant {
@@ -65,17 +68,25 @@ model ChatMessage {
 }
 
 model Notification {
-  id             Int       @id @default(autoincrement())
+  id             Int               @id @default(autoincrement())
   userId         Int
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type           String    @default("reclamation_assigned") // reclamation_assigned | vehicule_etat | ...
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type           String            @default("reclamation_assigned") // reclamation_assigned | vehicule_etat | chat_message | client_dette | ...
   reclamationId  Int?
   vehiculeId     Int?
-  vehicule       Vehicule? @relation(fields: [vehiculeId], references: [id], onDelete: SetNull)
-  title          String?   @default("")
+  vehicule       Vehicule?         @relation(fields: [vehiculeId], references: [id], onDelete: SetNull)
+  conversationId Int?
+  conversation   ChatConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  clientDetteId  Int?
+  clientDette    ClientDette?      @relation(fields: [clientDetteId], references: [id], onDelete: SetNull)
+  title          String?           @default("")
   message        String
-  read           Boolean   @default(false)
-  createdAt      DateTime  @default(now())
+  read           Boolean           @default(false)
+  createdAt      DateTime          @default(now())
+
+  @@index([userId, read])
+  @@index([conversationId])
+  @@index([clientDetteId])
 }
 
 model RefreshToken {
@@ -413,14 +424,15 @@ model DemandeDevis {
 }
 
 model ClientDette {
-  id                 Int      @id @default(autoincrement())
+  id                 Int            @id @default(autoincrement())
   client_name        String
-  telephone_client   String   @default("")
-  designation        String   @default("")
-  reste              Float    @default(0)
-  notes              String?  @default("")
-  createdAt          DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  telephone_client   String         @default("")
+  designation        String         @default("")
+  reste              Float          @default(0)
+  notes              String?        @default("")
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  notifications      Notification[]
 }
 
 model Reclamation {

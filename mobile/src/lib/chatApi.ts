@@ -52,7 +52,7 @@ export function openDirectChat(token: string, userId: number) {
   return apiFetch<{ data: ChatConversation }>('/chat/conversations/direct', {
     token,
     method: 'POST',
-    body: JSON.stringify({ userId }),
+    body: { userId },
   }).then((r) => r.data)
 }
 
@@ -60,7 +60,7 @@ export function createGroupChat(token: string, title: string, memberIds: number[
   return apiFetch<{ data: ChatConversation }>('/chat/conversations/group', {
     token,
     method: 'POST',
-    body: JSON.stringify({ title, memberIds }),
+    body: { title, memberIds },
   }).then((r) => r.data)
 }
 
@@ -68,14 +68,22 @@ export function addGroupMembers(token: string, conversationId: number, userIds: 
   return apiFetch<{ data: ChatConversation }>(`/chat/conversations/${conversationId}/members`, {
     token,
     method: 'POST',
-    body: JSON.stringify({ userIds }),
+    body: { userIds },
   }).then((r) => r.data)
 }
 
-export function fetchChatMessages(token: string, conversationId: number) {
+export function fetchChatMessages(
+  token: string,
+  conversationId: number,
+  opts?: { limit?: number; before?: string; after?: string }
+) {
   return apiFetch<{ data: ChatMessage[] }>(`/chat/conversations/${conversationId}/messages`, {
     token,
-    params: { limit: 80 },
+    params: {
+      limit: opts?.limit ?? 40,
+      before: opts?.before,
+      after: opts?.after,
+    },
   }).then((r) => r.data ?? [])
 }
 
@@ -83,7 +91,7 @@ export function sendChatMessage(token: string, conversationId: number, body: str
   return apiFetch<{ data: ChatMessage }>(`/chat/conversations/${conversationId}/messages`, {
     token,
     method: 'POST',
-    body: JSON.stringify({ body }),
+    body: { body },
   }).then((r) => r.data)
 }
 
@@ -91,6 +99,6 @@ export function markChatRead(token: string, conversationId: number) {
   return apiFetch<{ ok: boolean }>(`/chat/conversations/${conversationId}/read`, {
     token,
     method: 'POST',
-    body: JSON.stringify({}),
+    body: {},
   })
 }

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
-  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -14,10 +13,11 @@ import type { ComponentProps } from 'react'
 import MiniBarChart, { MiniBarChartSummary } from '../components/stats/MiniBarChart'
 import StatsSkeleton from '../components/stats/StatsSkeleton'
 import AppToast from '../components/ui/AppToast'
+import CenteredSheetShell from '../components/ui/CenteredSheetShell'
 import { formatMontant } from '../lib/formatMoney'
 import { fetchStatsDashboard, fetchStatsTrends, fetchTempsEnCoursTechniciens, type TechTempsEnCours } from '../lib/statsApi'
 import { isInStatsMonth, MOIS_FR, monthYearLabel, yearOptions } from '../lib/statsHelpers'
-import { MENU_STRUCTURE, type MenuRouteId } from '../navigation/menuConfig'
+import { MENU_STRUCTURE, categoryMenuItems, type MenuRouteId } from '../navigation/menuConfig'
 import { theme } from '../theme/appTheme'
 import type {
   GlobalStatCounts,
@@ -30,7 +30,11 @@ import type {
 type IonIcon = ComponentProps<typeof Ionicons>['name']
 
 const IMPLEMENTED_ROUTES = new Set<MenuRouteId>(
-  MENU_STRUCTURE.flatMap((c) => c.items.filter((i) => i.implemented).map((i) => i.id))
+  MENU_STRUCTURE.flatMap((c) =>
+    categoryMenuItems(c)
+      .filter((i) => i.implemented)
+      .map((i) => i.id)
+  )
 )
 
 const GLOBAL_ITEMS: GlobalStatItem[] = [
@@ -639,83 +643,74 @@ export default function StatistiquesScreen({
         <View style={styles.footerSpacer} />
       </ScrollView>
 
-      <Modal
+      <CenteredSheetShell
         visible={selectedTechTemps != null}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setSelectedTechTemps(null)}
+        onClose={() => setSelectedTechTemps(null)}
+        maxWidth={440}
+        maxCard={680}
       >
-        <View style={styles.detailModal}>
-          <View style={styles.detailHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.detailTitle}>{selectedTechTemps?.nom ?? ''}</Text>
-              <Text style={styles.detailSub}>
-                Performance — {techTempsMoisLabel} · {selectedTechTemps?.vehiculesCount ?? 0} véhicule(s)
-              </Text>
-            </View>
-            <Pressable onPress={() => setSelectedTechTemps(null)} hitSlop={12}>
-              <Ionicons name="close" size={24} color={theme.text} />
-            </Pressable>
-          </View>
-          {selectedTechTemps ? (
-            <ScrollView contentContainerStyle={styles.detailBody}>
-              <View style={styles.detailKpis}>
-                <View style={styles.detailKpi}>
-                  <Text style={styles.detailKpiLabel}>Véhicules</Text>
-                  <Text style={styles.detailKpiValue}>{selectedTechTemps.vehiculesCount}</Text>
-                </View>
-                <View style={styles.detailKpi}>
-                  <Text style={styles.detailKpiLabel}>Marques</Text>
-                  <Text style={styles.detailKpiValue}>{selectedTechTemps.marquesCount ?? '—'}</Text>
-                </View>
-                <View style={[styles.detailKpi, styles.detailKpiAccent]}>
-                  <Text style={[styles.detailKpiLabel, { color: '#c2410c' }]}>Moyenne</Text>
-                  <Text style={[styles.detailKpiValue, { color: '#c2410c' }]}>
-                    {selectedTechTemps.moyenneMinutes > 0
-                      ? formatDuree(selectedTechTemps.moyenneMinutes)
-                      : '—'}
-                  </Text>
-                </View>
+        {selectedTechTemps ? (
+          <>
+            <Text style={styles.detailTitle}>{selectedTechTemps.nom}</Text>
+            <Text style={styles.detailSub}>
+              Performance — {techTempsMoisLabel} · {selectedTechTemps.vehiculesCount} véhicule(s)
+            </Text>
+            <View style={styles.detailKpis}>
+              <View style={styles.detailKpi}>
+                <Text style={styles.detailKpiLabel}>Véhicules</Text>
+                <Text style={styles.detailKpiValue}>{selectedTechTemps.vehiculesCount}</Text>
               </View>
-              {(selectedTechTemps.byServiceType?.length ?? 0) > 0 ? (
-                <View style={{ marginBottom: 12, gap: 6 }}>
-                  <Text style={styles.detailKpiLabel}>Par type de service</Text>
-                  {selectedTechTemps.byServiceType!.map((s) => (
-                    <View key={s.service_type} style={styles.vehDetailCard}>
-                      <Text style={styles.vehPlate}>{s.label}</Text>
-                      <View style={styles.vehMetaRow}>
-                        <Text style={styles.vehModel}>{s.count} véhicule(s)</Text>
-                        <Text style={styles.vehTime}>
-                          moy. {s.moyenneMinutes > 0 ? formatDuree(s.moyenneMinutes) : '—'}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              ) : null}
-              {(selectedTechTemps.vehicules?.length ?? 0) === 0 ? (
-                <Text style={styles.emptyHint}>Aucun détail véhicule.</Text>
-              ) : (
-                selectedTechTemps.vehicules!.map((v) => (
-                  <View key={v.vehiculeId} style={styles.vehDetailCard}>
-                    <Text style={styles.vehPlate}>{v.immatriculation}</Text>
-                    <Text style={styles.vehModel}>
-                      {v.modele}
-                      {v.serviceLabel ? ` · ${v.serviceLabel}` : ''}
-                    </Text>
+              <View style={styles.detailKpi}>
+                <Text style={styles.detailKpiLabel}>Marques</Text>
+                <Text style={styles.detailKpiValue}>{selectedTechTemps.marquesCount ?? '—'}</Text>
+              </View>
+              <View style={[styles.detailKpi, styles.detailKpiAccent]}>
+                <Text style={[styles.detailKpiLabel, { color: '#c2410c' }]}>Moyenne</Text>
+                <Text style={[styles.detailKpiValue, { color: '#c2410c' }]}>
+                  {selectedTechTemps.moyenneMinutes > 0
+                    ? formatDuree(selectedTechTemps.moyenneMinutes)
+                    : '—'}
+                </Text>
+              </View>
+            </View>
+            {(selectedTechTemps.byServiceType?.length ?? 0) > 0 ? (
+              <View style={{ marginBottom: 12, gap: 6 }}>
+                <Text style={styles.detailKpiLabel}>Par type de service</Text>
+                {selectedTechTemps.byServiceType!.map((s) => (
+                  <View key={s.service_type} style={styles.vehDetailCard}>
+                    <Text style={styles.vehPlate}>{s.label}</Text>
                     <View style={styles.vehMetaRow}>
+                      <Text style={styles.vehModel}>{s.count} véhicule(s)</Text>
                       <Text style={styles.vehTime}>
-                        {v.minutes > 0 ? formatDuree(v.minutes) : '—'}
+                        moy. {s.moyenneMinutes > 0 ? formatDuree(s.moyenneMinutes) : '—'}
                       </Text>
-                      <Text style={styles.vehDate}>{v.lastChange}</Text>
                     </View>
                   </View>
-                ))
-              )}
-            </ScrollView>
-          ) : null}
-        </View>
-      </Modal>
+                ))}
+              </View>
+            ) : null}
+            {(selectedTechTemps.vehicules?.length ?? 0) === 0 ? (
+              <Text style={styles.emptyHint}>Aucun détail véhicule.</Text>
+            ) : (
+              selectedTechTemps.vehicules!.map((v) => (
+                <View key={v.vehiculeId} style={styles.vehDetailCard}>
+                  <Text style={styles.vehPlate}>{v.immatriculation}</Text>
+                  <Text style={styles.vehModel}>
+                    {v.modele}
+                    {v.serviceLabel ? ` · ${v.serviceLabel}` : ''}
+                  </Text>
+                  <View style={styles.vehMetaRow}>
+                    <Text style={styles.vehTime}>
+                      {v.minutes > 0 ? formatDuree(v.minutes) : '—'}
+                    </Text>
+                    <Text style={styles.vehDate}>{v.lastChange}</Text>
+                  </View>
+                </View>
+              ))
+            )}
+          </>
+        ) : null}
+      </CenteredSheetShell>
 
       <AppToast message={toast} type="error" onDismiss={() => setToast(null)} />
     </View>
@@ -975,7 +970,7 @@ const styles = StyleSheet.create({
   },
   detailTitle: { fontSize: 18, fontWeight: '800', color: theme.text },
   detailSub: { fontSize: 12, color: theme.textMuted, marginTop: 2 },
-  detailBody: { padding: 16, gap: 10, paddingBottom: 40 },
+  detailBody: { padding: 16, gap: 10 },
   detailKpis: { flexDirection: 'row', gap: 8, marginBottom: 4 },
   detailKpi: {
     flex: 1,

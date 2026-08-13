@@ -15,7 +15,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { createProduit, updateProduit } from '../lib/produitApi'
-import { getStatusBarInset } from '../lib/safeArea'
+import { getSheetBottomInset, getStatusBarInset } from '../lib/safeArea'
 import { theme } from '../theme/appTheme'
 import {
   HUILE_TYPE_STYLES,
@@ -87,7 +87,7 @@ export default function ProduitFormModal({
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const topInset = getStatusBarInset()
-  const bottomInset = Platform.OS === 'ios' ? 28 : 16
+  const bottomInset = Math.max(20, getSheetBottomInset())
 
   const catOptions = useMemo(
     () => modalCategoryOptions(categoriesFromData),
@@ -415,7 +415,7 @@ export default function ProduitFormModal({
           </View>
         </ScrollView>
 
-        <View style={[styles.footerBar, { paddingBottom: bottomInset }]}>
+        <View style={[styles.footerBar, { paddingBottom: bottomInset + 8 }]}>
           <Pressable
             style={({ pressed }) => [styles.cancelBtn, pressed && styles.pressed]}
             onPress={onClose}

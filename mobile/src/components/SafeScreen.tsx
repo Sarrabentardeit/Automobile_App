@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { Platform, SafeAreaView, StatusBar, StyleSheet, View, type ViewStyle } from 'react-native'
+import { Platform, SafeAreaView, StyleSheet, View, type ViewStyle } from 'react-native'
+import { getSheetBottomInset, getStatusBarInset } from '../lib/safeArea'
 
 type Props = {
   children: ReactNode
@@ -11,9 +12,10 @@ export default function SafeScreen({ children, style }: Props) {
   if (Platform.OS === 'ios') {
     return <SafeAreaView style={[styles.flex, style]}>{children}</SafeAreaView>
   }
-  const top = StatusBar.currentHeight ?? 28
+  const top = getStatusBarInset()
+  const bottom = Math.min(getSheetBottomInset(), 24)
   return (
-    <View style={[styles.flex, { paddingTop: top, paddingBottom: 16 }, style]}>
+    <View style={[styles.flex, { paddingTop: top, paddingBottom: bottom }, style]}>
       {children}
     </View>
   )

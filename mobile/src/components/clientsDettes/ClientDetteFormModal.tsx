@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
-  Dimensions,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import CenteredBlurModal from '../ui/CenteredBlurModal'
 import { createClientDette, deleteClientDette, updateClientDette } from '../../lib/clientDetteApi'
+import { getModalLayout } from '../../lib/modalLayout'
 import { theme } from '../../theme/appTheme'
 import type { ClientAvecDette, ClientDetteInput } from '../../types/clientDette'
 
@@ -48,7 +48,10 @@ export default function ClientDetteFormModal({
   const [resteText, setResteText] = useState('0')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const dialogHeight = Math.min(Dimensions.get('window').height * 0.88, 620)
+  const { cardMaxHeight, scrollMaxHeight, footerPaddingBottom } = getModalLayout({
+    maxCard: 620,
+    chrome: isEdit ? 200 : 150,
+  })
 
   useEffect(() => {
     if (!visible) return
@@ -129,7 +132,7 @@ export default function ClientDetteFormModal({
 
   return (
     <CenteredBlurModal visible={visible} onClose={onClose}>
-      <View style={[styles.card, { maxHeight: dialogHeight }]}>
+      <View style={[styles.card, { maxHeight: cardMaxHeight }]}>
         <View style={styles.accent} />
         <View style={styles.header}>
           <View style={styles.headerText}>
@@ -145,7 +148,7 @@ export default function ClientDetteFormModal({
           </Pressable>
         </View>
         <ScrollView
-          style={{ flex: 1 }}
+          style={{ maxHeight: scrollMaxHeight }}
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           nestedScrollEnabled
@@ -218,7 +221,7 @@ export default function ClientDetteFormModal({
             <Text style={styles.deleteText}>Supprimer</Text>
           </Pressable>
         ) : null}
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: footerPaddingBottom }]}>
           <Pressable style={styles.cancelBtn} onPress={onClose} disabled={saving}>
             <Text style={styles.cancelText}>Annuler</Text>
           </Pressable>
@@ -323,7 +326,8 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     gap: 10,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: theme.borderLight,
   },

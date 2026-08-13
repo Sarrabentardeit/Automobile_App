@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
-  Dimensions,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import CenteredBlurModal from '../ui/CenteredBlurModal'
 import { createFournisseur, deleteFournisseur, updateFournisseur } from '../../lib/fournisseurApi'
+import { getModalLayout } from '../../lib/modalLayout'
 import { theme } from '../../theme/appTheme'
 import type { Fournisseur, FournisseurInput } from '../../types/fournisseur'
 
@@ -98,8 +97,10 @@ export default function FournisseurFormModal({
   const [form, setForm] = useState<FournisseurInput>(emptyForm())
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const bottomInset = Platform.OS === 'ios' ? 20 : 12
-  const dialogHeight = Math.min(Dimensions.get('window').height * 0.88, 620)
+  const { cardMaxHeight, scrollMaxHeight, footerPaddingBottom } = getModalLayout({
+    maxCard: 620,
+    chrome: isEdit ? 200 : 160,
+  })
 
   useEffect(() => {
     if (!visible) return
@@ -183,7 +184,7 @@ export default function FournisseurFormModal({
 
   return (
     <CenteredBlurModal visible={visible} onClose={onClose}>
-      <View style={[styles.card, { maxHeight: dialogHeight }]}>
+      <View style={[styles.card, { maxHeight: cardMaxHeight }]}>
         <View style={styles.accent} />
         <View style={styles.header}>
           <LinearGradient colors={['#fff7ed', '#ffedd5']} style={styles.headerBanner}>
@@ -208,7 +209,11 @@ export default function FournisseurFormModal({
           </LinearGradient>
         </View>
 
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={{ maxHeight: scrollMaxHeight }}
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+        >
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
           <Field
@@ -271,7 +276,7 @@ export default function FournisseurFormModal({
           </Pressable>
         ) : null}
 
-        <View style={[styles.footer, { paddingBottom: bottomInset }]}>
+        <View style={[styles.footer, { paddingBottom: footerPaddingBottom }]}>
           <Pressable style={styles.cancelBtn} onPress={onClose} disabled={saving}>
             <Text style={styles.cancelText}>Annuler</Text>
           </Pressable>

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
-  Dimensions,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,6 +17,7 @@ import {
   updateDemandeDevis,
 } from '../../lib/demandeDevisApi'
 import { todayIsoDate } from '../../lib/demandeDevisHelpers'
+import { getModalLayout } from '../../lib/modalLayout'
 import { theme } from '../../theme/appTheme'
 import {
   DEMANDE_DEVIS_STATUTS,
@@ -62,7 +62,10 @@ export default function DevisFormModal({
   const [montantText, setMontantText] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const dialogHeight = Math.min(Dimensions.get('window').height * 0.92, 680)
+  const { cardMaxHeight, scrollMaxHeight, footerPaddingBottom } = getModalLayout({
+    maxCard: 680,
+    chrome: 150,
+  })
 
   useEffect(() => {
     if (!visible) return
@@ -153,7 +156,7 @@ export default function DevisFormModal({
 
   return (
     <CenteredBlurModal visible={visible} onClose={onClose} maxWidth={440}>
-      <View style={[styles.card, { maxHeight: dialogHeight }]}>
+      <View style={[styles.card, { maxHeight: cardMaxHeight }]}>
         <View style={styles.accent} />
         <View style={styles.header}>
           <View style={styles.headerText}>
@@ -168,11 +171,11 @@ export default function DevisFormModal({
         </View>
 
         <ScrollView
-          style={{ flex: 1 }}
+          style={{ maxHeight: scrollMaxHeight }}
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           nestedScrollEnabled
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator
         >
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -260,7 +263,7 @@ export default function DevisFormModal({
           />
         </ScrollView>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: footerPaddingBottom }]}>
           {isEdit ? (
             <Pressable style={styles.deleteBtn} onPress={confirmDelete} disabled={saving}>
               <Ionicons name="trash-outline" size={20} color="#dc2626" />
@@ -391,7 +394,8 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     gap: 10,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: theme.borderLight,
   },

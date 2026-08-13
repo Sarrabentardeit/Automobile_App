@@ -8,31 +8,93 @@ import {
   View,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import { fetchChatConversations } from '../lib/chatApi'
 import {
   fetchNotifications,
+  fetchNotificationsUnreadCount,
   markAllNotificationsRead,
   markNotificationRead,
   type AppNotification,
 } from '../lib/notifications'
+import type { MenuRouteId } from '../navigation/menuConfig'
+
+export type NotificationNavigateTarget =
+  | { kind: 'vehicule'; vehiculeId: number }
+  | { kind: 'chat'; conversationId?: number }
+  | { kind: 'dette'; detteId: number }
+  | { kind: 'route'; route: MenuRouteId }
 
 type Props = {
   accessToken: string
-  userId: number
   iconColor?: string
-  onOpenVehicule?: (vehiculeId: number) => void
+  onNavigate?: (target: NotificationNavigateTarget) => void
+}
+
+export function resolveNotificationTarget(
+  n: Pick<
+    AppNotification,
+    'vehiculeId' | 'reclamationId' | 'conversationId' | 'clientDetteId' | 'type'
+  >
+): NotificationNavigateTarget | null {
+  if (n.conversationId != null) return { kind: 'chat', conversationId: n.conversationId }
+  if (n.clientDetteId != null) return { kind: 'dette', detteId: n.clientDetteId }
+  if (n.vehiculeId != null) return { kind: 'vehicule', vehiculeId: n.vehiculeId }
+  if (n.reclamationId != null) return { kind: 'route', route: 'reclamation' }
+  const t = (n.type ?? '').toLowerCase()
+  if (t.includes('chat') || t.includes('message')) return { kind: 'chat' }
+  if (t.includes('dette') || t.includes('debt')) return { kind: 'route', route: 'clients_dettes' }
+  if (t.includes('calendar') || t.includes('rdv') || t.includes('affectation')) {
+    return { kind: 'route', route: 'calendar' }
+  }
+  if (t.includes('devis')) return { kind: 'route', route: 'devis' }
+  return null
+}
+
+function linkLabel(n: AppNotification): string | null {
+  const target = resolveNotificationTarget(n)
+  if (!target) return null
+  if (target.kind === 'vehicule') return 'Voir le véhicule →'
+  if (target.kind === 'chat') return 'Ouvrir la conversation →'
+  if (target.kind === 'dette') return 'Voir la dette →'
+  switch (target.route) {
+    case 'reclamation':
+      return 'Voir les réclamations →'
+    case 'calendar':
+      return 'Voir le calendrier →'
+    case 'clients_dettes':
+      return 'Voir les dettes →'
+    case 'devis':
+      return 'Voir les devis →'
+    default:
+      return 'Ouvrir →'
+  }
 }
 
 export default function NotificationsBell({
   accessToken,
-  userId,
   iconColor = '#f9fafb',
-  onOpenVehicule,
+  onNavigate,
 }: Props) {
   const [open, setOpen] = useState(false)
   const [list, setList] = useState<AppNotification[]>([])
+  const [unreadNotif, setUnreadNotif] = useState(0)
+  const [chatUnread, setChatUnread] = useState(0)
   const [loading, setLoading] = useState(false)
 
-  const refresh = useCallback(async () => {
+  const refreshBadge = useCallback(async () => {
+    try {
+      const [count, convos] = await Promise.all([
+        fetchNotificationsUnreadCount(accessToken),
+        fetchChatConversations(accessToken).catch(() => []),
+      ])
+      setUnreadNotif(count)
+      setChatUnread(convos.reduce((s, c) => s + (c.unreadCount || 0), 0))
+    } catch {
+      /* keep previous */
+    }
+  }, [accessToken])
+
+  const refreshList = useCallback(async () => {
     try {
       const rows = await fetchNotifications(accessToken)
       setList(rows.sort((a, b) => b.date.localeCompare(a.date)))
@@ -42,42 +104,47 @@ export default function NotificationsBell({
   }, [accessToken])
 
   useEffect(() => {
-    void refresh()
-    const id = setInterval(() => void refresh(), 60_000)
+    void refreshBadge()
+    const id = setInterval(() => void refreshBadge(), 45_000)
     return () => clearInterval(id)
-  }, [refresh])
+  }, [refreshBadge])
 
   useEffect(() => {
-    if (open) {
-      setLoading(true)
-      void refresh().finally(() => setLoading(false))
-    }
-  }, [open, refresh])
+    if (!open) return
+    setLoading(true)
+    void Promise.all([refreshList(), refreshBadge()]).finally(() => setLoading(false))
+  }, [open, refreshList, refreshBadge])
 
-  const unread = list.filter((n) => !n.read).length
+  const badgeTotal = unreadNotif + chatUnread
 
   const handlePress = async (n: AppNotification) => {
     if (!n.read) {
       try {
         await markNotificationRead(accessToken, n.id)
         setList((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)))
+        setUnreadNotif((c) => Math.max(0, c - 1))
       } catch {
         /* ignore */
       }
     }
     setOpen(false)
-    if (n.vehiculeId != null && onOpenVehicule) {
-      onOpenVehicule(n.vehiculeId)
-    }
+    const target = resolveNotificationTarget(n)
+    if (target) onNavigate?.(target)
   }
 
   const markAll = async () => {
     try {
       await markAllNotificationsRead(accessToken)
       setList((prev) => prev.map((n) => ({ ...n, read: true })))
+      setUnreadNotif(0)
     } catch {
       /* ignore */
     }
+  }
+
+  const openChat = () => {
+    setOpen(false)
+    onNavigate?.({ kind: 'chat' })
   }
 
   return (
@@ -86,11 +153,14 @@ export default function NotificationsBell({
         style={[styles.bellBtn, open && styles.bellBtnActive]}
         onPress={() => setOpen(true)}
         hitSlop={8}
+        accessibilityLabel={
+          badgeTotal > 0 ? `Notifications, ${badgeTotal} non lues` : 'Notifications'
+        }
       >
         <Ionicons name="notifications-outline" size={24} color={iconColor} />
-        {unread > 0 ? (
+        {badgeTotal > 0 ? (
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>{unread > 99 ? '99+' : unread}</Text>
+            <Text style={styles.badgeText}>{badgeTotal > 99 ? '99+' : badgeTotal}</Text>
           </View>
         ) : null}
       </Pressable>
@@ -100,7 +170,7 @@ export default function NotificationsBell({
           <View style={styles.panel}>
             <View style={styles.panelHeader}>
               <Text style={styles.panelTitle}>Notifications</Text>
-              {unread > 0 ? (
+              {unreadNotif > 0 ? (
                 <Pressable onPress={() => void markAll()}>
                   <Text style={styles.markAll}>Tout marquer lu</Text>
                 </Pressable>
@@ -109,35 +179,46 @@ export default function NotificationsBell({
                 <Ionicons name="close" size={22} color="#6b7280" />
               </Pressable>
             </View>
+
+            {chatUnread > 0 ? (
+              <Pressable style={styles.chatRow} onPress={openChat}>
+                <Ionicons name="chatbubbles-outline" size={18} color="#2563eb" />
+                <Text style={styles.chatRowText}>
+                  Chat — {chatUnread} message{chatUnread > 1 ? 's' : ''} non lu
+                  {chatUnread > 1 ? 's' : ''}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color="#2563eb" />
+              </Pressable>
+            ) : null}
+
             <ScrollView style={styles.list} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
               {loading && list.length === 0 ? (
                 <Text style={styles.empty}>Chargement…</Text>
               ) : list.length === 0 ? (
                 <Text style={styles.empty}>Aucune notification</Text>
               ) : (
-                list.slice(0, 30).map((n) => (
-                  <Pressable
-                    key={n.id}
-                    style={[styles.item, !n.read && styles.itemUnread]}
-                    onPress={() => void handlePress(n)}
-                  >
-                    {n.title ? (
-                      <Text style={styles.itemTitle}>{n.title}</Text>
-                    ) : null}
-                    <Text style={styles.itemMessage}>{n.message}</Text>
-                    <Text style={styles.itemDate}>
-                      {new Date(n.date).toLocaleString('fr-FR', {
-                        day: '2-digit',
-                        month: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </Text>
-                    {n.vehiculeId != null ? (
-                      <Text style={styles.itemLink}>Voir le véhicule →</Text>
-                    ) : null}
-                  </Pressable>
-                ))
+                list.slice(0, 40).map((n) => {
+                  const link = linkLabel(n)
+                  return (
+                    <Pressable
+                      key={n.id}
+                      style={[styles.item, !n.read && styles.itemUnread]}
+                      onPress={() => void handlePress(n)}
+                    >
+                      {n.title ? <Text style={styles.itemTitle}>{n.title}</Text> : null}
+                      <Text style={styles.itemMessage}>{n.message}</Text>
+                      <Text style={styles.itemDate}>
+                        {new Date(n.date).toLocaleString('fr-FR', {
+                          day: '2-digit',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </Text>
+                      {link ? <Text style={styles.itemLink}>{link}</Text> : null}
+                    </Pressable>
+                  )
+                })
               )}
             </ScrollView>
           </View>
@@ -194,6 +275,17 @@ const styles = StyleSheet.create({
   },
   panelTitle: { flex: 1, fontSize: 15, fontWeight: '800', color: '#111827' },
   markAll: { fontSize: 12, color: '#ea580c', fontWeight: '600' },
+  chatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: '#eff6ff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#dbeafe',
+  },
+  chatRowText: { flex: 1, fontSize: 13, fontWeight: '700', color: '#1d4ed8' },
   list: { maxHeight: 400 },
   empty: { padding: 24, textAlign: 'center', color: '#6b7280', fontSize: 14 },
   item: { padding: 14, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },

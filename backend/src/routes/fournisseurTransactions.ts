@@ -32,9 +32,27 @@ function toDto(row: TransactionRow) {
   }
 }
 
-router.get('/', authenticate(), async (_req, res) => {
+router.get('/', authenticate(), async (req, res) => {
   try {
+    const year = Number(req.query.year)
+    const month = Number(req.query.month)
+    let where: { date?: { gte: string; lte: string } } | undefined
+    if (
+      Number.isInteger(year) &&
+      year >= 2000 &&
+      Number.isInteger(month) &&
+      month >= 1 &&
+      month <= 12
+    ) {
+      const mm = String(month).padStart(2, '0')
+      const start = `${year}-${mm}-01`
+      const lastDay = new Date(year, month, 0).getDate()
+      const end = `${year}-${mm}-${String(lastDay).padStart(2, '0')}`
+      where = { date: { gte: start, lte: end } }
+    }
+
     const list = (await db.fournisseurTransaction.findMany({
+      where,
       orderBy: [{ date: 'desc' }, { id: 'desc' }],
     })) as TransactionRow[]
 

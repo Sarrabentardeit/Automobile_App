@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { prisma } from '../lib/prisma'
-import { authenticate } from '../middleware/auth'
+import { notifyMany } from '../lib/notify'
+import { authenticate, type AuthRequest } from '../middleware/auth'
 
 const router = Router()
 const db = prisma as any
@@ -19,6 +20,35 @@ type ClientDetteRow = {
   designation: string
   reste: number
   notes: string | null
+}
+
+async function notifyFinanceAboutDette(
+  actorId: number | undefined,
+  dette: ClientDetteRow,
+  kind: 'created' | 'updated'
+) {
+  try {
+    const targets = await prisma.user.findMany({
+      where: {
+        statut: 'actif',
+        role: { in: ['admin', 'responsable', 'financier'] },
+        ...(actorId ? { id: { not: actorId } } : {}),
+      },
+      select: { id: true },
+    })
+    const verb = kind === 'created' ? 'Nouvelle dette' : 'Dette mise à jour'
+    void notifyMany(
+      targets.map((u) => u.id),
+      {
+        type: 'client_dette',
+        title: verb,
+        message: `${dette.client_name} — ${dette.designation || 'Dette'} · reste ${dette.reste}`,
+        clientDetteId: dette.id,
+      }
+    )
+  } catch (e) {
+    console.warn('[clientsDettes] notify failed', e)
+  }
 }
 
 function toClientAvecDette(c: ClientDetteRow) {
@@ -78,7 +108,7 @@ router.get('/:id', authenticate(), async (req, res) => {
 })
 
 // POST /clients-dettes - créer
-router.post('/', authenticate(), async (req, res) => {
+router.post('/', authenticate(), async (req: AuthRequest, res) => {
   try {
     const body = req.body as {
       clientName?: string
@@ -102,6 +132,8 @@ router.post('/', authenticate(), async (req, res) => {
       },
     })) as ClientDetteRow
 
+    void notifyFinanceAboutDette(req.user?.sub, created, 'created')
+
     return res.status(201).json(toClientAvecDette(created))
   } catch (err) {
     console.error(err)
@@ -114,7 +146,7 @@ router.post('/', authenticate(), async (req, res) => {
 })
 
 // PUT /clients-dettes/:id - mise à jour
-router.put('/:id', authenticate(), async (req, res) => {
+router.put('/:id', authenticate(), async (req: AuthRequest, res) => {
   try {
     const id = Number(req.params.id)
     if (isNaN(id)) return res.status(400).json({ error: 'ID invalide' })
@@ -144,6 +176,8 @@ router.put('/:id', authenticate(), async (req, res) => {
         ...(body.notes !== undefined && { notes: (body.notes ?? '').trim() || null }),
       },
     })) as ClientDetteRow
+
+    void notifyFinanceAboutDette(req.user?.sub, updated, 'updated')
 
     return res.json(toClientAvecDette(updated))
   } catch (err) {

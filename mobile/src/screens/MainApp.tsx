@@ -1,11 +1,25 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import * as Notifications from 'expo-notifications'
 import { StatusBar } from 'expo-status-bar'
 import AppDrawer from '../components/AppDrawer'
-import NotificationsBell from '../components/NotificationsBell'
+import GlobalSearchModal from '../components/GlobalSearchModal'
+import ProfileEditModal from '../components/ProfileEditModal'
+import NotificationsBell, {
+  type NotificationNavigateTarget,
+} from '../components/NotificationsBell'
 import { getStatusBarInset } from '../lib/safeArea'
-import { normalizeStoredUser, type StoredUser } from '../lib/authStorage'
+import {
+  normalizeStoredUser,
+  updateStoredUser,
+  type StoredUser,
+} from '../lib/authStorage'
+import {
+  claimNotificationResponseId,
+  pushPayloadToNavTarget,
+  registerExpoPushToken,
+} from '../lib/pushNotifications'
 import {
   getDefaultRoute,
   getMenuTitle,
@@ -48,10 +62,17 @@ type Props = {
   user: StoredUser
   accessToken: string
   onLogout: () => void
+  onUserUpdated?: (user: StoredUser) => void
 }
 
 type NavState =
-  | { type: 'menu'; route: MenuRouteId; vehiculesEtat?: EtatVehicule }
+  | {
+      type: 'menu'
+      route: MenuRouteId
+      vehiculesEtat?: EtatVehicule
+      conversationId?: number
+      detteId?: number
+    }
   | {
       type: 'vehicule_detail'
       route: MenuRouteId
@@ -59,12 +80,23 @@ type NavState =
       initialTab?: VehiculeOpenOptions['initialTab']
     }
 
-export default function MainApp({ user: rawUser, accessToken, onLogout }: Props) {
-  const user = normalizeStoredUser(rawUser)
+export default function MainApp({
+  user: rawUser,
+  accessToken,
+  onLogout,
+  onUserUpdated,
+}: Props) {
+  const [user, setUser] = useState(() => normalizeStoredUser(rawUser))
   const permissions = user.permissions
+
+  useEffect(() => {
+    setUser(normalizeStoredUser(rawUser))
+  }, [rawUser])
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [showAddVehicule, setShowAddVehicule] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
+  const [showProfile, setShowProfile] = useState(false)
   const [listRefreshKey, setListRefreshKey] = useState(0)
   const [clientsRefreshKey, setClientsRefreshKey] = useState(0)
   const [nav, setNav] = useState<NavState>(() => ({
@@ -82,6 +114,55 @@ export default function MainApp({ user: rawUser, accessToken, onLogout }: Props)
   const goToVehiculesEtat = (etat: EtatVehicule) => {
     setNav({ type: 'menu', route: 'vehicules', vehiculesEtat: etat })
   }
+
+  const navigateFromNotification = useCallback((target: NotificationNavigateTarget) => {
+    setDrawerOpen(false)
+    if (target.kind === 'vehicule') {
+      setNav({
+        type: 'vehicule_detail',
+        route: 'vehicules',
+        vehiculeId: target.vehiculeId,
+      })
+      return
+    }
+    if (target.kind === 'chat') {
+      setNav({
+        type: 'menu',
+        route: 'chat',
+        conversationId: target.conversationId,
+      })
+      return
+    }
+    if (target.kind === 'dette') {
+      setNav({
+        type: 'menu',
+        route: 'clients_dettes',
+        detteId: target.detteId,
+      })
+      return
+    }
+    setNav({ type: 'menu', route: target.route })
+  }, [])
+
+  useEffect(() => {
+    void registerExpoPushToken(accessToken).catch(() => undefined)
+  }, [accessToken])
+
+  useEffect(() => {
+    const handleResponse = (response: Notifications.NotificationResponse) => {
+      if (!claimNotificationResponseId(response.notification.request.identifier)) return
+      const data = response.notification.request.content.data as
+        | Record<string, unknown>
+        | undefined
+      const target = pushPayloadToNavTarget(data)
+      if (target) navigateFromNotification(target)
+    }
+    const sub = Notifications.addNotificationResponseReceivedListener(handleResponse)
+    void Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (response) handleResponse(response)
+    })
+    return () => sub.remove()
+  }, [navigateFromNotification])
 
   const showShell = nav.type === 'menu'
   const statusBarInset = getStatusBarInset()
@@ -103,6 +184,8 @@ export default function MainApp({ user: rawUser, accessToken, onLogout }: Props)
               vehiculeId: id,
             })
           }
+          onNavigateRoute={(route) => setNav({ type: 'menu', route })}
+          onNavigateNotification={navigateFromNotification}
         />
       )
     }
@@ -176,7 +259,15 @@ export default function MainApp({ user: rawUser, accessToken, onLogout }: Props)
           <ReclamationsScreen accessToken={accessToken} drawerOpen={drawerOpen} />
         )
       case 'chat':
-        return <ChatScreen accessToken={accessToken} userId={user.id} />
+        return (
+          <ChatScreen
+            accessToken={accessToken}
+            userId={user.id}
+            initialConversationId={
+              nav.type === 'menu' ? nav.conversationId ?? null : null
+            }
+          />
+        )
       case 'equipe_membres':
         return (
           <EquipeMembresScreen
@@ -214,6 +305,7 @@ export default function MainApp({ user: rawUser, accessToken, onLogout }: Props)
             accessToken={accessToken}
             canViewFinance={!!permissions.canViewFinance}
             drawerOpen={drawerOpen}
+            initialDetteId={nav.type === 'menu' ? nav.detteId ?? null : null}
           />
         )
       case 'fournisseurs':
@@ -364,17 +456,17 @@ export default function MainApp({ user: rawUser, accessToken, onLogout }: Props)
             <Text style={styles.headerTitle} numberOfLines={1}>
               {title}
             </Text>
+            <Pressable
+              style={styles.menuBtn}
+              onPress={() => setShowSearch(true)}
+              hitSlop={8}
+              accessibilityLabel="Recherche globale"
+            >
+              <Ionicons name="search" size={22} color="#f9fafb" />
+            </Pressable>
             <NotificationsBell
               accessToken={accessToken}
-              userId={user.id}
-              onOpenVehicule={(vehiculeId) => {
-                setDrawerOpen(false)
-                setNav({
-                  type: 'vehicule_detail',
-                  route: 'vehicules',
-                  vehiculeId,
-                })
-              }}
+              onNavigate={navigateFromNotification}
             />
           </View>
         </View>
@@ -394,6 +486,16 @@ export default function MainApp({ user: rawUser, accessToken, onLogout }: Props)
         }}
       />
 
+      <GlobalSearchModal
+        visible={showSearch}
+        accessToken={accessToken}
+        onClose={() => setShowSearch(false)}
+        onOpenVehicule={(id) => {
+          setNav({ type: 'vehicule_detail', route: 'vehicules', vehiculeId: id })
+        }}
+        onOpenClients={() => goTo('clients')}
+      />
+
       <AppDrawer
         visible={drawerOpen}
         user={user}
@@ -402,6 +504,30 @@ export default function MainApp({ user: rawUser, accessToken, onLogout }: Props)
         onClose={() => setDrawerOpen(false)}
         onNavigate={goTo}
         onLogout={onLogout}
+        onOpenSearch={() => {
+          setDrawerOpen(false)
+          setShowSearch(true)
+        }}
+        onEditProfile={() => setShowProfile(true)}
+      />
+
+      <ProfileEditModal
+        visible={showProfile}
+        accessToken={accessToken}
+        fullName={user.fullName}
+        telephone={user.telephone}
+        avatarUrl={user.avatarUrl}
+        onClose={() => setShowProfile(false)}
+        onSaved={(data) => {
+          const next = normalizeStoredUser({
+            ...user,
+            fullName: data.fullName,
+            avatarUrl: data.avatarUrl,
+          })
+          setUser(next)
+          void updateStoredUser(next)
+          onUserUpdated?.(next)
+        }}
       />
     </View>
   )

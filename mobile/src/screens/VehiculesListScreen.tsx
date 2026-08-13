@@ -501,7 +501,10 @@ export default function VehiculesListScreen({
             void (async () => {
               try {
                 await deleteVehicule(accessToken, v.id)
-                refreshList()
+                setVehicules((prev) => prev.filter((x) => x.id !== v.id))
+                setTotal((t) => Math.max(0, t - 1))
+                void loadCounts()
+                onListChanged?.()
               } catch (e) {
                 Alert.alert(
                   'Erreur',
@@ -521,13 +524,27 @@ export default function VehiculesListScreen({
     pieces: string
   ) => {
     if (!changeEtatVehicule) return
-    await changeEtat(accessToken, changeEtatVehicule.id, {
+    const id = changeEtatVehicule.id
+    await changeEtat(accessToken, id, {
       nouvel_etat: etat,
       commentaire,
       pieces_utilisees: pieces,
     })
     setChangeEtatVehicule(null)
-    refreshList()
+    setVehicules((prev) => {
+      const next = prev.map((x) =>
+        x.id === id ? { ...x, etat_actuel: etat } : x
+      )
+      if (filtreEtat !== 'tous' && filtreEtat !== etat) {
+        return next.filter((x) => x.id !== id)
+      }
+      return next
+    })
+    if (filtreEtat !== 'tous' && filtreEtat !== etat) {
+      setTotal((t) => Math.max(0, t - 1))
+    }
+    void loadCounts()
+    onListChanged?.()
   }
 
   const onEndReached = async () => {

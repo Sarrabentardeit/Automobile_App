@@ -20,6 +20,7 @@ export type LoginResponse = {
     fullName: string
     role: string
     telephone?: string
+    avatarUrl?: string | null
     permissions?: Record<string, unknown>
   }
   accessToken: string
@@ -50,10 +51,16 @@ export async function apiFetch<T>(
   if (body) headers['Content-Type'] = 'application/json'
   if (token) headers.Authorization = `Bearer ${token}`
 
+  // Accepte objet OU string déjà sérialisée (évite double JSON.stringify → API 400 silencieuse)
+  let requestBody: string | undefined
+  if (body != null) {
+    requestBody = typeof body === 'string' ? body : JSON.stringify(body)
+  }
+
   const res = await fetch(url, {
     method,
     headers,
-    body: body ? JSON.stringify(body) : undefined,
+    body: requestBody,
   })
   const data = await res.json().catch(() => ({}))
 

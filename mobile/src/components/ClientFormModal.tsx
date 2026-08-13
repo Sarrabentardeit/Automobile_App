@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
-  Dimensions,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import CenteredBlurModal from './ui/CenteredBlurModal'
 import { createClient, updateClient } from '../lib/clientApi'
+import { getModalLayout } from '../lib/modalLayout'
 import { theme } from '../theme/appTheme'
 import type { Client, ClientInput } from '../types/client'
 
@@ -96,8 +95,10 @@ export default function ClientFormModal({
   const [form, setForm] = useState<ClientInput>(emptyForm())
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const bottomInset = Platform.OS === 'ios' ? 20 : 12
-  const dialogHeight = Math.min(Dimensions.get('window').height * 0.82, 640)
+  const { cardMaxHeight, scrollMaxHeight, footerPaddingBottom } = getModalLayout({
+    maxCard: 640,
+    chrome: 180,
+  })
 
   useEffect(() => {
     if (!visible) return
@@ -159,7 +160,7 @@ export default function ClientFormModal({
 
   return (
     <CenteredBlurModal visible={visible} onClose={onClose}>
-      <View style={[styles.card, { height: dialogHeight }]}>
+      <View style={[styles.card, { maxHeight: cardMaxHeight }]}>
         <View style={styles.screenAccent} />
         <View style={styles.sheetHeader}>
           <LinearGradient colors={['#fff7ed', '#ffedd5']} style={styles.headerBanner}>
@@ -185,7 +186,7 @@ export default function ClientFormModal({
         </View>
 
         <ScrollView
-          style={styles.scroll}
+          style={{ maxHeight: scrollMaxHeight }}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -273,7 +274,7 @@ export default function ClientFormModal({
             </View>
         </ScrollView>
 
-        <View style={[styles.footerBar, { paddingBottom: bottomInset }]}>
+        <View style={[styles.footerBar, { paddingBottom: footerPaddingBottom }]}>
           <Pressable
             style={({ pressed }) => [styles.cancelBtn, pressed && styles.btnPressed]}
             onPress={onClose}
@@ -325,7 +326,6 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     alignItems: 'stretch',
   },
-  scroll: { flex: 1 },
   headerBanner: {
     width: '100%',
     flexDirection: 'row',

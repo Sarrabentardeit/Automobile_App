@@ -1,8 +1,9 @@
-import { Dimensions, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import CenteredBlurModal from '../ui/CenteredBlurModal'
 import { formatDateFr, relativeDayLabel } from '../../lib/calendarGrid'
+import { getModalLayout } from '../../lib/modalLayout'
 import { theme } from '../../theme/appTheme'
 import type { CalendarAssignment, CalendarRdvStatut } from '../../types/calendarAssignment'
 import { CALENDAR_RDV_STATUTS, CALENDAR_RDV_STATUT_CONFIG } from '../../types/calendarAssignment'
@@ -84,7 +85,10 @@ export default function CalendarAssignmentDetailModal({
   if (!assignment) return null
 
   const [c1, c2] = avatarGradient(assignment.memberName)
-  const dialogHeight = Math.min(Dimensions.get('window').height * 0.88, 620)
+  const { cardMaxHeight, scrollMaxHeight, footerPaddingBottom } = getModalLayout({
+    maxCard: 620,
+    chrome: 150,
+  })
   const rel = relativeDayLabel(assignment.date)
   const tel = assignment.clientTelephone?.replace(/\s/g, '') ?? ''
   const statut = assignment.statut ?? 'prevu'
@@ -92,7 +96,7 @@ export default function CalendarAssignmentDetailModal({
 
   return (
     <CenteredBlurModal visible={visible} onClose={onClose}>
-      <View style={[styles.card, { maxHeight: dialogHeight }]}>
+      <View style={[styles.card, { maxHeight: cardMaxHeight }]}>
         <View style={[styles.accent, { backgroundColor: cfg.color }]} />
 
         <View style={styles.header}>
@@ -109,7 +113,7 @@ export default function CalendarAssignmentDetailModal({
         </View>
 
         <ScrollView
-          style={{ flex: 1 }}
+          style={{ maxHeight: scrollMaxHeight }}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scroll}
           bounces={false}
@@ -201,7 +205,7 @@ export default function CalendarAssignmentDetailModal({
         </ScrollView>
 
         {canManage ? (
-          <View style={styles.footer}>
+          <View style={[styles.footer, { paddingBottom: footerPaddingBottom }]}>
             <Pressable
               style={({ pressed }) => [styles.footerBtn, styles.footerEdit, pressed && styles.pressed]}
               onPress={onEdit}
@@ -218,7 +222,7 @@ export default function CalendarAssignmentDetailModal({
             </Pressable>
           </View>
         ) : (
-          <View style={styles.footerReadOnly}>
+          <View style={[styles.footerReadOnly, { paddingBottom: footerPaddingBottom }]}>
             <Pressable
               style={({ pressed }) => [styles.closeBtn, pressed && styles.pressed]}
               onPress={onClose}
@@ -338,7 +342,8 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     gap: 10,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: theme.borderLight,
   },
@@ -363,7 +368,12 @@ const styles = StyleSheet.create({
     backgroundColor: theme.dangerSoft,
   },
   footerDeleteText: { fontWeight: '800', color: theme.danger },
-  footerReadOnly: { padding: 16, borderTopWidth: 1, borderTopColor: theme.borderLight },
+  footerReadOnly: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: theme.borderLight,
+  },
   closeBtn: {
     paddingVertical: 14,
     alignItems: 'center',

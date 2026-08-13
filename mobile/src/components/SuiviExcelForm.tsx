@@ -9,6 +9,7 @@ type Props = {
   data: VehiculeSuiviInput
   onChange: (next: VehiculeSuiviInput) => void
   numero?: string
+  readOnly?: boolean
 }
 
 type LineField = 'travauxEffectues' | 'travauxProchains' | 'produitsUtilises'
@@ -38,9 +39,11 @@ function setLine(
   onChange({ ...data, [field]: copy.join('\n') })
 }
 
-export default function SuiviExcelForm({ data, onChange, numero }: Props) {
-  const set = <K extends keyof VehiculeSuiviInput>(k: K, v: VehiculeSuiviInput[K]) =>
+export default function SuiviExcelForm({ data, onChange, numero, readOnly = false }: Props) {
+  const set = <K extends keyof VehiculeSuiviInput>(k: K, v: VehiculeSuiviInput[K]) => {
+    if (readOnly) return
     onChange({ ...data, [k]: v })
+  }
 
   const travEff = linesOf(data.travauxEffectues)
   const travProch = linesOf(data.travauxProchains)
@@ -52,6 +55,7 @@ export default function SuiviExcelForm({ data, onChange, numero }: Props) {
   const prod = padTo(produits, rowCount)
 
   const addRow = () => {
+    if (readOnly) return
     onChange({
       ...data,
       travauxEffectues: padTo(linesOf(data.travauxEffectues), rowCount).concat('').join('\n'),
@@ -61,7 +65,7 @@ export default function SuiviExcelForm({ data, onChange, numero }: Props) {
   }
 
   const removeRow = (i: number) => {
-    if (rowCount <= 1) return
+    if (readOnly || rowCount <= 1) return
     const next = (lines: string[]) => {
       const copy = padTo(lines, rowCount)
       copy.splice(i, 1)
@@ -90,6 +94,7 @@ export default function SuiviExcelForm({ data, onChange, numero }: Props) {
             value={data.date ?? ''}
             onChangeText={(v) => set('date', v)}
             placeholder="AAAA-MM-JJ"
+            editable={!readOnly}
           />
         </View>
         <View style={styles.infoCell}>
@@ -98,6 +103,7 @@ export default function SuiviExcelForm({ data, onChange, numero }: Props) {
             style={styles.valInput}
             value={data.voiture ?? ''}
             onChangeText={(v) => set('voiture', v)}
+            editable={!readOnly}
           />
         </View>
       </View>
@@ -109,6 +115,7 @@ export default function SuiviExcelForm({ data, onChange, numero }: Props) {
             value={data.kilometrage ?? ''}
             onChangeText={(v) => set('kilometrage', v)}
             keyboardType="number-pad"
+            editable={!readOnly}
           />
         </View>
         <View style={styles.infoCell}>
@@ -117,6 +124,7 @@ export default function SuiviExcelForm({ data, onChange, numero }: Props) {
             style={styles.valInput}
             value={data.matricule ?? ''}
             onChangeText={(v) => set('matricule', v)}
+            editable={!readOnly}
           />
         </View>
       </View>
@@ -125,7 +133,7 @@ export default function SuiviExcelForm({ data, onChange, numero }: Props) {
         <Text style={[styles.th, { flex: 41 }]}>TRAVAUX EFFECTUÉES</Text>
         <Text style={[styles.th, { flex: 36 }]}>TRAVAUX PROCHAINS</Text>
         <Text style={[styles.th, { flex: 23 }]}>PRODUITS UTILISÉS</Text>
-        <View style={styles.thAction} />
+        {!readOnly ? <View style={styles.thAction} /> : null}
       </View>
       {Array.from({ length: rowCount }, (_, i) => (
         <View key={i} style={styles.dataRow}>
@@ -133,31 +141,38 @@ export default function SuiviExcelForm({ data, onChange, numero }: Props) {
             style={[styles.dataCell, { flex: 41 }]}
             value={eff[i] ?? ''}
             onChangeText={(v) => setLine('travauxEffectues', eff, rowCount, i, v, data, onChange)}
+            editable={!readOnly}
           />
           <TextInput
             style={[styles.dataCell, { flex: 36 }]}
             value={proch[i] ?? ''}
             onChangeText={(v) => setLine('travauxProchains', proch, rowCount, i, v, data, onChange)}
+            editable={!readOnly}
           />
           <TextInput
             style={[styles.dataCell, { flex: 23 }]}
             value={prod[i] ?? ''}
             onChangeText={(v) => setLine('produitsUtilises', prod, rowCount, i, v, data, onChange)}
+            editable={!readOnly}
           />
-          <Pressable
-            onPress={() => removeRow(i)}
-            disabled={rowCount <= 1}
-            style={[styles.delBtn, rowCount <= 1 && styles.delBtnDisabled]}
-            hitSlop={6}
-          >
-            <Text style={[styles.delText, rowCount <= 1 && styles.delTextDisabled]}>×</Text>
-          </Pressable>
+          {!readOnly ? (
+            <Pressable
+              onPress={() => removeRow(i)}
+              disabled={rowCount <= 1}
+              style={[styles.delBtn, rowCount <= 1 && styles.delBtnDisabled]}
+              hitSlop={6}
+            >
+              <Text style={[styles.delText, rowCount <= 1 && styles.delTextDisabled]}>×</Text>
+            </Pressable>
+          ) : null}
         </View>
       ))}
 
-      <Pressable onPress={addRow} style={styles.addRow}>
-        <Text style={styles.addText}>+ Ajouter une ligne</Text>
-      </Pressable>
+      {!readOnly ? (
+        <Pressable onPress={addRow} style={styles.addRow}>
+          <Text style={styles.addText}>+ Ajouter une ligne</Text>
+        </Pressable>
+      ) : null}
 
       <View style={styles.footerRow}>
         <View style={styles.techBox}>
@@ -166,6 +181,7 @@ export default function SuiviExcelForm({ data, onChange, numero }: Props) {
             style={styles.techInput}
             value={data.technicien ?? ''}
             onChangeText={(v) => set('technicien', v)}
+            editable={!readOnly}
           />
         </View>
         <View style={styles.rempliBox}>
@@ -174,6 +190,7 @@ export default function SuiviExcelForm({ data, onChange, numero }: Props) {
             style={styles.valInput}
             value={data.rempliPar ?? ''}
             onChangeText={(v) => set('rempliPar', v)}
+            editable={!readOnly}
           />
         </View>
       </View>

@@ -1,8 +1,7 @@
-import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import ModalBlurBackdrop from '../ui/ModalBlurBackdrop'
-import { getStatusBarInset } from '../../lib/safeArea'
+import CenteredSheetShell from '../ui/CenteredSheetShell'
 import { theme } from '../../theme/appTheme'
 import type { Client } from '../../types/client'
 
@@ -81,100 +80,13 @@ export default function ClientDetailSheet({
 
   const tel = (client.telephone ?? '').replace(/\s/g, '')
   const [c1, c2] = avatarGradient(client.nom)
-  const topInset = getStatusBarInset()
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <ModalBlurBackdrop onPress={onClose} />
-        <View style={[styles.sheet, { paddingBottom: Math.max(20, topInset > 0 ? 12 : 20) }]}>
-        <View style={styles.handle} />
-
-        <ScrollView
-          style={{ flex: 1 }}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scroll}
-          bounces={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.profile}>
-            <LinearGradient colors={[c1, c2]} style={styles.avatarLg}>
-              <Text style={styles.avatarLgText}>{initial(client.nom)}</Text>
-            </LinearGradient>
-            <Text style={styles.profileName}>{client.nom}</Text>
-            {client.matriculeFiscale ? (
-              <View style={styles.mfPill}>
-                <Text style={styles.mfPillText}>MF {client.matriculeFiscale}</Text>
-              </View>
-            ) : null}
-          </View>
-
-          <View style={styles.actionGrid}>
-            <Pressable
-              style={({ pressed }) => [styles.actionPrimary, pressed && styles.pressed]}
-              onPress={() => void Linking.openURL(`tel:${tel}`)}
-            >
-              <Ionicons name="call" size={22} color="#fff" />
-              <Text style={styles.actionPrimaryText}>Appeler</Text>
-            </Pressable>
-            {client.email ? (
-              <Pressable
-                style={({ pressed }) => [styles.actionSecondary, pressed && styles.pressed]}
-                onPress={() => void Linking.openURL(`mailto:${client.email}`)}
-              >
-                <Ionicons name="mail" size={20} color={theme.primary} />
-                <Text style={styles.actionSecondaryText}>E-mail</Text>
-              </Pressable>
-            ) : (
-              <View style={[styles.actionSecondary, styles.actionDisabled]}>
-                <Ionicons name="mail-outline" size={20} color={theme.textSubtle} />
-                <Text style={styles.actionDisabledText}>E-mail</Text>
-              </View>
-            )}
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Coordonnées</Text>
-            <View style={styles.sectionCard}>
-              <InfoRow
-                icon="call-outline"
-                label="Téléphone"
-                value={client.telephone}
-                accent
-                onPress={() => void Linking.openURL(`tel:${tel}`)}
-              />
-              {client.email ? (
-                <>
-                  <View style={styles.divider} />
-                  <InfoRow
-                    icon="mail-outline"
-                    label="E-mail"
-                    value={client.email}
-                    onPress={() => void Linking.openURL(`mailto:${client.email}`)}
-                  />
-                </>
-              ) : null}
-              {client.adresse ? (
-                <>
-                  <View style={styles.divider} />
-                  <InfoRow icon="location-outline" label="Adresse" value={client.adresse} />
-                </>
-              ) : null}
-            </View>
-          </View>
-
-          {client.notes ? (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Notes</Text>
-              <View style={styles.notesCard}>
-                <Ionicons name="document-text-outline" size={18} color={theme.textMuted} />
-                <Text style={styles.notesText}>{client.notes}</Text>
-              </View>
-            </View>
-          ) : null}
-        </ScrollView>
-
-        <View style={styles.footer}>
+    <CenteredSheetShell
+      visible={visible}
+      onClose={onClose}
+      footer={
+        <>
           <Pressable
             style={({ pressed }) => [styles.footerBtn, styles.footerEdit, pressed && styles.pressed]}
             onPress={onEdit}
@@ -189,52 +101,89 @@ export default function ClientDetailSheet({
             <Ionicons name="trash-outline" size={20} color={theme.danger} />
             <Text style={styles.footerDeleteText}>Supprimer</Text>
           </Pressable>
-        </View>
+        </>
+      }
+    >
+      <View style={styles.profile}>
+        <LinearGradient colors={[c1, c2]} style={styles.avatarLg}>
+          <Text style={styles.avatarLgText}>{initial(client.nom)}</Text>
+        </LinearGradient>
+        <Text style={styles.profileName}>{client.nom}</Text>
+        {client.matriculeFiscale ? (
+          <View style={styles.mfPill}>
+            <Text style={styles.mfPillText}>MF {client.matriculeFiscale}</Text>
+          </View>
+        ) : null}
+      </View>
 
-        <Pressable onPress={onClose} hitSlop={12} style={styles.closeFab}>
-          <Ionicons name="close" size={22} color={theme.textSecondary} />
+      <View style={styles.actionGrid}>
+        <Pressable
+          style={({ pressed }) => [styles.actionPrimary, pressed && styles.pressed]}
+          onPress={() => void Linking.openURL(`tel:${tel}`)}
+        >
+          <Ionicons name="call" size={22} color="#fff" />
+          <Text style={styles.actionPrimaryText}>Appeler</Text>
         </Pressable>
+        {client.email ? (
+          <Pressable
+            style={({ pressed }) => [styles.actionSecondary, pressed && styles.pressed]}
+            onPress={() => void Linking.openURL(`mailto:${client.email}`)}
+          >
+            <Ionicons name="mail" size={20} color={theme.primary} />
+            <Text style={styles.actionSecondaryText}>E-mail</Text>
+          </Pressable>
+        ) : (
+          <View style={[styles.actionSecondary, styles.actionDisabled]}>
+            <Ionicons name="mail-outline" size={20} color={theme.textSubtle} />
+            <Text style={styles.actionDisabledText}>E-mail</Text>
+          </View>
+        )}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Coordonnées</Text>
+        <View style={styles.sectionCard}>
+          <InfoRow
+            icon="call-outline"
+            label="Téléphone"
+            value={client.telephone}
+            accent
+            onPress={() => void Linking.openURL(`tel:${tel}`)}
+          />
+          {client.email ? (
+            <>
+              <View style={styles.divider} />
+              <InfoRow
+                icon="mail-outline"
+                label="E-mail"
+                value={client.email}
+                onPress={() => void Linking.openURL(`mailto:${client.email}`)}
+              />
+            </>
+          ) : null}
+          {client.adresse ? (
+            <>
+              <View style={styles.divider} />
+              <InfoRow icon="location-outline" label="Adresse" value={client.adresse} />
+            </>
+          ) : null}
         </View>
       </View>
-    </Modal>
+
+      {client.notes ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Notes</Text>
+          <View style={styles.notesCard}>
+            <Ionicons name="document-text-outline" size={18} color={theme.textMuted} />
+            <Text style={styles.notesText}>{client.notes}</Text>
+          </View>
+        </View>
+      ) : null}
+    </CenteredSheetShell>
   )
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    maxHeight: '92%',
-    backgroundColor: theme.surface,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    zIndex: 1,
-    ...theme.shadow.sm,
-    elevation: 12,
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: theme.border,
-    marginTop: 10,
-    marginBottom: 4,
-  },
-  scroll: { paddingHorizontal: 20, paddingBottom: 8 },
-  closeFab: {
-    position: 'absolute',
-    top: 12,
-    right: 16,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: theme.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   profile: { alignItems: 'center', paddingTop: 8, paddingBottom: 20 },
   avatarLg: {
     width: 72,
@@ -252,6 +201,7 @@ const styles = StyleSheet.create({
     color: theme.text,
     textAlign: 'center',
     letterSpacing: -0.3,
+    paddingHorizontal: 36,
   },
   mfPill: {
     marginTop: 8,
@@ -341,15 +291,6 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   notesText: { flex: 1, fontSize: 14, color: theme.textSecondary, lineHeight: 20 },
-  footer: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 8,
-    borderTopWidth: 1,
-    borderTopColor: theme.borderLight,
-  },
   footerBtn: {
     flex: 1,
     flexDirection: 'row',

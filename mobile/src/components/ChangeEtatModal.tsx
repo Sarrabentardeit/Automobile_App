@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import {
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,7 +8,8 @@ import {
   View,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import ModalBlurBackdrop from './ui/ModalBlurBackdrop'
+import CenteredBlurModal from './ui/CenteredBlurModal'
+import { getModalLayout } from '../lib/modalLayout'
 import {
   ETAT_CONFIG,
   TRANSITIONS_AUTORISEES,
@@ -47,6 +47,7 @@ export default function ChangeEtatModal({
     color: '#6b7280',
     description: '',
   }
+  const { cardMaxHeight, scrollMaxHeight } = getModalLayout({ maxCard: 640, chrome: 120 })
 
   const reset = () => {
     setSelected(null)
@@ -80,157 +81,155 @@ export default function ChangeEtatModal({
 
   if (transitions.length === 0) {
     return (
-      <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
-        <View style={styles.overlay}>
-          <ModalBlurBackdrop onPress={handleClose} />
-          <View style={styles.sheet}>
-            <Text style={styles.title}>Aucune transition</Text>
-            <Text style={styles.sub}>
-              Impossible de changer l&apos;état depuis {currentCfg.label}.
-            </Text>
-            <Pressable style={styles.btnSecondary} onPress={handleClose}>
-              <Text style={styles.btnSecondaryText}>Fermer</Text>
-            </Pressable>
-          </View>
+      <CenteredBlurModal visible={visible} onClose={handleClose} maxWidth={420}>
+        <View style={[styles.sheet, { maxHeight: cardMaxHeight }]}>
+          <Text style={styles.title}>Aucune transition</Text>
+          <Text style={styles.sub}>
+            Impossible de changer l&apos;état depuis {currentCfg.label}.
+          </Text>
+          <Pressable style={styles.btnSecondary} onPress={handleClose}>
+            <Text style={styles.btnSecondaryText}>Fermer</Text>
+          </Pressable>
         </View>
-      </Modal>
+      </CenteredBlurModal>
     )
   }
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
-      <View style={styles.overlay}>
-        <ModalBlurBackdrop onPress={handleClose} />
-        <View style={styles.sheet}>
-          <View style={styles.sheetHeader}>
-            <Text style={styles.title}>
-              {step === 'confirm' ? 'Confirmer' : "Changer l'état"}
-            </Text>
-            <Pressable onPress={handleClose} hitSlop={8}>
-              <Ionicons name="close" size={24} color="#6b7280" />
-            </Pressable>
-          </View>
-          <Text style={styles.sub}>
-            {vehicule.modele} — {vehicule.immatriculation || 'Sans immat.'}
+    <CenteredBlurModal visible={visible} onClose={handleClose} maxWidth={420}>
+      <View style={[styles.sheet, { maxHeight: cardMaxHeight }]}>
+        <View style={styles.sheetHeader}>
+          <Text style={styles.title}>
+            {step === 'confirm' ? 'Confirmer' : "Changer l'état"}
           </Text>
+          <Pressable onPress={handleClose} hitSlop={8}>
+            <Ionicons name="close" size={24} color="#6b7280" />
+          </Pressable>
+        </View>
+        <Text style={styles.sub}>
+          {vehicule.modele} — {vehicule.immatriculation || 'Sans immat.'}
+        </Text>
 
-          {step === 'select' ? (
-            <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled">
-              <Text style={styles.label}>État actuel</Text>
+        {step === 'select' ? (
+          <ScrollView
+            style={{ maxHeight: scrollMaxHeight }}
+            keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled
+          >
+            <Text style={styles.label}>État actuel</Text>
+            <View style={[styles.badge, { backgroundColor: currentCfg.color }]}>
+              <Text style={styles.badgeText}>{currentCfg.label}</Text>
+            </View>
+
+            <Text style={[styles.label, { marginTop: 16 }]}>Nouvel état</Text>
+            {transitions.map((etat) => {
+              const cfg = ETAT_CONFIG[etat]
+              if (!cfg) return null
+              const isSel = selected === etat
+              return (
+                <Pressable
+                  key={etat}
+                  onPress={() => {
+                    setSelected(etat)
+                    setError('')
+                  }}
+                  style={[
+                    styles.etatOption,
+                    isSel && { borderColor: cfg.color, backgroundColor: `${cfg.color}12` },
+                  ]}
+                >
+                  <View style={[styles.radio, { borderColor: cfg.color }]}>
+                    {isSel ? (
+                      <View style={[styles.radioInner, { backgroundColor: cfg.color }]} />
+                    ) : null}
+                  </View>
+                  <View style={styles.etatOptionText}>
+                    <Text style={[styles.etatLabel, { color: cfg.color }]}>{cfg.label}</Text>
+                    <Text style={styles.etatDesc}>{cfg.description}</Text>
+                  </View>
+                </Pressable>
+              )
+            })}
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+            <Pressable
+              style={[styles.btnPrimary, !selected && styles.btnDisabled]}
+              disabled={!selected}
+              onPress={() => {
+                if (!selected) setError('Choisissez un état')
+                else setStep('confirm')
+              }}
+            >
+              <Text style={styles.btnPrimaryText}>Suivant</Text>
+            </Pressable>
+          </ScrollView>
+        ) : (
+          <ScrollView
+            style={{ maxHeight: scrollMaxHeight }}
+            keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled
+            contentContainerStyle={{ paddingBottom: 12 }}
+          >
+            <View style={styles.transitionRow}>
               <View style={[styles.badge, { backgroundColor: currentCfg.color }]}>
                 <Text style={styles.badgeText}>{currentCfg.label}</Text>
               </View>
-
-              <Text style={[styles.label, { marginTop: 16 }]}>Nouvel état</Text>
-              {transitions.map((etat) => {
-                const cfg = ETAT_CONFIG[etat]
-                if (!cfg) return null
-                const isSel = selected === etat
-                return (
-                  <Pressable
-                    key={etat}
-                    onPress={() => {
-                      setSelected(etat)
-                      setError('')
-                    }}
-                    style={[
-                      styles.etatOption,
-                      isSel && { borderColor: cfg.color, backgroundColor: `${cfg.color}12` },
-                    ]}
-                  >
-                    <View style={[styles.radio, { borderColor: cfg.color }]}>
-                      {isSel ? (
-                        <View style={[styles.radioInner, { backgroundColor: cfg.color }]} />
-                      ) : null}
-                    </View>
-                    <View style={styles.etatOptionText}>
-                      <Text style={[styles.etatLabel, { color: cfg.color }]}>{cfg.label}</Text>
-                      <Text style={styles.etatDesc}>{cfg.description}</Text>
-                    </View>
-                  </Pressable>
-                )
-              })}
-              {error ? <Text style={styles.error}>{error}</Text> : null}
-              <Pressable
-                style={[styles.btnPrimary, !selected && styles.btnDisabled]}
-                disabled={!selected}
-                onPress={() => {
-                  if (!selected) setError('Choisissez un état')
-                  else setStep('confirm')
-                }}
+              <Ionicons name="arrow-forward" size={20} color="#9ca3af" />
+              <View
+                style={[
+                  styles.badge,
+                  { backgroundColor: (ETAT_CONFIG[selected!] ?? currentCfg).color },
+                ]}
               >
-                <Text style={styles.btnPrimaryText}>Suivant</Text>
+                <Text style={styles.badgeText}>
+                  {(ETAT_CONFIG[selected!] ?? currentCfg).label}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.label}>Commentaire (optionnel)</Text>
+            <TextInput
+              style={styles.textarea}
+              multiline
+              placeholder="Détails du changement..."
+              value={commentaire}
+              onChangeText={setCommentaire}
+            />
+            <Text style={styles.label}>Pièces utilisées (optionnel)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Références pièces..."
+              value={pieces}
+              onChangeText={setPieces}
+            />
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+            <View style={styles.btnRow}>
+              <Pressable style={styles.btnSecondary} onPress={() => setStep('select')}>
+                <Text style={styles.btnSecondaryText}>Retour</Text>
               </Pressable>
-            </ScrollView>
-          ) : (
-            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 12 }}>
-              <View style={styles.transitionRow}>
-                <View style={[styles.badge, { backgroundColor: currentCfg.color }]}>
-                  <Text style={styles.badgeText}>{currentCfg.label}</Text>
-                </View>
-                <Ionicons name="arrow-forward" size={20} color="#9ca3af" />
-                <View
-                  style={[
-                    styles.badge,
-                    { backgroundColor: (ETAT_CONFIG[selected!] ?? currentCfg).color },
-                  ]}
-                >
-                  <Text style={styles.badgeText}>
-                    {(ETAT_CONFIG[selected!] ?? currentCfg).label}
-                  </Text>
-                </View>
-              </View>
-              <Text style={styles.label}>Commentaire (optionnel)</Text>
-              <TextInput
-                style={styles.textarea}
-                multiline
-                placeholder="Détails du changement..."
-                value={commentaire}
-                onChangeText={setCommentaire}
-              />
-              <Text style={styles.label}>Pièces utilisées (optionnel)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Références pièces..."
-                value={pieces}
-                onChangeText={setPieces}
-              />
-              {error ? <Text style={styles.error}>{error}</Text> : null}
-              <View style={styles.btnRow}>
-                <Pressable style={styles.btnSecondary} onPress={() => setStep('select')}>
-                  <Text style={styles.btnSecondaryText}>Retour</Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.btnPrimary, styles.btnFlex, loading && styles.btnDisabled]}
-                  disabled={loading}
-                  onPress={() => void handleConfirm()}
-                >
-                  <Text style={styles.btnPrimaryText}>
-                    {loading ? 'Enregistrement...' : 'Confirmer'}
-                  </Text>
-                </Pressable>
-              </View>
-            </ScrollView>
-          )}
-        </View>
+              <Pressable
+                style={[styles.btnPrimary, styles.btnFlex, loading && styles.btnDisabled]}
+                disabled={loading}
+                onPress={() => void handleConfirm()}
+              >
+                <Text style={styles.btnPrimaryText}>
+                  {loading ? 'Enregistrement...' : 'Confirmer'}
+                </Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+        )}
       </View>
-    </Modal>
+    </CenteredBlurModal>
   )
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
   sheet: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderRadius: 20,
     padding: 20,
-    maxHeight: '90%',
-    zIndex: 1,
-    elevation: 12,
+    width: '100%',
+    flexShrink: 1,
+    elevation: 16,
   },
   sheetHeader: {
     flexDirection: 'row',
@@ -239,7 +238,6 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 18, fontWeight: '700', color: '#111827' },
   sub: { fontSize: 13, color: '#6b7280', marginTop: 4, marginBottom: 12 },
-  scroll: { maxHeight: 420 },
   label: { fontSize: 12, fontWeight: '600', color: '#6b7280', marginBottom: 6 },
   badge: {
     alignSelf: 'flex-start',

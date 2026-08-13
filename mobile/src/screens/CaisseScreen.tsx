@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,8 +12,10 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import AppToast from '../components/ui/AppToast'
+import CenteredBlurModal from '../components/ui/CenteredBlurModal'
 import { fetchCaisse, getSlotForUser, saveCaisse, teamMoneyMemberKey } from '../lib/caisseApi'
 import { apiFetch } from '../lib/api'
+import { getModalLayout } from '../lib/modalLayout'
 import { theme } from '../theme/appTheme'
 import {
   ALL_PRESENCE_STATUTS,
@@ -82,6 +83,10 @@ export default function CaisseScreen({ accessToken, canViewFinance, drawerOpen =
     setToastError(err)
     setToast(msg)
   }
+  const { cardMaxHeight, scrollMaxHeight, footerPaddingBottom } = getModalLayout({
+    maxCard: 640,
+    chrome: 150,
+  })
 
   const load = useCallback(async () => {
     setError(null)
@@ -346,14 +351,13 @@ export default function CaisseScreen({ accessToken, canViewFinance, drawerOpen =
       />
 
       {/* Modal détail jour */}
-      <Modal
+      <CenteredBlurModal
         visible={!!selectedDay && !editSlot}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setSelectedDay(null)}
+        onClose={() => setSelectedDay(null)}
+        maxWidth={440}
       >
-        {selectedDay && (
-          <View style={styles.modalRoot}>
+        {selectedDay ? (
+          <View style={[styles.modalCard, { maxHeight: cardMaxHeight }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{formatDateFR(selectedDay.date)}</Text>
               <Pressable onPress={() => setSelectedDay(null)} style={styles.modalClose} hitSlop={10}>
@@ -368,7 +372,11 @@ export default function CaisseScreen({ accessToken, canViewFinance, drawerOpen =
               </View>
             )}
 
-            <ScrollView contentContainerStyle={styles.modalScroll}>
+            <ScrollView
+              style={{ maxHeight: scrollMaxHeight }}
+              contentContainerStyle={[styles.modalScroll, { paddingBottom: footerPaddingBottom }]}
+              showsVerticalScrollIndicator={false}
+            >
               {users.map((u) => {
                 const raw = getSlotForUser(selectedDay.members, u.id)
                 const slot: TeamMemberSlots = {
@@ -433,18 +441,17 @@ export default function CaisseScreen({ accessToken, canViewFinance, drawerOpen =
               })}
             </ScrollView>
           </View>
-        )}
-      </Modal>
+        ) : null}
+      </CenteredBlurModal>
 
       {/* Modal édition slot */}
-      <Modal
+      <CenteredBlurModal
         visible={!!editSlot}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setEditSlot(null)}
+        onClose={() => setEditSlot(null)}
+        maxWidth={440}
       >
-        {editSlot && (
-          <View style={styles.modalRoot}>
+        {editSlot ? (
+          <View style={[styles.modalCard, { maxHeight: cardMaxHeight }]}>
             <View style={styles.modalHeader}>
               <View>
                 <Text style={styles.modalTitle}>{editSlot.name}</Text>
@@ -455,7 +462,12 @@ export default function CaisseScreen({ accessToken, canViewFinance, drawerOpen =
               </Pressable>
             </View>
 
-            <ScrollView contentContainerStyle={styles.editScroll} keyboardShouldPersistTaps="handled">
+            <ScrollView
+              style={{ maxHeight: scrollMaxHeight }}
+              contentContainerStyle={styles.editScroll}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
               {/* Présence */}
               <Text style={styles.editLabel}>Présence</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.presenceScroll}>
@@ -526,7 +538,7 @@ export default function CaisseScreen({ accessToken, canViewFinance, drawerOpen =
               />
             </ScrollView>
 
-            <View style={styles.editFooter}>
+            <View style={[styles.editFooter, { paddingBottom: footerPaddingBottom }]}>
               <Pressable
                 style={[styles.editBtn, styles.editBtnCancel]}
                 onPress={() => setEditSlot(null)}
@@ -545,8 +557,8 @@ export default function CaisseScreen({ accessToken, canViewFinance, drawerOpen =
               </Pressable>
             </View>
           </View>
-        )}
-      </Modal>
+        ) : null}
+      </CenteredBlurModal>
 
       <AppToast message={toast} type={toastError ? 'error' : 'success'} onDismiss={() => setToast(null)} />
     </View>
@@ -623,15 +635,18 @@ const styles = StyleSheet.create({
   denied: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
   deniedTitle: { fontSize: 17, fontWeight: '600', color: theme.text },
   // Modal
-  modalRoot: { flex: 1, backgroundColor: theme.bg },
+  modalCard: {
+    backgroundColor: theme.surface,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     paddingHorizontal: 18,
-    paddingTop: 20,
+    paddingTop: 18,
     paddingBottom: 14,
-    backgroundColor: theme.surface,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: theme.borderLight,
   },
@@ -694,8 +709,13 @@ const styles = StyleSheet.create({
   presenceChipText: { fontSize: 12, fontWeight: '600', color: theme.textMuted },
   presenceChipTextActive: { color: theme.primaryDark },
   editFooter: {
-    flexDirection: 'row', gap: 10, padding: 16,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.borderLight,
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    backgroundColor: theme.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: theme.borderLight,
   },
   editBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 12 },
   editBtnCancel: { backgroundColor: theme.surfaceMuted },

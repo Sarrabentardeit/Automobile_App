@@ -1,7 +1,7 @@
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import ModalBlurBackdrop from '../ui/ModalBlurBackdrop'
-import { getStatusBarInset } from '../../lib/safeArea'
+import CenteredBlurModal from '../ui/CenteredBlurModal'
+import { getModalLayout } from '../../lib/modalLayout'
 import { theme } from '../../theme/appTheme'
 import {
   HUILE_TYPE_STYLES,
@@ -42,19 +42,25 @@ export default function ProduitDetailSheet({
   const ft = normalizeFluideTypeForCategorie(produit.categorie, produit.fluideType)
   const fs = HUILE_TYPE_STYLES[ft]
   const alert = isProduitAlert(produit)
-  const bottomPad = Math.max(20, getStatusBarInset() > 40 ? 12 : 20)
+  const { cardMaxHeight, scrollMaxHeight, footerPaddingBottom } = getModalLayout({
+    maxCard: 640,
+    chrome: 140,
+  })
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <ModalBlurBackdrop onPress={onClose} />
-        <View style={[styles.sheet, { paddingBottom: bottomPad }]}>
-        <View style={styles.handle} />
+    <CenteredBlurModal visible={visible} onClose={onClose} maxWidth={420}>
+      <View style={[styles.card, { maxHeight: cardMaxHeight }]}>
+        <View style={styles.accent} />
         <Pressable onPress={onClose} hitSlop={12} style={styles.closeFab}>
           <Ionicons name="close" size={22} color={theme.textSecondary} />
         </Pressable>
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+        <ScrollView
+          style={{ maxHeight: scrollMaxHeight }}
+          showsVerticalScrollIndicator
+          contentContainerStyle={styles.scroll}
+          nestedScrollEnabled
+        >
           <View style={styles.profile}>
             <View style={styles.iconLg}>
               <Ionicons name="cube" size={32} color={theme.primary} />
@@ -109,10 +115,7 @@ export default function ProduitDetailSheet({
                 </>
               ) : null}
               <View style={styles.divider} />
-              <Row
-                label="Valeur stock (TND)"
-                value={formatTnd(produit.valeurAchatTTC)}
-              />
+              <Row label="Valeur stock (TND)" value={formatTnd(produit.valeurAchatTTC)} />
               {produit.seuilAlerte != null ? (
                 <>
                   <View style={styles.divider} />
@@ -123,7 +126,7 @@ export default function ProduitDetailSheet({
           </View>
         </ScrollView>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: footerPaddingBottom }]}>
           <Pressable
             style={({ pressed }) => [styles.footerBtn, styles.footerEdit, pressed && styles.pressed]}
             onPress={onEdit}
@@ -139,38 +142,25 @@ export default function ProduitDetailSheet({
             <Text style={styles.footerDeleteText}>Supprimer</Text>
           </Pressable>
         </View>
-        </View>
       </View>
-    </Modal>
+    </CenteredBlurModal>
   )
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    maxHeight: '90%',
+  card: {
+    width: '100%',
     backgroundColor: theme.surface,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    zIndex: 1,
-    ...theme.shadow.sm,
-    elevation: 12,
+    borderRadius: 20,
+    overflow: 'hidden',
+    flexShrink: 1,
+    elevation: 16,
   },
-  handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: theme.border,
-    marginTop: 10,
-  },
+  accent: { height: 3, backgroundColor: theme.primary },
   closeFab: {
     position: 'absolute',
     top: 12,
-    right: 16,
+    right: 12,
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -179,7 +169,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 2,
   },
-  scroll: { paddingHorizontal: 20, paddingBottom: 8 },
+  scroll: { paddingHorizontal: 20, paddingBottom: 8, paddingTop: 8 },
   profile: { alignItems: 'center', paddingTop: 8, paddingBottom: 12 },
   iconLg: {
     width: 72,
@@ -195,6 +185,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: theme.text,
     textAlign: 'center',
+    paddingHorizontal: 36,
   },
   badges: {
     flexDirection: 'row',
@@ -267,7 +258,7 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     gap: 10,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: theme.borderLight,

@@ -32,25 +32,32 @@ const VOYANT_COLORS: Record<VoyantEtat, string> = {
 type Props = {
   form: OrdreExcelFormState
   onChange: (next: OrdreExcelFormState) => void
+  readOnly?: boolean
 }
 
-export default function OrdreExcelForm({ form, onChange }: Props) {
+export default function OrdreExcelForm({ form, onChange, readOnly = false }: Props) {
   const [schemaFailed, setSchemaFailed] = useState(false)
   const schemaUri = getWebAssetUrl('/ordre-reparation-schema-voiture.jpg')
 
-  const set = <K extends keyof OrdreExcelFormState>(k: K, v: OrdreExcelFormState[K]) =>
+  const set = <K extends keyof OrdreExcelFormState>(k: K, v: OrdreExcelFormState[K]) => {
+    if (readOnly) return
     onChange({ ...form, [k]: v })
+  }
 
   const setComp = <K extends keyof OrdreExcelFormState['complement']>(
     k: K,
     v: OrdreExcelFormState['complement'][K]
-  ) => onChange({ ...form, complement: { ...form.complement, [k]: v } })
+  ) => {
+    if (readOnly) return
+    onChange({ ...form, complement: { ...form.complement, [k]: v } })
+  }
 
   const travauxPad = Math.max(0, TRAVAUX_TOTAL - form.lignes.length)
   const pieceSlots = [...form.complement.pieces]
   while (pieceSlots.length < PIECES_TOTAL) pieceSlots.push({ quantite: '', produit: '' })
 
   const cycleStatut = (idx: number) => {
+    if (readOnly) return
     const lignes = [...form.lignes]
     const order: OrdreLigneStatut[] = ['en_attente', 'fait', 'na']
     const cur = lignes[idx].statut
@@ -72,6 +79,7 @@ export default function OrdreExcelForm({ form, onChange }: Props) {
         rightValue={form.clientTelephone}
         onRightChange={(v) => set('clientTelephone', v)}
         rightKeyboardType="phone-pad"
+        readOnly={readOnly}
       />
       <ExcelRow
         leftLabel="VOITURE"
@@ -80,6 +88,7 @@ export default function OrdreExcelForm({ form, onChange }: Props) {
         rightLabel="IMMATRICULATION"
         rightValue={form.immatriculation}
         onRightChange={(v) => set('immatriculation', v)}
+        readOnly={readOnly}
       />
       <ExcelRow
         leftLabel="KILOMETRAGE"
@@ -89,6 +98,7 @@ export default function OrdreExcelForm({ form, onChange }: Props) {
         rightValue={form.technicien}
         onRightChange={(v) => set('technicien', v)}
         keyboardType="numeric"
+        readOnly={readOnly}
       />
       <ExcelRow
         leftLabel="DATE D'ENTRÉE"
@@ -97,6 +107,7 @@ export default function OrdreExcelForm({ form, onChange }: Props) {
         rightLabel="VIN NUMBER"
         rightValue={form.vin}
         onRightChange={(v) => set('vin', v)}
+        readOnly={readOnly}
       />
 
       <View style={styles.twoCol}>
@@ -110,15 +121,18 @@ export default function OrdreExcelForm({ form, onChange }: Props) {
               <TextInput
                 style={[styles.cellInput, { flex: 3 }]}
                 value={l.description}
+                editable={!readOnly}
                 onChangeText={(v) => {
+                  if (readOnly) return
                   const lignes = [...form.lignes]
                   lignes[i] = { ...lignes[i], description: v }
                   onChange({ ...form, lignes })
                 }}
               />
               <Pressable
-                style={[styles.statutChip, { flex: 1 }]}
+                style={[styles.statutChip, { flex: 1 }, readOnly && styles.statutChipReadonly]}
                 onPress={() => cycleStatut(i)}
+                disabled={readOnly}
               >
                 <Text style={styles.statutChipText}>{STATUT_LABELS[l.statut]}</Text>
               </Pressable>
@@ -130,20 +144,22 @@ export default function OrdreExcelForm({ form, onChange }: Props) {
               <View style={[styles.cellPad, { flex: 1 }]} />
             </View>
           ))}
-          <Pressable
-            style={styles.addLink}
-            onPress={() =>
-              onChange({
-                ...form,
-                lignes: [
-                  ...form.lignes,
-                  { description: '', statut: 'en_attente', ordre: form.lignes.length },
-                ],
-              })
-            }
-          >
-            <Text style={styles.addLinkText}>+ Ligne travail</Text>
-          </Pressable>
+          {!readOnly ? (
+            <Pressable
+              style={styles.addLink}
+              onPress={() =>
+                onChange({
+                  ...form,
+                  lignes: [
+                    ...form.lignes,
+                    { description: '', statut: 'en_attente', ordre: form.lignes.length },
+                  ],
+                })
+              }
+            >
+              <Text style={styles.addLinkText}>+ Ligne travail</Text>
+            </Pressable>
+          ) : null}
 
           <View style={styles.thRow}>
             <Text style={[styles.th, { flex: 1 }]}>QUANTITE</Text>
@@ -155,7 +171,9 @@ export default function OrdreExcelForm({ form, onChange }: Props) {
                 style={[styles.cellInput, { flex: 1, textAlign: 'center' }]}
                 value={p.quantite}
                 keyboardType="number-pad"
+                editable={!readOnly}
                 onChangeText={(v) => {
+                  if (readOnly) return
                   const pieces = [...form.complement.pieces]
                   while (pieces.length <= i) pieces.push({ quantite: '', produit: '' })
                   pieces[i] = { ...pieces[i], quantite: v }
@@ -165,7 +183,9 @@ export default function OrdreExcelForm({ form, onChange }: Props) {
               <TextInput
                 style={[styles.cellInput, { flex: 2 }]}
                 value={p.produit}
+                editable={!readOnly}
                 onChangeText={(v) => {
+                  if (readOnly) return
                   const pieces = [...form.complement.pieces]
                   while (pieces.length <= i) pieces.push({ quantite: '', produit: '' })
                   pieces[i] = { ...pieces[i], produit: v }
@@ -174,20 +194,22 @@ export default function OrdreExcelForm({ form, onChange }: Props) {
               />
             </View>
           ))}
-          <Pressable
-            style={styles.addLink}
-            onPress={() =>
-              onChange({
-                ...form,
-                complement: {
-                  ...form.complement,
-                  pieces: [...form.complement.pieces, { quantite: '', produit: '' }],
-                },
-              })
-            }
-          >
-            <Text style={styles.addLinkText}>+ Ligne pièce</Text>
-          </Pressable>
+          {!readOnly ? (
+            <Pressable
+              style={styles.addLink}
+              onPress={() =>
+                onChange({
+                  ...form,
+                  complement: {
+                    ...form.complement,
+                    pieces: [...form.complement.pieces, { quantite: '', produit: '' }],
+                  },
+                })
+              }
+            >
+              <Text style={styles.addLinkText}>+ Ligne pièce</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         <View style={styles.rightCol}>
@@ -215,12 +237,14 @@ export default function OrdreExcelForm({ form, onChange }: Props) {
                 placeholder={key.toUpperCase()}
                 placeholderTextColor="#9ca3af"
                 value={form.carrosserie[key]}
-                onChangeText={(v) =>
+                editable={!readOnly}
+                onChangeText={(v) => {
+                  if (readOnly) return
                   onChange({
                     ...form,
                     carrosserie: { ...form.carrosserie, [key]: v },
                   })
-                }
+                }}
               />
             ))}
           </View>
@@ -232,7 +256,9 @@ export default function OrdreExcelForm({ form, onChange }: Props) {
                 <Pressable
                   key={key}
                   style={[styles.voyantCell, { backgroundColor: VOYANT_COLORS[etat] }]}
-                  onPress={() =>
+                  disabled={readOnly}
+                  onPress={() => {
+                    if (readOnly) return
                     onChange({
                       ...form,
                       voyants: {
@@ -240,7 +266,7 @@ export default function OrdreExcelForm({ form, onChange }: Props) {
                         [key]: cycleVoyant(form.voyants[key] ?? 'nc'),
                       },
                     })
-                  }
+                  }}
                 >
                   <Text style={styles.voyantLbl} numberOfLines={1}>
                     {VOYANT_LABELS[key]}
@@ -259,17 +285,20 @@ export default function OrdreExcelForm({ form, onChange }: Props) {
             value={form.complement.travauxProchains}
             onChangeText={(v) => setComp('travauxProchains', v)}
             multiline
+            editable={!readOnly}
           />
           <LabeledField
             label="PRIX"
             value={form.complement.prix}
             onChange={(v) => setComp('prix', v)}
             keyboardType="decimal-pad"
+            readOnly={readOnly}
           />
           <LabeledField
             label="TECHNICIEN"
             value={form.complement.technicienMention}
             onChange={(v) => setComp('technicienMention', v)}
+            readOnly={readOnly}
           />
         </View>
       </View>
@@ -278,6 +307,7 @@ export default function OrdreExcelForm({ form, onChange }: Props) {
         label="SIGNATURE CONTRÔLE QUALITÉ OU GÉRANT"
         value={form.complement.signatureControle}
         onChange={(v) => setComp('signatureControle', v)}
+        readOnly={readOnly}
       />
       <Text style={styles.sectionHdr}>NOTE</Text>
       <TextInput
@@ -285,8 +315,14 @@ export default function OrdreExcelForm({ form, onChange }: Props) {
         value={form.complement.note}
         onChangeText={(v) => setComp('note', v)}
         multiline
+        editable={!readOnly}
       />
-      <LabeledField label="FICHE REMPLIE PAR" value={form.rempliPar} onChange={(v) => set('rempliPar', v)} />
+      <LabeledField
+        label="FICHE REMPLIE PAR"
+        value={form.rempliPar}
+        onChange={(v) => set('rempliPar', v)}
+        readOnly={readOnly}
+      />
     </View>
   )
 }
@@ -300,6 +336,7 @@ function ExcelRow({
   onRightChange,
   keyboardType,
   rightKeyboardType,
+  readOnly,
 }: {
   leftLabel: string
   leftValue: string
@@ -309,6 +346,7 @@ function ExcelRow({
   onRightChange: (v: string) => void
   keyboardType?: 'default' | 'numeric' | 'decimal-pad' | 'phone-pad' | 'number-pad'
   rightKeyboardType?: 'default' | 'numeric' | 'decimal-pad' | 'phone-pad' | 'number-pad'
+  readOnly?: boolean
 }) {
   return (
     <View style={styles.excelRow}>
@@ -318,6 +356,7 @@ function ExcelRow({
         value={leftValue}
         onChangeText={onLeftChange}
         keyboardType={keyboardType}
+        editable={!readOnly}
       />
       <Text style={styles.lbl}>{rightLabel}</Text>
       <TextInput
@@ -325,6 +364,7 @@ function ExcelRow({
         value={rightValue}
         onChangeText={onRightChange}
         keyboardType={rightKeyboardType}
+        editable={!readOnly}
       />
     </View>
   )
@@ -335,11 +375,13 @@ function LabeledField({
   value,
   onChange,
   keyboardType,
+  readOnly,
 }: {
   label: string
   value: string
   onChange: (v: string) => void
   keyboardType?: 'default' | 'numeric' | 'decimal-pad' | 'phone-pad' | 'number-pad'
+  readOnly?: boolean
 }) {
   return (
     <View style={styles.labeledRow}>
@@ -349,6 +391,7 @@ function LabeledField({
         value={value}
         onChangeText={onChange}
         keyboardType={keyboardType}
+        editable={!readOnly}
       />
     </View>
   )
@@ -423,6 +466,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#6366f1',
     paddingHorizontal: 2,
   },
+  statutChipReadonly: { opacity: 0.85 },
   statutChipText: { color: '#fff', fontSize: 8, fontWeight: '700' },
   addLink: { padding: 6, borderBottomWidth: 1, borderColor: BDR },
   addLinkText: { fontSize: 10, color: '#1a56db', fontWeight: '600' },

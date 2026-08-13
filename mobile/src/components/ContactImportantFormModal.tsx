@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
-  Dimensions,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import CenteredBlurModal from './ui/CenteredBlurModal'
 import { createContactImportant, updateContactImportant } from '../lib/contactImportantApi'
+import { getModalLayout } from '../lib/modalLayout'
 import { theme } from '../theme/appTheme'
 import {
   CONTACT_CATEGORIES,
@@ -44,8 +43,10 @@ export default function ContactImportantFormModal({
   const [notes, setNotes] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const bottomInset = Platform.OS === 'ios' ? 20 : 12
-  const dialogHeight = Math.min(Dimensions.get('window').height * 0.78, 580)
+  const { cardMaxHeight, scrollMaxHeight, footerPaddingBottom } = getModalLayout({
+    maxCard: 580,
+    chrome: 170,
+  })
 
   useEffect(() => {
     if (!visible) return
@@ -97,7 +98,7 @@ export default function ContactImportantFormModal({
 
   return (
     <CenteredBlurModal visible={visible} onClose={onClose}>
-      <View style={[styles.card, { height: dialogHeight }]}>
+      <View style={[styles.card, { maxHeight: cardMaxHeight }]}>
         <View style={styles.screenAccent} />
         <View style={styles.header}>
           <LinearGradient colors={['#fff7ed', '#ffedd5']} style={styles.headerBanner}>
@@ -125,7 +126,7 @@ export default function ContactImportantFormModal({
         </View>
 
         <ScrollView
-          style={styles.scroll}
+          style={{ maxHeight: scrollMaxHeight }}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
@@ -198,7 +199,7 @@ export default function ContactImportantFormModal({
           </View>
         </ScrollView>
 
-        <View style={[styles.footerBar, { paddingBottom: bottomInset }]}>
+        <View style={[styles.footerBar, { paddingBottom: footerPaddingBottom }]}>
           <Pressable
             style={({ pressed }) => [styles.cancelBtn, pressed && styles.pressed]}
             onPress={onClose}
@@ -273,7 +274,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.border,
   },
-  scroll: { flex: 1 },
   scrollContent: { padding: 16, gap: 12 },
   sectionCard: {
     backgroundColor: theme.bg,

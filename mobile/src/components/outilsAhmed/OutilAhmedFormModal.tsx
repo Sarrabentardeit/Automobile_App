@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
-  Dimensions,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,6 +17,7 @@ import {
   updateOutilAhmed,
 } from '../../lib/outilAhmedApi'
 import { todayIsoDate } from '../../lib/demandeDevisHelpers'
+import { getModalLayout } from '../../lib/modalLayout'
 import { theme } from '../../theme/appTheme'
 import type { OutilAhmed, OutilAhmedInput } from '../../types/outilAhmed'
 
@@ -56,7 +56,10 @@ export default function OutilAhmedFormModal({
   const [prixAhmedText, setPrixAhmedText] = useState('0')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const dialogHeight = Math.min(Dimensions.get('window').height * 0.88, 560)
+  const { cardMaxHeight, scrollMaxHeight, footerPaddingBottom } = getModalLayout({
+    maxCard: 560,
+    chrome: 150,
+  })
 
   useEffect(() => {
     if (!visible) return
@@ -147,7 +150,7 @@ export default function OutilAhmedFormModal({
 
   return (
     <CenteredBlurModal visible={visible} onClose={onClose} maxWidth={440}>
-      <View style={[styles.card, { maxHeight: dialogHeight }]}>
+      <View style={[styles.card, { maxHeight: cardMaxHeight }]}>
         <View style={styles.accent} />
         <View style={styles.header}>
           <View style={styles.headerText}>
@@ -160,6 +163,7 @@ export default function OutilAhmedFormModal({
         </View>
 
         <ScrollView
+          style={{ maxHeight: scrollMaxHeight }}
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -203,7 +207,7 @@ export default function OutilAhmedFormModal({
           </Text>
         </ScrollView>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: footerPaddingBottom }]}>
           {isEdit ? (
             <Pressable style={styles.deleteBtn} onPress={confirmDelete} disabled={saving}>
               <Ionicons name="trash-outline" size={20} color="#dc2626" />
@@ -309,7 +313,8 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     gap: 10,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: theme.borderLight,
   },

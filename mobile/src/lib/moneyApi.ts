@@ -1,13 +1,25 @@
 import { apiFetch } from './api'
 import type { MoneyIn, MoneyOut, TransactionFournisseur } from '../types/money'
 
-export async function fetchMoneyIn(token: string): Promise<MoneyIn[]> {
-  const list = await apiFetch<MoneyIn[]>('/money/in', { token })
+export async function fetchMoneyIn(
+  token: string,
+  period?: { year: number; month: number }
+): Promise<MoneyIn[]> {
+  const list = await apiFetch<MoneyIn[]>('/money/in', {
+    token,
+    params: period ? { year: period.year, month: period.month } : undefined,
+  })
   return Array.isArray(list) ? list : []
 }
 
-export async function fetchMoneyOut(token: string): Promise<MoneyOut[]> {
-  const list = await apiFetch<MoneyOut[]>('/money/out', { token })
+export async function fetchMoneyOut(
+  token: string,
+  period?: { year: number; month: number }
+): Promise<MoneyOut[]> {
+  const list = await apiFetch<MoneyOut[]>('/money/out', {
+    token,
+    params: period ? { year: period.year, month: period.month } : undefined,
+  })
   return Array.isArray(list) ? list : []
 }
 
@@ -19,8 +31,14 @@ export async function addMoneyOut(token: string, data: Omit<MoneyOut, 'id' | 'so
   return apiFetch<MoneyOut>('/money/out', { method: 'POST', token, body: data })
 }
 
-export async function fetchTransactionsFournisseurs(token: string): Promise<TransactionFournisseur[]> {
-  const list = await apiFetch<TransactionFournisseur[]>('/fournisseur-transactions', { token })
+export async function fetchTransactionsFournisseurs(
+  token: string,
+  period?: { year: number; month: number }
+): Promise<TransactionFournisseur[]> {
+  const list = await apiFetch<TransactionFournisseur[]>('/fournisseur-transactions', {
+    token,
+    params: period ? { year: period.year, month: period.month } : undefined,
+  })
   return Array.isArray(list) ? list : []
 }
 
