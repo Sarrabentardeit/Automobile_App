@@ -45,6 +45,8 @@ import {
   CHAT_READ_EVENT,
   isRealtimeConnected,
 } from '../lib/realtimeClient'
+import * as DocumentPicker from 'expo-document-picker'
+import * as FileSystem from 'expo-file-system/legacy'
 import { resolveUploadUrl } from '../lib/config'
 import { downloadChatFile } from '../lib/downloadChatFile'
 import { pickVehiculeImages } from '../lib/imageUpload'
@@ -112,6 +114,7 @@ export default function ChatScreen({
   const [addPick, setAddPick] = useState<number[]>([])
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [hasMoreOlder, setHasMoreOlder] = useState(true)
+  const [brokenImageIds, setBrokenImageIds] = useState<Set<number>>(() => new Set())
   const listRef = useRef<FlatList<ChatMessage>>(null)
   const messagesRef = useRef<ChatMessage[]>([])
   messagesRef.current = messages
@@ -305,10 +308,47 @@ export default function ChatScreen({
     }
   }
 
+  const handlePickPdf = async () => {
+    try {
+      const left = 5 - pending.length
+      if (left <= 0) {
+        Alert.alert('Chat', 'Maximum 5 pièces jointes')
+        return
+      }
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/pdf',
+        multiple: left > 1,
+        copyToCacheDirectory: true,
+      })
+      if (result.canceled || !result.assets?.length) return
+      const assets = result.assets.slice(0, left)
+      const next: Array<ChatAttachmentInput & { previewUri?: string }> = []
+      for (const asset of assets) {
+        const size = asset.size ?? 0
+        if (size > 8 * 1024 * 1024) {
+          Alert.alert('Chat', `${asset.name || 'PDF'} trop volumineux (max 8 Mo)`)
+          continue
+        }
+        const base64 = await FileSystem.readAsStringAsync(asset.uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        })
+        if (!base64) continue
+        next.push({
+          dataUrl: `data:application/pdf;base64,${base64}`,
+          fileName: asset.name || `document-${Date.now()}.pdf`,
+        })
+      }
+      if (next.length) setPending((prev) => [...prev, ...next])
+    } catch (e) {
+      Alert.alert('Chat', e instanceof Error ? e.message : 'Sélection PDF impossible')
+    }
+  }
+
   const handleAttachPress = () => {
-    Alert.alert('Joindre', 'Photo ou image', [
+    Alert.alert('Joindre', 'Photo, image ou PDF', [
       { text: 'Galerie', onPress: () => void handlePickImage(false) },
       { text: 'Caméra', onPress: () => void handlePickImage(true) },
+      { text: 'PDF', onPress: () => void handlePickPdf() },
       { text: 'Annuler', style: 'cancel' },
     ])
   }
@@ -317,7 +357,8 @@ export default function ChatScreen({
     if (!selected || sending) return
     const text = draft.trim()
     if (!text && pending.length === 0) return
-    const attachments = pending.map(({ dataUrl, fileName }) => ({ dataUrl, fileName }))
+    const snapshot = pending
+    const attachments = snapshot.map(({ dataUrl, fileName }) => ({ dataUrl, fileName }))
     setSending(true)
     setDraft('')
     setPending([])
@@ -328,7 +369,7 @@ export default function ChatScreen({
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80)
     } catch {
       setDraft(text)
-      setPending(attachments.map((a) => ({ ...a })))
+      setPending(snapshot)
       Alert.alert('Chat', 'Envoi impossible')
     } finally {
       setSending(false)
@@ -667,33 +708,49 @@ export default function ChatScreen({
                     <>
                       {(item.attachments ?? []).map((a) => {
                         const url = resolveUploadUrl(a.url_path)
-                        if (a.kind === 'image') {
+                        const openFile = () => {
+                          void downloadChatFile(a.url_path, a.original_name || 'fichier', {
+                            accessToken,
+                          }).catch(() => {
+                            Alert.alert(
+                              'Téléchargement',
+                              'Impossible de télécharger le fichier'
+                            )
+                            void Linking.openURL(url)
+                          })
+                        }
+                        if (a.kind === 'image' && !brokenImageIds.has(a.id)) {
                           return (
                             <Pressable
                               key={a.id}
-                              onPress={() => void Linking.openURL(url)}
+                              onPress={openFile}
+                              onLongPress={openFile}
                               style={styles.attImgWrap}
                             >
-                              <Image source={{ uri: url }} style={styles.attImg} />
+                              <Image
+                                source={{ uri: url }}
+                                style={styles.attImg}
+                                onError={() => {
+                                  setBrokenImageIds((prev) => {
+                                    const next = new Set(prev)
+                                    next.add(a.id)
+                                    return next
+                                  })
+                                }}
+                              />
                             </Pressable>
                           )
                         }
                         return (
                           <Pressable
                             key={a.id}
-                            onPress={() => {
-                              void downloadChatFile(
-                                a.url_path,
-                                a.original_name || 'fichier.pdf'
-                              ).catch(() => {
-                                Alert.alert('Téléchargement', 'Impossible de télécharger le fichier')
-                                void Linking.openURL(url)
-                              })
-                            }}
+                            onPress={openFile}
                             style={[styles.fileChip, item.mine && styles.fileChipMine]}
                           >
                             <Ionicons
-                              name="document-text-outline"
+                              name={
+                                a.kind === 'image' ? 'image-outline' : 'document-text-outline'
+                              }
                               size={14}
                               color={item.mine ? '#fff' : theme.text}
                             />
@@ -701,7 +758,7 @@ export default function ChatScreen({
                               style={[styles.fileChipText, item.mine && styles.mineText]}
                               numberOfLines={1}
                             >
-                              {a.original_name || 'Fichier'}
+                              {a.original_name || (a.kind === 'image' ? 'Photo' : 'Fichier')}
                             </Text>
                             <Ionicons
                               name="download-outline"
