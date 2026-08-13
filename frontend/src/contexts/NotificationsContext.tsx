@@ -1,7 +1,16 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  type ReactNode,
+} from 'react'
 import type { Notification } from '@/types'
 import { useAuth } from '@/contexts/AuthContext'
 import { apiFetch } from '@/lib/api'
+import { playNotificationSound, unlockAppSounds } from '@/lib/appSounds'
 
 interface NotificationsContextValue {
   notifications: Notification[]
@@ -15,14 +24,23 @@ interface NotificationsContextValue {
 
 const Context = createContext<NotificationsContextValue | null>(null)
 
+function isChatNotifType(type?: string) {
+  const t = (type ?? '').toLowerCase()
+  return t === 'chat_message' || t.includes('chat_message')
+}
+
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const { user, getAccessToken } = useAuth()
   const [notifications, setNotifications] = useState<Notification[]>([])
+  const readyRef = useRef(false)
+  const seenUnreadIdsRef = useRef<Set<number>>(new Set())
 
-  const fetchApiNotifications = useCallback(async () => {
+  const fetchApiNotifications = useCallback(async (opts?: { playSound?: boolean }) => {
     const token = getAccessToken()
     if (!token || !user?.id) {
       setNotifications([])
+      readyRef.current = false
+      seenUnreadIdsRef.current = new Set()
       return
     }
     try {
@@ -33,23 +51,48 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
           type?: string
           reclamationId?: number
           vehiculeId?: number
+          conversationId?: number
           title?: string
           message: string
           date: string
           read: boolean
         }>
-      >(
-        '/notifications',
-        { token }
+      >('/notifications', { token })
+      const rows = list ?? []
+
+      if (opts?.playSound !== false && readyRef.current) {
+        const fresh = rows.filter(
+          n => !n.read && !isChatNotifType(n.type) && !seenUnreadIdsRef.current.has(n.id)
+        )
+        if (fresh.length > 0) playNotificationSound()
+      }
+
+      seenUnreadIdsRef.current = new Set(
+        rows.filter(n => !n.read && !isChatNotifType(n.type)).map(n => n.id)
       )
-      setNotifications(list ?? [])
+      readyRef.current = true
+      setNotifications(rows)
     } catch {
       setNotifications([])
     }
   }, [user?.id, getAccessToken])
 
   useEffect(() => {
-    fetchApiNotifications()
+    const unlock = () => unlockAppSounds()
+    window.addEventListener('pointerdown', unlock, { once: true })
+    window.addEventListener('keydown', unlock, { once: true })
+    return () => {
+      window.removeEventListener('pointerdown', unlock)
+      window.removeEventListener('keydown', unlock)
+    }
+  }, [])
+
+  useEffect(() => {
+    void fetchApiNotifications({ playSound: false })
+    const id = window.setInterval(() => {
+      void fetchApiNotifications({ playSound: true })
+    }, 15_000)
+    return () => window.clearInterval(id)
   }, [fetchApiNotifications])
 
   const myNotifications = useCallback(
@@ -94,6 +137,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         try {
           await apiFetch(`/notifications/${id}/read`, { method: 'PATCH', token })
           setNotifications(prev => prev.map(n => (n.id === id ? { ...n, read: true } : n)))
+          seenUnreadIdsRef.current.delete(id)
         } catch {
           // ignore
         }
@@ -110,6 +154,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
           try {
             await apiFetch('/notifications/read-all', { method: 'PATCH', token })
             setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+            seenUnreadIdsRef.current = new Set()
           } catch {
             // ignore
           }
@@ -128,7 +173,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         addNotification,
         markAsRead,
         markAllAsRead,
-        refreshApiNotifications: fetchApiNotifications,
+        refreshApiNotifications: () => fetchApiNotifications({ playSound: false }),
       }}
     >
       {children}

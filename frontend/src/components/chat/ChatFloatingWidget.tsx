@@ -26,6 +26,7 @@ import {
   type ChatMember,
   type ChatMessage,
 } from '@/lib/chatApi'
+import { playMessageSound } from '@/lib/appSounds'
 import { cn } from '@/lib/utils'
 
 function formatTime(iso: string) {
@@ -70,6 +71,8 @@ export default function ChatFloatingWidget() {
   const [loadingMsgs, setLoadingMsgs] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<number | null>(null)
+  const lastMsgIdRef = useRef(0)
+  const threadReadyRef = useRef(false)
 
   const hideOnFullPage = location.pathname === '/chat'
 
@@ -109,12 +112,18 @@ export default function ChatFloatingWidget() {
   }, [getAccessToken])
 
   const loadMessages = useCallback(
-    async (conversationId: number) => {
+    async (conversationId: number, opts?: { silent?: boolean }) => {
       const token = getAccessToken()
       if (!token) return
-      setLoadingMsgs(true)
+      if (!opts?.silent) setLoadingMsgs(true)
       try {
-        const list = await fetchChatMessages(token, conversationId)
+        const { messages: list } = await fetchChatMessages(token, conversationId)
+        if (opts?.silent && threadReadyRef.current) {
+          const incoming = list.filter(m => !m.mine && m.id > lastMsgIdRef.current)
+          if (incoming.length > 0) playMessageSound()
+        }
+        lastMsgIdRef.current = list.reduce((m, x) => Math.max(m, x.id), 0)
+        threadReadyRef.current = true
         setMessages(list)
         await markChatRead(token, conversationId)
         setConversations(prev =>
@@ -123,7 +132,7 @@ export default function ChatFloatingWidget() {
       } catch {
         /* ignore */
       } finally {
-        setLoadingMsgs(false)
+        if (!opts?.silent) setLoadingMsgs(false)
       }
     },
     [getAccessToken]
@@ -153,13 +162,17 @@ export default function ChatFloatingWidget() {
   useEffect(() => {
     if (!open || selectedId == null) {
       setMessages([])
+      lastMsgIdRef.current = 0
+      threadReadyRef.current = false
       return
     }
     setShowAdd(false)
     setAddPick([])
+    lastMsgIdRef.current = 0
+    threadReadyRef.current = false
     void loadMessages(selectedId)
     const id = window.setInterval(() => {
-      void loadMessages(selectedId)
+      void loadMessages(selectedId, { silent: true })
       void loadConversations()
     }, 8000)
     return () => window.clearInterval(id)
@@ -549,23 +562,36 @@ export default function ChatFloatingWidget() {
                       <div
                         className={cn(
                           'max-w-[85%] rounded-2xl px-3 py-2 text-sm',
-                          m.mine
-                            ? 'bg-orange-500 text-white rounded-br-md'
-                            : 'bg-white border border-gray-100 text-gray-900 rounded-bl-md'
+                          m.deleted
+                            ? 'bg-gray-100 border border-dashed border-gray-200 text-gray-400 italic'
+                            : m.mine
+                              ? 'bg-orange-500 text-white rounded-br-md'
+                              : 'bg-white border border-gray-100 text-gray-900 rounded-bl-md'
                         )}
                       >
-                        {!m.mine && selected.type === 'group' ? (
+                        {!m.mine && !m.deleted && selected.type === 'group' ? (
                           <p className="text-[10px] font-bold text-orange-600 mb-0.5">
                             {m.senderNom}
                           </p>
                         ) : null}
                         <p className="whitespace-pre-wrap break-words text-[13px] leading-snug">
-                          {m.body}
+                          {m.deleted
+                            ? 'Message supprimé'
+                            : m.body?.trim() ||
+                              (m.attachments?.some(a => a.kind === 'image')
+                                ? '📷 Photo'
+                                : m.attachments?.length
+                                  ? '📎 Pièce jointe'
+                                  : '')}
                         </p>
                         <p
                           className={cn(
                             'text-[9px] mt-1',
-                            m.mine ? 'text-orange-100 text-right' : 'text-gray-400'
+                            m.deleted
+                              ? 'text-gray-400'
+                              : m.mine
+                                ? 'text-orange-100 text-right'
+                                : 'text-gray-400'
                           )}
                         >
                           {formatTime(m.createdAt)}

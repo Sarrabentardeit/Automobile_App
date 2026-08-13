@@ -4,7 +4,9 @@ import {
   Alert,
   Dimensions,
   FlatList,
+  Image,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -19,16 +21,24 @@ import { Ionicons } from '@expo/vector-icons'
 import {
   addGroupMembers,
   createGroupChat,
+  deleteChatMessageForEveryone,
   fetchChatConversations,
   fetchChatMembers,
   fetchChatMessages,
+  hideChatMessageForMe,
   markChatRead,
   openDirectChat,
+  pinChatMessage,
   sendChatMessage,
+  unpinChatMessage,
+  type ChatAttachmentInput,
   type ChatConversation,
   type ChatMember,
   type ChatMessage,
 } from '../lib/chatApi'
+import { playMessageSound } from '../lib/appSounds'
+import { resolveUploadUrl } from '../lib/config'
+import { pickVehiculeImages } from '../lib/imageUpload'
 import { getSheetBottomInset, getStatusBarInset } from '../lib/safeArea'
 import { theme } from '../theme/appTheme'
 
@@ -75,7 +85,11 @@ export default function ChatScreen({
   const [members, setMembers] = useState<ChatMember[]>([])
   const [selected, setSelected] = useState<ChatConversation | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [pinnedMessage, setPinnedMessage] = useState<ChatMessage | null>(null)
   const [draft, setDraft] = useState('')
+  const [pending, setPending] = useState<Array<ChatAttachmentInput & { previewUri?: string }>>(
+    []
+  )
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [sending, setSending] = useState(false)
@@ -105,8 +119,13 @@ export default function ChatScreen({
 
   const loadThread = useCallback(
     async (conv: ChatConversation) => {
-      const list = await fetchChatMessages(accessToken, conv.id, { limit: 40 })
+      const { messages: list, pinnedMessage: pinned } = await fetchChatMessages(
+        accessToken,
+        conv.id,
+        { limit: 40 }
+      )
       setMessages(list)
+      setPinnedMessage(pinned)
       setHasMoreOlder(list.length >= 40)
       await markChatRead(accessToken, conv.id)
       setConversations((prev) =>
@@ -123,11 +142,18 @@ export default function ChatScreen({
         await loadThread(conv)
         return
       }
-      const newer = await fetchChatMessages(accessToken, conv.id, {
-        after: newest,
-        limit: 50,
-      })
+      const { messages: newer, pinnedMessage: pinned } = await fetchChatMessages(
+        accessToken,
+        conv.id,
+        {
+          after: newest,
+          limit: 50,
+        }
+      )
+      setPinnedMessage(pinned)
       if (newer.length === 0) return
+      const fromOthers = newer.filter((m) => !m.mine && !m.deleted)
+      if (fromOthers.length > 0) playMessageSound()
       setMessages((prev) => {
         const ids = new Set(prev.map((m) => m.id))
         const add = newer.filter((m) => !ids.has(m.id))
@@ -144,7 +170,7 @@ export default function ChatScreen({
     if (!oldest) return
     setLoadingOlder(true)
     try {
-      const older = await fetchChatMessages(accessToken, selected.id, {
+      const { messages: older } = await fetchChatMessages(accessToken, selected.id, {
         before: oldest,
         limit: 40,
       })
@@ -203,25 +229,114 @@ export default function ChatScreen({
   const openConversation = (c: ChatConversation) => {
     setSelected(c)
     setDraft('')
+    setPending([])
+    setPinnedMessage(null)
     setShowAddMembers(false)
     setAddPick([])
   }
 
+  const handlePickImage = async (useCamera: boolean) => {
+    try {
+      const left = 5 - pending.length
+      if (left <= 0) {
+        Alert.alert('Chat', 'Maximum 5 pièces jointes')
+        return
+      }
+      const picked = await pickVehiculeImages({
+        useCamera,
+        category: 'intervention',
+        selectionLimit: left,
+      })
+      if (!picked.length) return
+      setPending((prev) => [
+        ...prev,
+        ...picked.map((p) => ({
+          dataUrl: p.payload.dataUrl,
+          fileName: p.payload.fileName,
+          previewUri: p.uri,
+        })),
+      ])
+    } catch (e) {
+      Alert.alert('Chat', e instanceof Error ? e.message : 'Sélection impossible')
+    }
+  }
+
+  const handleAttachPress = () => {
+    Alert.alert('Joindre', 'Photo ou image', [
+      { text: 'Galerie', onPress: () => void handlePickImage(false) },
+      { text: 'Caméra', onPress: () => void handlePickImage(true) },
+      { text: 'Annuler', style: 'cancel' },
+    ])
+  }
+
   const handleSend = async () => {
-    if (!selected || !draft.trim() || sending) return
+    if (!selected || sending) return
     const text = draft.trim()
+    if (!text && pending.length === 0) return
+    const attachments = pending.map(({ dataUrl, fileName }) => ({ dataUrl, fileName }))
     setSending(true)
     setDraft('')
+    setPending([])
     try {
-      const msg = await sendChatMessage(accessToken, selected.id, text)
+      const msg = await sendChatMessage(accessToken, selected.id, text, attachments)
       setMessages((prev) => [...prev, msg])
       void loadList()
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80)
     } catch {
       setDraft(text)
+      setPending(attachments.map((a) => ({ ...a })))
+      Alert.alert('Chat', 'Envoi impossible')
     } finally {
       setSending(false)
     }
+  }
+
+  const openMessageActions = (m: ChatMessage) => {
+    if (m.deleted || !selected) return
+    const buttons: Array<{
+      text: string
+      style?: 'cancel' | 'destructive' | 'default'
+      onPress?: () => void
+    }> = [
+      {
+        text: 'Épingler',
+        onPress: () => {
+          void pinChatMessage(accessToken, selected.id, m.id)
+            .then((pinned) => {
+              setPinnedMessage(pinned)
+            })
+            .catch(() => Alert.alert('Chat', 'Épinglage impossible'))
+        },
+      },
+      {
+        text: 'Supprimer pour moi',
+        onPress: () => {
+          void hideChatMessageForMe(accessToken, m.id)
+            .then(() => {
+              setMessages((prev) => prev.filter((x) => x.id !== m.id))
+              if (pinnedMessage?.id === m.id) setPinnedMessage(null)
+            })
+            .catch(() => Alert.alert('Chat', 'Action impossible'))
+        },
+      },
+    ]
+    if (m.mine) {
+      buttons.push({
+        text: 'Supprimer pour tous',
+        style: 'destructive',
+        onPress: () => {
+          void deleteChatMessageForEveryone(accessToken, m.id)
+            .then((updated) => {
+              setMessages((prev) => prev.map((x) => (x.id === m.id ? updated : x)))
+              if (pinnedMessage?.id === m.id) setPinnedMessage(null)
+              void loadList()
+            })
+            .catch(() => Alert.alert('Chat', 'Suppression impossible'))
+        },
+      })
+    }
+    buttons.push({ text: 'Annuler', style: 'cancel' })
+    Alert.alert('Message', undefined, buttons)
   }
 
   const handleNewDm = async (memberId: number) => {
@@ -435,6 +550,31 @@ export default function ChatScreen({
             ) : null}
           </View>
 
+          {pinnedMessage && !pinnedMessage.deleted ? (
+            <View style={styles.pinBar}>
+              <Ionicons name="pin" size={14} color="#92400e" />
+              <Text style={styles.pinText} numberOfLines={1}>
+                {pinnedMessage.body?.trim() ||
+                  (pinnedMessage.attachments?.[0]?.kind === 'image'
+                    ? '📷 Photo'
+                    : pinnedMessage.attachments?.length
+                      ? '📎 Pièce jointe'
+                      : 'Message épinglé')}
+              </Text>
+              <Pressable
+                hitSlop={8}
+                onPress={() => {
+                  if (!selected) return
+                  void unpinChatMessage(accessToken, selected.id)
+                    .then(() => setPinnedMessage(null))
+                    .catch(() => Alert.alert('Chat', 'Impossible de retirer l’épingle'))
+                }}
+              >
+                <Ionicons name="close" size={16} color="#92400e" />
+              </Pressable>
+            </View>
+          ) : null}
+
           <FlatList
             ref={listRef}
             style={{ flex: 1 }}
@@ -460,21 +600,109 @@ export default function ChatScreen({
             }
             ListEmptyComponent={<Text style={styles.empty}>Écrivez le premier message</Text>}
             renderItem={({ item }) => (
-              <View style={[styles.bubbleWrap, item.mine ? styles.mineWrap : styles.theirsWrap]}>
-                <View style={[styles.bubble, item.mine ? styles.mineBubble : styles.theirsBubble]}>
-                  {!item.mine && selected?.type === 'group' ? (
+              <Pressable
+                onLongPress={() => openMessageActions(item)}
+                style={[styles.bubbleWrap, item.mine ? styles.mineWrap : styles.theirsWrap]}
+              >
+                <View
+                  style={[
+                    styles.bubble,
+                    item.deleted
+                      ? styles.deletedBubble
+                      : item.mine
+                        ? styles.mineBubble
+                        : styles.theirsBubble,
+                  ]}
+                >
+                  {!item.mine && !item.deleted && selected?.type === 'group' ? (
                     <Text style={styles.sender}>{item.senderNom}</Text>
                   ) : null}
-                  <Text style={[styles.bubbleText, item.mine && styles.mineText]}>{item.body}</Text>
-                  <Text style={[styles.bubbleTime, item.mine && styles.mineTime]}>
+                  {item.deleted ? (
+                    <Text style={[styles.bubbleText, styles.deletedText]}>Message supprimé</Text>
+                  ) : (
+                    <>
+                      {(item.attachments ?? []).map((a) => {
+                        const url = resolveUploadUrl(a.url_path)
+                        if (a.kind === 'image') {
+                          return (
+                            <Pressable
+                              key={a.id}
+                              onPress={() => void Linking.openURL(url)}
+                              style={styles.attImgWrap}
+                            >
+                              <Image source={{ uri: url }} style={styles.attImg} />
+                            </Pressable>
+                          )
+                        }
+                        return (
+                          <Pressable
+                            key={a.id}
+                            onPress={() => void Linking.openURL(url)}
+                            style={[styles.fileChip, item.mine && styles.fileChipMine]}
+                          >
+                            <Ionicons
+                              name="document-text-outline"
+                              size={14}
+                              color={item.mine ? '#fff' : theme.text}
+                            />
+                            <Text
+                              style={[styles.fileChipText, item.mine && styles.mineText]}
+                              numberOfLines={1}
+                            >
+                              {a.original_name || 'Fichier'}
+                            </Text>
+                          </Pressable>
+                        )
+                      })}
+                      {item.body?.trim() ? (
+                        <Text style={[styles.bubbleText, item.mine && styles.mineText]}>
+                          {item.body}
+                        </Text>
+                      ) : null}
+                    </>
+                  )}
+                  <Text
+                    style={[
+                      styles.bubbleTime,
+                      item.mine && !item.deleted && styles.mineTime,
+                      item.deleted && styles.deletedText,
+                    ]}
+                  >
                     {formatTime(item.createdAt)}
                   </Text>
                 </View>
-              </View>
+              </Pressable>
             )}
           />
 
+          {pending.length > 0 ? (
+            <ScrollView
+              horizontal
+              style={styles.pendingRow}
+              contentContainerStyle={{ gap: 8, paddingHorizontal: 10 }}
+            >
+              {pending.map((p, i) => (
+                <View key={`${p.fileName}-${i}`} style={styles.pendingThumb}>
+                  {p.previewUri ? (
+                    <Image source={{ uri: p.previewUri }} style={styles.pendingImg} />
+                  ) : (
+                    <Ionicons name="document" size={20} color={theme.textMuted} />
+                  )}
+                  <Pressable
+                    style={styles.pendingRemove}
+                    onPress={() => setPending((prev) => prev.filter((_, idx) => idx !== i))}
+                  >
+                    <Ionicons name="close" size={12} color="#fff" />
+                  </Pressable>
+                </View>
+              ))}
+            </ScrollView>
+          ) : null}
+
           <View style={[styles.composer, { paddingBottom: Math.max(10, bottomInset) }]}>
+            <Pressable style={styles.attachBtn} onPress={handleAttachPress}>
+              <Ionicons name="attach" size={22} color={theme.textSecondary} />
+            </Pressable>
             <TextInput
               style={styles.input}
               value={draft}
@@ -484,8 +712,11 @@ export default function ChatScreen({
               multiline
             />
             <Pressable
-              style={[styles.sendBtn, (!draft.trim() || sending) && styles.sendDisabled]}
-              disabled={!draft.trim() || sending}
+              style={[
+                styles.sendBtn,
+                ((!draft.trim() && pending.length === 0) || sending) && styles.sendDisabled,
+              ]}
+              disabled={(!draft.trim() && pending.length === 0) || sending}
               onPress={() => void handleSend()}
             >
               <Ionicons name="send" size={18} color="#fff" />
@@ -784,6 +1015,17 @@ const styles = StyleSheet.create({
   backBtn: { padding: 6 },
   threadTitle: { fontSize: 16, fontWeight: '800', color: theme.text },
   threadSub: { fontSize: 11, color: theme.textMuted, marginTop: 1 },
+  pinBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#fffbeb',
+    borderBottomWidth: 1,
+    borderBottomColor: '#fde68a',
+  },
+  pinText: { flex: 1, fontSize: 12, fontWeight: '600', color: '#92400e' },
   msgPad: { padding: 12, paddingBottom: 20 },
   bubbleWrap: { marginBottom: 8, flexDirection: 'row' },
   mineWrap: { justifyContent: 'flex-end' },
@@ -796,11 +1038,61 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.borderLight,
   },
+  deletedBubble: {
+    backgroundColor: theme.surfaceMuted,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: theme.border,
+  },
   sender: { fontSize: 11, fontWeight: '800', color: theme.primaryDark, marginBottom: 2 },
   bubbleText: { fontSize: 14, color: theme.text, lineHeight: 20 },
+  deletedText: { color: theme.textSubtle, fontStyle: 'italic' },
   mineText: { color: '#fff' },
   bubbleTime: { fontSize: 10, color: theme.textSubtle, marginTop: 4 },
   mineTime: { color: '#ffedd5', textAlign: 'right' },
+  attImgWrap: { marginBottom: 6, borderRadius: 10, overflow: 'hidden' },
+  attImg: { width: 200, height: 160, borderRadius: 10 },
+  fileChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: theme.surfaceMuted,
+    marginBottom: 6,
+    maxWidth: 200,
+  },
+  fileChipMine: { backgroundColor: 'rgba(255,255,255,0.2)' },
+  fileChipText: { fontSize: 12, fontWeight: '600', color: theme.text, flexShrink: 1 },
+  pendingRow: {
+    maxHeight: 72,
+    borderTopWidth: 1,
+    borderTopColor: theme.border,
+    backgroundColor: theme.surface,
+    paddingVertical: 8,
+  },
+  pendingThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: 10,
+    backgroundColor: theme.surfaceMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  pendingImg: { width: 56, height: 56 },
+  pendingRemove: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#0f172a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   composer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -809,6 +1101,12 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: theme.border,
     backgroundColor: theme.surface,
+  },
+  attachBtn: {
+    width: 40,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   input: {
     flex: 1,

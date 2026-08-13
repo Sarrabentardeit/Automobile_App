@@ -9,18 +9,32 @@ import {
   Plus,
   UserPlus,
   X,
+  Paperclip,
+  Pin,
+  PinOff,
+  MoreVertical,
+  Trash2,
+  EyeOff,
+  FileText,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { resolveUploadUrl } from '@/lib/api'
+import { playMessageSound } from '@/lib/appSounds'
 import {
   addGroupMembers,
   createGroupChat,
+  deleteChatMessageForEveryone,
   fetchChatConversations,
   fetchChatMembers,
   fetchChatMessages,
+  hideChatMessageForMe,
   markChatRead,
   openDirectChat,
+  pinChatMessage,
   sendChatMessage,
+  unpinChatMessage,
+  type ChatAttachmentInput,
   type ChatConversation,
   type ChatMember,
   type ChatMessage,
@@ -58,8 +72,22 @@ function initials(name: string) {
   return name.slice(0, 2).toUpperCase()
 }
 
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.onerror = () => reject(new Error('Lecture fichier impossible'))
+    reader.readAsDataURL(file)
+  })
+}
+
 type ComposeMode = null | 'dm' | 'group'
 type ListFilter = 'all' | 'unread'
+type PendingAttach = ChatAttachmentInput & { previewUrl?: string; kind: 'image' | 'file' }
+
+const MAX_PENDING = 5
+const MAX_BYTES = 8 * 1024 * 1024
+const ALLOWED = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'image/jpg'])
 
 export default function ChatPage() {
   const { getAccessToken, user } = useAuth()
@@ -68,7 +96,9 @@ export default function ChatPage() {
   const [members, setMembers] = useState<ChatMember[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [pinnedMessage, setPinnedMessage] = useState<ChatMessage | null>(null)
   const [draft, setDraft] = useState('')
+  const [pending, setPending] = useState<PendingAttach[]>([])
   const [q, setQ] = useState('')
   const [listFilter, setListFilter] = useState<ListFilter>('all')
   const [loadingList, setLoadingList] = useState(true)
@@ -79,8 +109,13 @@ export default function ChatPage() {
   const [groupPick, setGroupPick] = useState<number[]>([])
   const [showMembers, setShowMembers] = useState(false)
   const [addPick, setAddPick] = useState<number[]>([])
+  const [menuMsgId, setMenuMsgId] = useState<number | null>(null)
+  const [lightbox, setLightbox] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<number | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const lastMsgIdRef = useRef<number>(0)
+  const threadReadyRef = useRef(false)
 
   const selected = useMemo(
     () => conversations.find(c => c.id === selectedId) ?? null,
@@ -128,8 +163,19 @@ export default function ChatPage() {
       if (!token) return
       if (!opts?.silent) setLoadingMessages(true)
       try {
-        const list = await fetchChatMessages(token, conversationId)
+        const { messages: list, pinnedMessage: pinned } = await fetchChatMessages(
+          token,
+          conversationId
+        )
+        if (opts?.silent && threadReadyRef.current) {
+          const incoming = list.filter(m => !m.mine && m.id > lastMsgIdRef.current)
+          if (incoming.length > 0) playMessageSound()
+        }
+        const maxId = list.reduce((m, x) => Math.max(m, x.id), 0)
+        lastMsgIdRef.current = maxId
+        threadReadyRef.current = true
         setMessages(list)
+        setPinnedMessage(pinned)
         await markChatRead(token, conversationId)
         setConversations(prev =>
           prev.map(c => (c.id === conversationId ? { ...c, unreadCount: 0 } : c))
@@ -156,10 +202,18 @@ export default function ChatPage() {
   useEffect(() => {
     if (selectedId == null) {
       setMessages([])
+      setPinnedMessage(null)
+      setPending([])
+      lastMsgIdRef.current = 0
+      threadReadyRef.current = false
       return
     }
     setShowMembers(false)
     setAddPick([])
+    setMenuMsgId(null)
+    setPending([])
+    lastMsgIdRef.current = 0
+    threadReadyRef.current = false
     void loadMessages(selectedId)
   }, [selectedId, loadMessages])
 
@@ -177,21 +231,124 @@ export default function ChatPage() {
     }
   }, [loadConversations, loadMessages, selectedId])
 
+  useEffect(() => {
+    const close = () => setMenuMsgId(null)
+    if (menuMsgId != null) {
+      window.addEventListener('click', close)
+      return () => window.removeEventListener('click', close)
+    }
+  }, [menuMsgId])
+
+  const addFiles = async (files: FileList | null) => {
+    if (!files?.length) return
+    const next: PendingAttach[] = [...pending]
+    for (const file of Array.from(files)) {
+      if (next.length >= MAX_PENDING) {
+        toast.error(`Max ${MAX_PENDING} pièces jointes`)
+        break
+      }
+      let mime = file.type.toLowerCase()
+      if (mime === 'image/jpg') mime = 'image/jpeg'
+      if (!ALLOWED.has(mime)) {
+        toast.error('Formats acceptés : JPEG, PNG, WebP, PDF')
+        continue
+      }
+      if (file.size > MAX_BYTES) {
+        toast.error('Fichier trop volumineux (max 8 Mo)')
+        continue
+      }
+      try {
+        const dataUrl = await readFileAsDataUrl(file)
+        next.push({
+          dataUrl,
+          fileName: file.name,
+          previewUrl: mime.startsWith('image/') ? dataUrl : undefined,
+          kind: mime.startsWith('image/') ? 'image' : 'file',
+        })
+      } catch {
+        toast.error('Lecture du fichier impossible')
+      }
+    }
+    setPending(next)
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
   const handleSend = async () => {
     const token = getAccessToken()
     const text = draft.trim()
-    if (!token || !selectedId || !text || sending) return
+    if (!token || !selectedId || sending) return
+    if (!text && pending.length === 0) return
     setSending(true)
+    const attachments = pending.map(({ dataUrl, fileName }) => ({ dataUrl, fileName }))
     setDraft('')
+    setPending([])
     try {
-      const msg = await sendChatMessage(token, selectedId, text)
+      const msg = await sendChatMessage(token, selectedId, text, attachments)
       setMessages(prev => [...prev, msg])
       void loadConversations()
     } catch {
       setDraft(text)
+      setPending(
+        attachments.map(a => ({
+          ...a,
+          kind: a.dataUrl.startsWith('data:image/') ? 'image' : 'file',
+          previewUrl: a.dataUrl.startsWith('data:image/') ? a.dataUrl : undefined,
+        }))
+      )
       toast.error('Envoi impossible')
     } finally {
       setSending(false)
+    }
+  }
+
+  const handleDeleteEveryone = async (messageId: number) => {
+    const token = getAccessToken()
+    if (!token) return
+    setMenuMsgId(null)
+    try {
+      const updated = await deleteChatMessageForEveryone(token, messageId)
+      setMessages(prev => prev.map(m => (m.id === messageId ? updated : m)))
+      if (pinnedMessage?.id === messageId) setPinnedMessage(null)
+      void loadConversations()
+    } catch {
+      toast.error('Suppression impossible')
+    }
+  }
+
+  const handleHideForMe = async (messageId: number) => {
+    const token = getAccessToken()
+    if (!token) return
+    setMenuMsgId(null)
+    try {
+      await hideChatMessageForMe(token, messageId)
+      setMessages(prev => prev.filter(m => m.id !== messageId))
+      if (pinnedMessage?.id === messageId) setPinnedMessage(null)
+    } catch {
+      toast.error('Action impossible')
+    }
+  }
+
+  const handlePin = async (messageId: number) => {
+    const token = getAccessToken()
+    if (!token || !selectedId) return
+    setMenuMsgId(null)
+    try {
+      const pinned = await pinChatMessage(token, selectedId, messageId)
+      setPinnedMessage(pinned)
+      toast.success('Message épinglé')
+    } catch {
+      toast.error('Épinglage impossible')
+    }
+  }
+
+  const handleUnpin = async () => {
+    const token = getAccessToken()
+    if (!token || !selectedId) return
+    try {
+      await unpinChatMessage(token, selectedId)
+      setPinnedMessage(null)
+    } catch {
+      toast.error('Impossible de retirer l’épingle')
     }
   }
 
@@ -260,6 +417,51 @@ export default function ChatPage() {
     }
     return groups
   }, [messages])
+
+  const canSend = Boolean(draft.trim() || pending.length) && !sending
+
+  const renderAttachments = (m: ChatMessage, mine: boolean) => {
+    const atts = m.attachments ?? []
+    if (!atts.length) return null
+    return (
+      <div className="space-y-2 mb-1.5">
+        {atts.map(a => {
+          const url = resolveUploadUrl(a.url_path)
+          if (a.kind === 'image') {
+            return (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => setLightbox(url)}
+                className="block overflow-hidden rounded-lg"
+              >
+                <img
+                  src={url}
+                  alt={a.original_name || 'Image'}
+                  className="max-h-52 max-w-full object-cover rounded-lg"
+                />
+              </button>
+            )
+          }
+          return (
+            <a
+              key={a.id}
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className={cn(
+                'inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-semibold',
+                mine ? 'bg-orange-600/40 text-white' : 'bg-gray-100 text-gray-800'
+              )}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span className="truncate max-w-[180px]">{a.original_name || 'Fichier'}</span>
+            </a>
+          )
+        })}
+      </div>
+    )
+  }
 
   return (
     <div className="h-[calc(100vh-7rem)] min-h-[520px] flex flex-col">
@@ -601,6 +803,33 @@ export default function ChatPage() {
                 </div>
               ) : null}
 
+              {pinnedMessage && !pinnedMessage.deleted ? (
+                <div className="px-4 py-2 border-b border-amber-100 bg-amber-50 flex items-start gap-2">
+                  <Pin className="w-3.5 h-3.5 text-amber-700 mt-0.5 flex-shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-amber-800">
+                      Message épinglé
+                    </p>
+                    <p className="text-xs text-amber-900 truncate">
+                      {pinnedMessage.body?.trim() ||
+                        (pinnedMessage.attachments?.[0]?.kind === 'image'
+                          ? '📷 Photo'
+                          : pinnedMessage.attachments?.length
+                            ? '📎 Pièce jointe'
+                            : '…')}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleUnpin()}
+                    className="p-1 rounded-lg hover:bg-amber-100 text-amber-800"
+                    title="Retirer l’épingle"
+                  >
+                    <PinOff className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : null}
+
               <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 bg-[#f7f8fa]">
                 {loadingMessages && messages.length === 0 ? (
                   <p className="text-sm text-gray-400 text-center py-8">Chargement…</p>
@@ -619,32 +848,104 @@ export default function ChatPage() {
                       {g.items.map(m => (
                         <div
                           key={m.id}
-                          className={cn('flex', m.mine ? 'justify-end' : 'justify-start')}
+                          className={cn('flex group', m.mine ? 'justify-end' : 'justify-start')}
                         >
-                          <div
-                            className={cn(
-                              'max-w-[78%] rounded-2xl px-3.5 py-2.5 shadow-sm',
-                              m.mine
-                                ? 'bg-orange-500 text-white rounded-br-md'
-                                : 'bg-white border border-gray-100 text-gray-900 rounded-bl-md'
-                            )}
-                          >
-                            {!m.mine && selected.type === 'group' ? (
-                              <p className="text-[11px] font-bold text-orange-600 mb-0.5">
-                                {m.senderNom}
-                              </p>
-                            ) : null}
-                            <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
-                              {m.body}
-                            </p>
-                            <p
+                          <div className={cn('relative max-w-[78%]', m.mine ? 'order-1' : '')}>
+                            <div
                               className={cn(
-                                'text-[10px] mt-1 tabular-nums',
-                                m.mine ? 'text-orange-100 text-right' : 'text-gray-400'
+                                'rounded-2xl px-3.5 py-2.5 shadow-sm',
+                                m.deleted
+                                  ? 'bg-gray-100 border border-dashed border-gray-200 text-gray-400 italic'
+                                  : m.mine
+                                    ? 'bg-orange-500 text-white rounded-br-md'
+                                    : 'bg-white border border-gray-100 text-gray-900 rounded-bl-md'
                               )}
                             >
-                              {formatTime(m.createdAt)}
-                            </p>
+                              {!m.mine && !m.deleted && selected.type === 'group' ? (
+                                <p className="text-[11px] font-bold text-orange-600 mb-0.5">
+                                  {m.senderNom}
+                                </p>
+                              ) : null}
+                              {m.deleted ? (
+                                <p className="text-sm">Message supprimé</p>
+                              ) : (
+                                <>
+                                  {renderAttachments(m, m.mine)}
+                                  {m.body?.trim() ? (
+                                    <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
+                                      {m.body}
+                                    </p>
+                                  ) : null}
+                                </>
+                              )}
+                              <p
+                                className={cn(
+                                  'text-[10px] mt-1 tabular-nums',
+                                  m.deleted
+                                    ? 'text-gray-400'
+                                    : m.mine
+                                      ? 'text-orange-100 text-right'
+                                      : 'text-gray-400'
+                                )}
+                              >
+                                {formatTime(m.createdAt)}
+                              </p>
+                            </div>
+                            {!m.deleted ? (
+                              <div
+                                className={cn(
+                                  'absolute top-1 opacity-0 group-hover:opacity-100 transition-opacity',
+                                  m.mine ? '-left-8' : '-right-8'
+                                )}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={e => {
+                                    e.stopPropagation()
+                                    setMenuMsgId(id => (id === m.id ? null : m.id))
+                                  }}
+                                  className="w-7 h-7 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center text-gray-500 hover:text-gray-800"
+                                >
+                                  <MoreVertical className="w-3.5 h-3.5" />
+                                </button>
+                                {menuMsgId === m.id ? (
+                                  <div
+                                    className={cn(
+                                      'absolute top-8 z-20 w-48 rounded-xl border border-gray-200 bg-white shadow-lg py-1 text-sm',
+                                      m.mine ? 'right-0' : 'left-0'
+                                    )}
+                                    onClick={e => e.stopPropagation()}
+                                  >
+                                    <button
+                                      type="button"
+                                      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 text-left text-gray-700"
+                                      onClick={() => void handlePin(m.id)}
+                                    >
+                                      <Pin className="w-3.5 h-3.5" />
+                                      Épingler
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 text-left text-gray-700"
+                                      onClick={() => void handleHideForMe(m.id)}
+                                    >
+                                      <EyeOff className="w-3.5 h-3.5" />
+                                      Supprimer pour moi
+                                    </button>
+                                    {m.mine ? (
+                                      <button
+                                        type="button"
+                                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-red-50 text-left text-red-600"
+                                        onClick={() => void handleDeleteEveryone(m.id)}
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                        Supprimer pour tous
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       ))}
@@ -654,7 +955,33 @@ export default function ChatPage() {
                 <div ref={bottomRef} />
               </div>
 
-              <footer className="p-3 border-t border-gray-100 bg-white">
+              <footer className="p-3 border-t border-gray-100 bg-white space-y-2">
+                {pending.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {pending.map((p, i) => (
+                      <div
+                        key={`${p.fileName}-${i}`}
+                        className="relative rounded-lg border border-gray-200 bg-gray-50 overflow-hidden"
+                      >
+                        {p.kind === 'image' && p.previewUrl ? (
+                          <img src={p.previewUrl} alt="" className="h-14 w-14 object-cover" />
+                        ) : (
+                          <div className="h-14 px-3 flex items-center gap-1.5 text-xs font-medium text-gray-600">
+                            <FileText className="w-3.5 h-3.5" />
+                            <span className="max-w-[100px] truncate">{p.fileName || 'Fichier'}</span>
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setPending(prev => prev.filter((_, idx) => idx !== i))}
+                          className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-slate-800 text-white flex items-center justify-center"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
                 <form
                   className="flex items-end gap-2"
                   onSubmit={e => {
@@ -662,6 +989,22 @@ export default function ChatPage() {
                     void handleSend()
                   }}
                 >
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    multiple
+                    className="hidden"
+                    onChange={e => void addFiles(e.target.files)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    className="h-11 w-11 rounded-xl border border-gray-200 text-gray-600 flex items-center justify-center hover:bg-gray-50 flex-shrink-0"
+                    title="Joindre une image ou un PDF"
+                  >
+                    <Paperclip className="w-4 h-4" />
+                  </button>
                   <textarea
                     value={draft}
                     onChange={e => setDraft(e.target.value)}
@@ -677,7 +1020,7 @@ export default function ChatPage() {
                   />
                   <button
                     type="submit"
-                    disabled={sending || !draft.trim()}
+                    disabled={!canSend}
                     className="h-11 w-11 rounded-xl bg-orange-500 text-white flex items-center justify-center hover:bg-orange-600 disabled:opacity-40 flex-shrink-0"
                     title="Envoyer"
                   >
@@ -689,6 +1032,27 @@ export default function ChatPage() {
           )}
         </section>
       </div>
+
+      {lightbox ? (
+        <div
+          className="fixed inset-0 z-[80] bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <button
+            type="button"
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center"
+            onClick={() => setLightbox(null)}
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <img
+            src={lightbox}
+            alt=""
+            className="max-h-full max-w-full object-contain rounded-lg"
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -15,6 +15,7 @@ import {
   updateStoredUser,
   type StoredUser,
 } from '../lib/authStorage'
+import { playMessageSound, playNotificationSound } from '../lib/appSounds'
 import {
   claimNotificationResponseId,
   pushPayloadToNavTarget,
@@ -163,6 +164,20 @@ export default function MainApp({
     })
     return () => sub.remove()
   }, [navigateFromNotification])
+
+  /** Son in-app à l’arrivée d’une push (app ouverte). */
+  useEffect(() => {
+    const sub = Notifications.addNotificationReceivedListener((notification) => {
+      const data = notification.request.content.data as Record<string, unknown> | undefined
+      const type = String(data?.type ?? '').toLowerCase()
+      if (type.includes('chat') || data?.conversationId != null) {
+        playMessageSound()
+      } else {
+        playNotificationSound()
+      }
+    })
+    return () => sub.remove()
+  }, [])
 
   const showShell = nav.type === 'menu'
   const statusBarInset = getStatusBarInset()
@@ -504,10 +519,6 @@ export default function MainApp({
         onClose={() => setDrawerOpen(false)}
         onNavigate={goTo}
         onLogout={onLogout}
-        onOpenSearch={() => {
-          setDrawerOpen(false)
-          setShowSearch(true)
-        }}
         onEditProfile={() => setShowProfile(true)}
       />
 

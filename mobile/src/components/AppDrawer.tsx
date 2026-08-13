@@ -30,7 +30,6 @@ type Props = {
   onClose: () => void
   onNavigate: (route: MenuRouteId) => void
   onLogout: () => void
-  onOpenSearch?: () => void
   onEditProfile?: () => void
 }
 
@@ -42,7 +41,6 @@ export default function AppDrawer({
   onClose,
   onNavigate,
   onLogout,
-  onOpenSearch,
   onEditProfile,
 }: Props) {
   const role = mapRole(user.role)
@@ -134,17 +132,6 @@ export default function AppDrawer({
               <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
             ) : null}
           </Pressable>
-
-          {onOpenSearch ? (
-            <Pressable
-              style={styles.searchBtn}
-              onPress={onOpenSearch}
-              accessibilityLabel="Recherche globale"
-            >
-              <Ionicons name="search" size={18} color="#fed7aa" />
-              <Text style={styles.searchBtnText}>Recherche (immat, client…)</Text>
-            </Pressable>
-          ) : null}
 
           <ScrollView
             style={styles.nav}
@@ -377,22 +364,6 @@ const styles = StyleSheet.create({
   editHint: { color: '#9ca3af', fontSize: 11, marginTop: 2 },
   userInfo: { flex: 1, minWidth: 0 },
   userName: { color: '#f9fafb', fontSize: 14, fontWeight: '600' },
-  searchBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginHorizontal: 12,
-    marginTop: 10,
-    marginBottom: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: 'rgba(249,115,22,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(254,215,170,0.35)',
-    flexShrink: 0,
-  },
-  searchBtnText: { color: '#fed7aa', fontSize: 13, fontWeight: '700', flex: 1 },
   userRole: {
     color: '#fb923c',
     fontSize: 11,

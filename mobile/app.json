@@ -55,7 +55,8 @@
           "photosPermission": "EL MECANO a besoin d'accéder à vos photos pour les documents véhicule.",
           "cameraPermission": "EL MECANO a besoin de la caméra pour photographier les véhicules."
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "extra": {
       "eas": {

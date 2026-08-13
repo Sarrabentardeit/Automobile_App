@@ -1,4 +1,6 @@
 import { Router } from 'express'
+import fs from 'fs/promises'
+import path from 'path'
 import { prisma } from '../lib/prisma'
 import { notifyMany } from '../lib/notify'
 import { authenticate, type AuthRequest } from '../middleware/auth'
@@ -10,6 +12,107 @@ const LEGACY_TEAM_CHANNEL_TITLE = 'Équipe EL MECANO'
 const MESSAGE_MAX = 4000
 const TITLE_MAX = 80
 const LIST_LIMIT = 50
+const CHAT_UPLOADS = path.resolve(process.cwd(), 'uploads', 'chat')
+const ALLOWED_CHAT_MIME = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+] as const
+const MAX_ATTACH_BYTES = 8 * 1024 * 1024
+const MAX_ATTACHMENTS = 5
+
+function parseDataUrl(dataUrl?: string): { mimeType: string; buffer: Buffer; ext: string } | null {
+  if (!dataUrl) return null
+  const match = dataUrl.match(/^data:([a-zA-Z0-9.+/-]+);base64,(.+)$/)
+  if (!match) return null
+  let mimeType = match[1].toLowerCase()
+  if (mimeType === 'image/jpg' || mimeType === 'image/pjpeg') mimeType = 'image/jpeg'
+  if (!ALLOWED_CHAT_MIME.includes(mimeType as (typeof ALLOWED_CHAT_MIME)[number])) return null
+  try {
+    const buffer = Buffer.from(match[2], 'base64')
+    if (buffer.length > MAX_ATTACH_BYTES) return null
+    const ext =
+      mimeType === 'image/png'
+        ? 'png'
+        : mimeType === 'image/webp'
+          ? 'webp'
+          : mimeType === 'application/pdf'
+            ? 'pdf'
+            : 'jpg'
+    return { mimeType, buffer, ext }
+  } catch {
+    return null
+  }
+}
+
+function attachmentKind(mime: string): 'image' | 'file' {
+  return mime.startsWith('image/') ? 'image' : 'file'
+}
+
+function mapAttachment(a: {
+  id: number
+  url_path: string
+  original_name: string
+  mime_type: string
+  size_bytes: number
+  kind: string
+}) {
+  return {
+    id: a.id,
+    url_path: a.url_path,
+    original_name: a.original_name,
+    mime_type: a.mime_type,
+    size_bytes: a.size_bytes,
+    kind: a.kind === 'image' ? 'image' : 'file',
+  }
+}
+
+function serializeMessage(
+  m: {
+    id: number
+    body: string
+    createdAt: Date
+    senderId: number
+    deletedAt?: Date | null
+    sender: { id: number; fullName: string; email?: string | null }
+    attachments?: Array<{
+      id: number
+      url_path: string
+      original_name: string
+      mime_type: string
+      size_bytes: number
+      kind: string
+    }>
+  },
+  me: number
+) {
+  const deleted = !!m.deletedAt
+  return {
+    id: m.id,
+    body: deleted ? '' : m.body,
+    createdAt: m.createdAt.toISOString(),
+    senderId: m.senderId,
+    senderNom: userLabel(m.sender),
+    mine: m.senderId === me,
+    deleted,
+    attachments: deleted ? [] : (m.attachments ?? []).map(mapAttachment),
+  }
+}
+
+function previewBody(m: {
+  body?: string
+  deletedAt?: Date | null
+  attachments?: Array<{ kind: string }>
+}): string {
+  if (m.deletedAt) return 'Message supprimé'
+  const body = (m.body ?? '').trim()
+  if (body) return body
+  const att = m.attachments?.[0]
+  if (att?.kind === 'image') return '📷 Photo'
+  if (att) return '📎 Pièce jointe'
+  return ''
+}
 
 function userLabel(u: { fullName?: string | null; email?: string | null; id: number }) {
   return (u.fullName || u.email || `User #${u.id}`).trim()
@@ -49,7 +152,16 @@ const conversationInclude = {
   messages: {
     orderBy: { createdAt: 'desc' as const },
     take: 1,
-    include: { sender: { select: { id: true, fullName: true } } },
+    include: {
+      sender: { select: { id: true, fullName: true } },
+      attachments: true,
+    },
+  },
+  pinnedMessage: {
+    include: {
+      sender: { select: { id: true, fullName: true, email: true } },
+      attachments: true,
+    },
   },
 }
 
@@ -69,8 +181,28 @@ function serializeConversation(
       body: string
       createdAt: Date
       senderId: number
+      deletedAt?: Date | null
       sender: { id: number; fullName: string }
+      attachments?: Array<{ kind: string }>
     }>
+    pinnedMessageId?: number | null
+    pinnedAt?: Date | null
+    pinnedMessage?: {
+      id: number
+      body: string
+      createdAt: Date
+      senderId: number
+      deletedAt?: Date | null
+      sender: { id: number; fullName: string; email?: string | null }
+      attachments?: Array<{
+        id: number
+        url_path: string
+        original_name: string
+        mime_type: string
+        size_bytes: number
+        kind: string
+      }>
+    } | null
   },
   me: number
 ) {
@@ -101,12 +233,17 @@ function serializeConversation(
     lastMessage: last
       ? {
           id: last.id,
-          body: last.body,
+          body: previewBody(last),
           createdAt: last.createdAt.toISOString(),
           senderId: last.senderId,
           senderNom: userLabel(last.sender),
         }
       : null,
+    pinnedMessage:
+      c.pinnedMessage && !c.pinnedMessage.deletedAt
+        ? serializeMessage(c.pinnedMessage, me)
+        : null,
+    pinnedAt: c.pinnedAt?.toISOString() ?? null,
     unreadCount: 0 as number,
     _lastReadAt: lastRead,
   }
@@ -143,6 +280,8 @@ router.get('/conversations', authenticate(), async (req: AuthRequest, res) => {
           where: {
             conversationId: c.id,
             senderId: { not: me },
+            deletedAt: null,
+            hides: { none: { userId: me } },
             ...(lastRead ? { createdAt: { gt: lastRead } } : {}),
           },
         })
@@ -399,9 +538,16 @@ router.get('/conversations/:id/messages', authenticate(), async (req: AuthReques
     const after = typeof req.query.after === 'string' ? req.query.after : undefined
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || LIST_LIMIT))
 
+    const hidden = (await db.chatMessageHide.findMany({
+      where: { userId: me },
+      select: { messageId: true },
+    })) as Array<{ messageId: number }>
+    const hiddenIds = hidden.map((h) => h.messageId)
+
     const messages = await db.chatMessage.findMany({
       where: {
         conversationId: id,
+        ...(hiddenIds.length ? { id: { notIn: hiddenIds } } : {}),
         ...(before ? { createdAt: { lt: new Date(before) } } : {}),
         ...(after ? { createdAt: { gt: new Date(after) } } : {}),
       },
@@ -409,36 +555,38 @@ router.get('/conversations/:id/messages', authenticate(), async (req: AuthReques
       take: limit,
       include: {
         sender: { select: { id: true, fullName: true, email: true } },
+        attachments: true,
       },
     })
 
-    const data = messages
-      .map(
-        (m: {
-          id: number
-          body: string
-          createdAt: Date
-          senderId: number
-          sender: { id: number; fullName: string; email: string }
-        }) => ({
-          id: m.id,
-          body: m.body,
-          createdAt: m.createdAt.toISOString(),
-          senderId: m.senderId,
-          senderNom: userLabel(m.sender),
-          mine: m.senderId === me,
-        })
-      )
-      .reverse()
+    const data = messages.map((m: Parameters<typeof serializeMessage>[0]) => serializeMessage(m, me)).reverse()
 
-    return res.json({ data })
+    const conv = await db.chatConversation.findUnique({
+      where: { id },
+      include: {
+        pinnedMessage: {
+          include: {
+            sender: { select: { id: true, fullName: true, email: true } },
+            attachments: true,
+          },
+        },
+      },
+    })
+    const pinned =
+      conv?.pinnedMessage &&
+      !conv.pinnedMessage.deletedAt &&
+      !hiddenIds.includes(conv.pinnedMessage.id)
+        ? serializeMessage(conv.pinnedMessage, me)
+        : null
+
+    return res.json({ data, pinnedMessage: pinned })
   } catch (err) {
     console.error(err)
     return res.status(500).json({ error: 'Internal server error' })
   }
 })
 
-/** Envoyer un message. */
+/** Envoyer un message (+ pièces jointes optionnelles). */
 router.post('/conversations/:id/messages', authenticate(), async (req: AuthRequest, res) => {
   try {
     const me = req.user!.sub
@@ -449,15 +597,72 @@ router.post('/conversations/:id/messages', authenticate(), async (req: AuthReque
     }
 
     const body = String(req.body?.body ?? '').trim()
-    if (!body) return res.status(400).json({ error: 'Message vide' })
+    const rawAtts = Array.isArray(req.body?.attachments) ? req.body.attachments : []
+    if (rawAtts.length > MAX_ATTACHMENTS) {
+      return res.status(400).json({ error: `Max ${MAX_ATTACHMENTS} pièces jointes` })
+    }
+    if (!body && rawAtts.length === 0) {
+      return res.status(400).json({ error: 'Message vide' })
+    }
     if (body.length > MESSAGE_MAX) {
       return res.status(400).json({ error: `Message trop long (max ${MESSAGE_MAX})` })
+    }
+
+    type AttIn = { dataUrl?: string; fileName?: string }
+    const prepared: Array<{
+      buffer: Buffer
+      mimeType: string
+      ext: string
+      fileName: string
+      kind: 'image' | 'file'
+    }> = []
+    for (const raw of rawAtts as AttIn[]) {
+      const parsed = parseDataUrl(raw.dataUrl)
+      if (!parsed) {
+        return res.status(400).json({ error: 'Pièce jointe invalide (JPEG/PNG/WebP/PDF, max 8 Mo)' })
+      }
+      const fileName = String(raw.fileName ?? `fichier.${parsed.ext}`).slice(0, 120)
+      prepared.push({
+        ...parsed,
+        fileName,
+        kind: attachmentKind(parsed.mimeType),
+      })
     }
 
     const msg = await db.chatMessage.create({
       data: { conversationId: id, senderId: me, body },
       include: { sender: { select: { id: true, fullName: true, email: true } } },
     })
+
+    const savedAtts: Array<{
+      id: number
+      url_path: string
+      original_name: string
+      mime_type: string
+      size_bytes: number
+      kind: string
+    }> = []
+    if (prepared.length) {
+      const dir = path.join(CHAT_UPLOADS, String(id))
+      await fs.mkdir(dir, { recursive: true })
+      for (let i = 0; i < prepared.length; i++) {
+        const p = prepared[i]
+        const diskName = `${msg.id}_${Date.now()}_${i}.${p.ext}`
+        await fs.writeFile(path.join(dir, diskName), p.buffer)
+        const row = await db.chatAttachment.create({
+          data: {
+            messageId: msg.id,
+            url_path: `/uploads/chat/${id}/${diskName}`,
+            original_name: p.fileName,
+            mime_type: p.mimeType,
+            size_bytes: p.buffer.length,
+            kind: p.kind,
+          },
+        })
+        savedAtts.push(row)
+      }
+    }
+
     await db.chatConversation.update({
       where: { id },
       data: { updatedAt: new Date() },
@@ -467,20 +672,20 @@ router.post('/conversations/:id/messages', authenticate(), async (req: AuthReque
       data: { lastReadAt: new Date() },
     })
 
-    // Notifs deep-link + push pour les autres participants
     try {
       const others = (await db.chatParticipant.findMany({
         where: { conversationId: id, userId: { not: me } },
         select: { userId: true },
       })) as Array<{ userId: number }>
-      const preview = body.length > 120 ? `${body.slice(0, 117)}…` : body
+      const preview = previewBody({ body, attachments: savedAtts })
+      const short = preview.length > 120 ? `${preview.slice(0, 117)}…` : preview
       const senderName = userLabel(msg.sender)
       void notifyMany(
         others.map((p) => p.userId),
         {
           type: 'chat_message',
           title: 'Nouveau message',
-          message: `${senderName}: ${preview}`,
+          message: `${senderName}: ${short}`,
           conversationId: id,
         }
       )
@@ -489,15 +694,136 @@ router.post('/conversations/:id/messages', authenticate(), async (req: AuthReque
     }
 
     return res.status(201).json({
-      data: {
-        id: msg.id,
-        body: msg.body,
-        createdAt: msg.createdAt.toISOString(),
-        senderId: msg.senderId,
-        senderNom: userLabel(msg.sender),
-        mine: true,
+      data: serializeMessage(
+        { ...msg, deletedAt: null, attachments: savedAtts },
+        me
+      ),
+    })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+/** Supprimer pour tout le monde (expéditeur uniquement). */
+router.delete('/messages/:messageId', authenticate(), async (req: AuthRequest, res) => {
+  try {
+    const me = req.user!.sub
+    const messageId = Number(req.params.messageId)
+    if (!Number.isInteger(messageId)) return res.status(400).json({ error: 'id invalide' })
+
+    const msg = await db.chatMessage.findUnique({
+      where: { id: messageId },
+      include: { attachments: true },
+    })
+    if (!msg) return res.status(404).json({ error: 'Message introuvable' })
+    if (!(await assertParticipant(msg.conversationId, me))) {
+      return res.status(403).json({ error: 'Accès refusé' })
+    }
+    if (msg.senderId !== me && req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Seul l’auteur peut supprimer pour tous' })
+    }
+
+    const updated = await db.chatMessage.update({
+      where: { id: messageId },
+      data: { deletedAt: new Date(), deletedById: me, body: '' },
+      include: {
+        sender: { select: { id: true, fullName: true, email: true } },
+        attachments: true,
       },
     })
+
+    // Retirer l’épingle si c’était ce message
+    await db.chatConversation.updateMany({
+      where: { id: msg.conversationId, pinnedMessageId: messageId },
+      data: { pinnedMessageId: null, pinnedAt: null, pinnedById: null },
+    })
+
+    return res.json({ data: serializeMessage(updated, me) })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+/** Masquer pour moi uniquement. */
+router.post('/messages/:messageId/hide', authenticate(), async (req: AuthRequest, res) => {
+  try {
+    const me = req.user!.sub
+    const messageId = Number(req.params.messageId)
+    if (!Number.isInteger(messageId)) return res.status(400).json({ error: 'id invalide' })
+
+    const msg = await db.chatMessage.findUnique({ where: { id: messageId } })
+    if (!msg) return res.status(404).json({ error: 'Message introuvable' })
+    if (!(await assertParticipant(msg.conversationId, me))) {
+      return res.status(403).json({ error: 'Accès refusé' })
+    }
+
+    await db.chatMessageHide.upsert({
+      where: { messageId_userId: { messageId, userId: me } },
+      create: { messageId, userId: me },
+      update: { hiddenAt: new Date() },
+    })
+
+    return res.json({ ok: true })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+/** Épingler un message. */
+router.post('/conversations/:id/pin', authenticate(), async (req: AuthRequest, res) => {
+  try {
+    const me = req.user!.sub
+    const id = Number(req.params.id)
+    const messageId = Number(req.body?.messageId)
+    if (!Number.isInteger(id) || !Number.isInteger(messageId)) {
+      return res.status(400).json({ error: 'Paramètres invalides' })
+    }
+    if (!(await assertParticipant(id, me))) {
+      return res.status(403).json({ error: 'Accès refusé' })
+    }
+
+    const msg = await db.chatMessage.findFirst({
+      where: { id: messageId, conversationId: id, deletedAt: null },
+      include: {
+        sender: { select: { id: true, fullName: true, email: true } },
+        attachments: true,
+      },
+    })
+    if (!msg) return res.status(404).json({ error: 'Message introuvable' })
+
+    await db.chatConversation.update({
+      where: { id },
+      data: {
+        pinnedMessageId: messageId,
+        pinnedAt: new Date(),
+        pinnedById: me,
+      },
+    })
+
+    return res.json({ data: serializeMessage(msg, me) })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+/** Retirer l’épingle. */
+router.delete('/conversations/:id/pin', authenticate(), async (req: AuthRequest, res) => {
+  try {
+    const me = req.user!.sub
+    const id = Number(req.params.id)
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'id invalide' })
+    if (!(await assertParticipant(id, me))) {
+      return res.status(403).json({ error: 'Accès refusé' })
+    }
+    await db.chatConversation.update({
+      where: { id },
+      data: { pinnedMessageId: null, pinnedAt: null, pinnedById: null },
+    })
+    return res.json({ ok: true })
   } catch (err) {
     console.error(err)
     return res.status(500).json({ error: 'Internal server error' })

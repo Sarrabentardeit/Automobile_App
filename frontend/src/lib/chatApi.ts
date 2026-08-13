@@ -8,6 +8,15 @@ export type ChatMember = {
   statut?: 'actif' | 'inactif'
 }
 
+export type ChatAttachment = {
+  id: number
+  url_path: string
+  original_name: string
+  mime_type: string
+  size_bytes: number
+  kind: 'image' | 'file'
+}
+
 export type ChatMessage = {
   id: number
   body: string
@@ -15,6 +24,13 @@ export type ChatMessage = {
   senderId: number
   senderNom: string
   mine: boolean
+  deleted?: boolean
+  attachments?: ChatAttachment[]
+}
+
+export type ChatAttachmentInput = {
+  dataUrl: string
+  fileName?: string
 }
 
 export type ChatConversation = {
@@ -36,6 +52,8 @@ export type ChatConversation = {
     senderId: number
     senderNom: string
   } | null
+  pinnedMessage?: ChatMessage | null
+  pinnedAt?: string | null
 }
 
 export function fetchChatConversations(token: string) {
@@ -83,18 +101,59 @@ export function removeGroupMember(token: string, conversationId: number, userId:
 }
 
 export function fetchChatMessages(token: string, conversationId: number, before?: string) {
-  return apiFetch<{ data: ChatMessage[] }>(`/chat/conversations/${conversationId}/messages`, {
-    token,
-    params: { limit: 80, before },
-  }).then(r => r.data ?? [])
+  return apiFetch<{ data: ChatMessage[]; pinnedMessage: ChatMessage | null }>(
+    `/chat/conversations/${conversationId}/messages`,
+    {
+      token,
+      params: { limit: 80, before },
+    }
+  ).then(r => ({
+    messages: r.data ?? [],
+    pinnedMessage: r.pinnedMessage ?? null,
+  }))
 }
 
-export function sendChatMessage(token: string, conversationId: number, body: string) {
+export function sendChatMessage(
+  token: string,
+  conversationId: number,
+  body: string,
+  attachments?: ChatAttachmentInput[]
+) {
   return apiFetch<{ data: ChatMessage }>(`/chat/conversations/${conversationId}/messages`, {
     token,
     method: 'POST',
-    body: JSON.stringify({ body }),
+    body: JSON.stringify({ body, attachments: attachments?.length ? attachments : undefined }),
   }).then(r => r.data)
+}
+
+export function deleteChatMessageForEveryone(token: string, messageId: number) {
+  return apiFetch<{ data: ChatMessage }>(`/chat/messages/${messageId}`, {
+    token,
+    method: 'DELETE',
+  }).then(r => r.data)
+}
+
+export function hideChatMessageForMe(token: string, messageId: number) {
+  return apiFetch<{ ok: boolean }>(`/chat/messages/${messageId}/hide`, {
+    token,
+    method: 'POST',
+    body: JSON.stringify({}),
+  })
+}
+
+export function pinChatMessage(token: string, conversationId: number, messageId: number) {
+  return apiFetch<{ data: ChatMessage }>(`/chat/conversations/${conversationId}/pin`, {
+    token,
+    method: 'POST',
+    body: JSON.stringify({ messageId }),
+  }).then(r => r.data)
+}
+
+export function unpinChatMessage(token: string, conversationId: number) {
+  return apiFetch<{ ok: boolean }>(`/chat/conversations/${conversationId}/pin`, {
+    token,
+    method: 'DELETE',
+  })
 }
 
 export function markChatRead(token: string, conversationId: number) {

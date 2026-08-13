@@ -47,6 +47,10 @@ async function sendExpoPush(
         title,
         body,
         data,
+        channelId:
+          String(data.type ?? '').includes('chat') || data.conversationId != null
+            ? 'messages'
+            : 'default',
       }),
     })
   } catch (err) {

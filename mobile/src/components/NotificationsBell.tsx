@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Modal,
   Pressable,
@@ -16,6 +16,7 @@ import {
   markNotificationRead,
   type AppNotification,
 } from '../lib/notifications'
+import { playMessageSound, playNotificationSound } from '../lib/appSounds'
 import type { MenuRouteId } from '../navigation/menuConfig'
 
 export type NotificationNavigateTarget =
@@ -80,15 +81,40 @@ export default function NotificationsBell({
   const [unreadNotif, setUnreadNotif] = useState(0)
   const [chatUnread, setChatUnread] = useState(0)
   const [loading, setLoading] = useState(false)
+  const readyRef = useRef(false)
+  const chatUnreadRef = useRef(0)
+  const notifIdsRef = useRef<Set<number>>(new Set())
 
   const refreshBadge = useCallback(async () => {
     try {
-      const [count, convos] = await Promise.all([
+      const [count, convos, rows] = await Promise.all([
         fetchNotificationsUnreadCount(accessToken),
         fetchChatConversations(accessToken).catch(() => []),
+        fetchNotifications(accessToken).catch(() => [] as AppNotification[]),
       ])
+      const nextChat = convos.reduce((s, c) => s + (c.unreadCount || 0), 0)
+      const unreadRows = rows.filter((n) => {
+        if (n.read) return false
+        const t = (n.type ?? '').toLowerCase()
+        return t !== 'chat_message' && !t.includes('chat_message')
+      })
+      const ids = new Set(unreadRows.map((n) => n.id))
+
+      if (readyRef.current) {
+        if (nextChat > chatUnreadRef.current) playMessageSound()
+        for (const id of ids) {
+          if (!notifIdsRef.current.has(id)) {
+            playNotificationSound()
+            break
+          }
+        }
+      }
+
+      chatUnreadRef.current = nextChat
+      notifIdsRef.current = ids
+      readyRef.current = true
       setUnreadNotif(count)
-      setChatUnread(convos.reduce((s, c) => s + (c.unreadCount || 0), 0))
+      setChatUnread(nextChat)
     } catch {
       /* keep previous */
     }
@@ -104,8 +130,11 @@ export default function NotificationsBell({
   }, [accessToken])
 
   useEffect(() => {
+    readyRef.current = false
+    chatUnreadRef.current = 0
+    notifIdsRef.current = new Set()
     void refreshBadge()
-    const id = setInterval(() => void refreshBadge(), 45_000)
+    const id = setInterval(() => void refreshBadge(), 12_000)
     return () => clearInterval(id)
   }, [refreshBadge])
 
