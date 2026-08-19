@@ -13,7 +13,7 @@ import path from 'path'
 const router = Router()
 const db = prisma as any
 
-const ETATS = ['orange', 'mauve', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'vert', 'retour'] as const
+const ETATS = ['orange', 'mauve', 'sous_traitance', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'vert', 'retour'] as const
 const TYPES = ['voiture', 'moto'] as const
 const SERVICE_TYPES = [
   'diagnostic',
@@ -28,19 +28,21 @@ const ALLOWED_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'imag
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024
 const UPLOADS_ROOT = path.resolve(process.cwd(), 'uploads', 'vehicules')
 const TRANSITIONS: Record<string, string[]> = {
-  orange: ['bleu', 'mauve', 'attente_client', 'rouge', 'remise_cle', 'retour'],
-  mauve: ['orange', 'attente_client'],
-  attente_client: ['orange', 'mauve', 'bleu', 'rouge', 'remise_cle', 'vert'],
-  bleu: ['remise_cle', 'orange', 'attente_client'],
-  rouge: ['orange', 'mauve', 'attente_client'],
-  remise_cle: ['vert', 'orange', 'attente_client'],
+  orange: ['bleu', 'mauve', 'sous_traitance', 'attente_client', 'rouge', 'remise_cle', 'retour'],
+  mauve: ['orange', 'sous_traitance', 'attente_client'],
+  sous_traitance: ['orange', 'mauve', 'attente_client', 'bleu', 'rouge', 'remise_cle'],
+  attente_client: ['orange', 'mauve', 'sous_traitance', 'bleu', 'rouge', 'remise_cle', 'vert'],
+  bleu: ['remise_cle', 'orange', 'sous_traitance', 'attente_client'],
+  rouge: ['orange', 'mauve', 'sous_traitance', 'attente_client'],
+  remise_cle: ['vert', 'orange', 'sous_traitance', 'attente_client'],
   vert: ['retour'],
-  retour: ['orange', 'mauve', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'vert'],
+  retour: ['orange', 'mauve', 'sous_traitance', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'vert'],
 }
 
 const ETAT_LABELS: Record<string, string> = {
   orange: 'Orange',
   mauve: 'Mauve',
+  sous_traitance: 'Sous-traitance',
   attente_client: 'Attente client',
   bleu: 'Bleu',
   rouge: 'Problème',

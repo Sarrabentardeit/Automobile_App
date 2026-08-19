@@ -290,7 +290,7 @@ export default function VehiculesPage() {
         )
       : []
 
-  const etats: EtatVehicule[] = ['orange', 'mauve', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'retour']
+  const etats: EtatVehicule[] = ['orange', 'mauve', 'sous_traitance', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'retour']
   const countByEtat = (etat: EtatVehicule) => filteredCounts?.byEtat?.[etat] ?? 0
   const totalAll = filteredCounts?.total ?? 0
 

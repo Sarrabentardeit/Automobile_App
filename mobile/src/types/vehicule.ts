@@ -1,6 +1,7 @@
 export type EtatVehicule =
   | 'orange'
   | 'mauve'
+  | 'sous_traitance'
   | 'attente_client'
   | 'bleu'
   | 'rouge'
@@ -111,6 +112,7 @@ export const ETAT_CONFIG: Record<
 > = {
   orange: { label: 'EN COURS', description: 'Réparation en cours', color: '#f97316' },
   mauve: { label: 'ATT PIÈCES', description: 'En attente pièce', color: '#a855f7' },
+  sous_traitance: { label: 'SOUS TRAITANCE', description: 'Envoyé en sous-traitance', color: '#4169E1' },
   attente_client: { label: 'ATT CLIENT', description: 'En attente client', color: '#ca8a04' },
   bleu: { label: 'TEST', description: 'Test / essai', color: '#06b6d4' },
   rouge: { label: 'À RÉSOUDRE', description: 'Problème technique', color: '#ef4444' },
@@ -209,6 +211,7 @@ export const IMAGE_CATEGORIES: { value: VehiculeImageCategory; label: string }[]
 export const ETATS_ENTREE: EtatVehicule[] = [
   'orange',
   'mauve',
+  'sous_traitance',
   'attente_client',
   'bleu',
   'rouge',
@@ -218,12 +221,13 @@ export const ETATS_ENTREE: EtatVehicule[] = [
 ]
 
 export const TRANSITIONS_AUTORISEES: Record<EtatVehicule, EtatVehicule[]> = {
-  orange: ['bleu', 'mauve', 'attente_client', 'rouge', 'remise_cle', 'retour'],
-  mauve: ['orange', 'attente_client'],
-  attente_client: ['orange', 'mauve', 'bleu', 'rouge', 'remise_cle', 'vert'],
-  bleu: ['remise_cle', 'orange', 'attente_client'],
-  rouge: ['orange', 'mauve', 'attente_client'],
-  remise_cle: ['vert', 'orange', 'attente_client'],
+  orange: ['bleu', 'mauve', 'sous_traitance', 'attente_client', 'rouge', 'remise_cle', 'retour'],
+  mauve: ['orange', 'sous_traitance', 'attente_client'],
+  sous_traitance: ['orange', 'mauve', 'attente_client', 'bleu', 'rouge', 'remise_cle'],
+  attente_client: ['orange', 'mauve', 'sous_traitance', 'bleu', 'rouge', 'remise_cle', 'vert'],
+  bleu: ['remise_cle', 'orange', 'sous_traitance', 'attente_client'],
+  rouge: ['orange', 'mauve', 'sous_traitance', 'attente_client'],
+  remise_cle: ['vert', 'orange', 'sous_traitance', 'attente_client'],
   vert: ['retour'],
-  retour: ['orange', 'mauve', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'vert'],
+  retour: ['orange', 'mauve', 'sous_traitance', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'vert'],
 }

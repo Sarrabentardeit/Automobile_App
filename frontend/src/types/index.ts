@@ -103,7 +103,7 @@ export interface User {
 }
 
 // ==================== ETATS / WORKFLOW ====================
-export type EtatVehicule = 'orange' | 'mauve' | 'attente_client' | 'bleu' | 'rouge' | 'remise_cle' | 'vert' | 'retour'
+export type EtatVehicule = 'orange' | 'mauve' | 'sous_traitance' | 'attente_client' | 'bleu' | 'rouge' | 'remise_cle' | 'vert' | 'retour'
 export type VehiculeType = 'voiture' | 'moto'
 
 export interface EtatConfig {
@@ -131,6 +131,14 @@ export const ETAT_CONFIG: Record<EtatVehicule, EtatConfig> = {
     bg: 'bg-purple-500',
     bgLight: 'bg-purple-50',
     border: 'border-purple-400',
+  },
+  sous_traitance: {
+    label: 'SOUS TRAITANCE',
+    description: 'Envoyé en sous-traitance',
+    color: '#4169E1',
+    bg: 'bg-blue-600',
+    bgLight: 'bg-blue-50',
+    border: 'border-blue-500',
   },
   attente_client: {
     label: 'ATT CLIENT',
@@ -183,14 +191,15 @@ export const ETAT_CONFIG: Record<EtatVehicule, EtatConfig> = {
 }
 
 export const TRANSITIONS_AUTORISEES: Record<EtatVehicule, EtatVehicule[]> = {
-  orange: ['bleu', 'mauve', 'attente_client', 'rouge', 'remise_cle', 'retour'],
-  mauve: ['orange', 'attente_client'],
-  attente_client: ['orange', 'mauve', 'bleu', 'rouge', 'remise_cle', 'vert'],
-  bleu: ['remise_cle', 'orange', 'attente_client'],
-  rouge: ['orange', 'mauve', 'attente_client'],
-  remise_cle: ['vert', 'orange', 'attente_client'],
+  orange: ['bleu', 'mauve', 'sous_traitance', 'attente_client', 'rouge', 'remise_cle', 'retour'],
+  mauve: ['orange', 'sous_traitance', 'attente_client'],
+  sous_traitance: ['orange', 'mauve', 'attente_client', 'bleu', 'rouge', 'remise_cle'],
+  attente_client: ['orange', 'mauve', 'sous_traitance', 'bleu', 'rouge', 'remise_cle', 'vert'],
+  bleu: ['remise_cle', 'orange', 'sous_traitance', 'attente_client'],
+  rouge: ['orange', 'mauve', 'sous_traitance', 'attente_client'],
+  remise_cle: ['vert', 'orange', 'sous_traitance', 'attente_client'],
   vert: ['retour'],
-  retour: ['orange', 'mauve', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'vert'],
+  retour: ['orange', 'mauve', 'sous_traitance', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'vert'],
 }
 
 // ==================== VEHICULES ====================

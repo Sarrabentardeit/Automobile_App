@@ -28,6 +28,7 @@ export type BrandFoldersResponse = {
 export const ETATS_FILTRE: EtatVehicule[] = [
   'orange',
   'mauve',
+  'sous_traitance',
   'attente_client',
   'bleu',
   'rouge',

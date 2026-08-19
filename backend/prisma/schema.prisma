@@ -140,7 +140,7 @@ model Vehicule {
   immatriculation      String    @default("")
   modele               String
   type                 String    @default("voiture") // voiture | moto
-  etat_actuel          String    @default("orange") // orange, mauve, bleu, rouge, vert
+  etat_actuel          String    @default("orange") // orange, mauve, sous_traitance, attente_client, bleu, rouge, remise_cle, vert, retour
   service_type         String    @default("autre") // diagnostic, diagnostic_approfondi, service_rapide, reprogrammation, autre
   technicien_id        Int?
   responsable_id       Int?

@@ -9,6 +9,7 @@ import Card from '@/components/ui/Card'
 const ETATS: EtatVehicule[] = [
   'orange',
   'mauve',
+  'sous_traitance',
   'attente_client',
   'bleu',
   'rouge',

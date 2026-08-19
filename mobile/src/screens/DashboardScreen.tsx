@@ -25,6 +25,7 @@ import { ETAT_CONFIG, type EtatVehicule, type Vehicule } from '../types/vehicule
 const ETATS: EtatVehicule[] = [
   'orange',
   'mauve',
+  'sous_traitance',
   'attente_client',
   'bleu',
   'rouge',
@@ -36,6 +37,7 @@ const ETATS: EtatVehicule[] = [
 const ETATS_ACTIFS: EtatVehicule[] = [
   'orange',
   'mauve',
+  'sous_traitance',
   'attente_client',
   'bleu',
   'rouge',

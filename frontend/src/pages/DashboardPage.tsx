@@ -19,6 +19,7 @@ import { apiFetch } from '@/lib/api'
 const ETATS_ACTIFS: EtatVehicule[] = [
   'orange',
   'mauve',
+  'sous_traitance',
   'attente_client',
   'bleu',
   'rouge',
