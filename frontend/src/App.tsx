@@ -10,6 +10,7 @@ import { OutilsProvider } from '@/contexts/OutilsContext'
 import { ClientsProvider } from '@/contexts/ClientsContext'
 import { ClientsDettesProvider } from '@/contexts/ClientsDettesContext'
 import { ContactsImportantsProvider } from '@/contexts/ContactsImportantsContext'
+import { NotesPersonnellesProvider } from '@/contexts/NotesPersonnellesContext'
 import { DemandesDevisProvider } from '@/contexts/DemandesDevisContext'
 import { ReclamationsProvider } from '@/contexts/ReclamationsContext'
 import { CalendarProvider } from '@/contexts/CalendarContext'
@@ -52,6 +53,7 @@ import ChecklistsPage from '@/pages/ChecklistsPage'
 import ChecklistsHistoryPage from '@/pages/ChecklistsHistoryPage'
 import ChecklistTemplatesPage from '@/pages/ChecklistTemplatesPage'
 import DocumentsPage from '@/pages/DocumentsPage'
+import NotesPersonnellesPage from '@/pages/NotesPersonnellesPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 
 export default function App() {
@@ -70,6 +72,7 @@ export default function App() {
               <ClientsProvider>
               <ClientsDettesProvider>
               <ContactsImportantsProvider>
+              <NotesPersonnellesProvider>
               <DemandesDevisProvider>
               <ReclamationsProvider>
               <CalendarProvider>
@@ -117,6 +120,7 @@ export default function App() {
               <Route path="/checklists/history" element={<ChecklistsHistoryPage />} />
               <Route path="/checklists/modeles" element={<ChecklistTemplatesPage />} />
               <Route path="/documents" element={<DocumentsPage />} />
+              <Route path="/notes" element={<NotesPersonnellesPage />} />
             </Route>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<NotFoundPage />} />
@@ -129,6 +133,7 @@ export default function App() {
               </CalendarProvider>
               </ReclamationsProvider>
               </DemandesDevisProvider>
+              </NotesPersonnellesProvider>
               </ContactsImportantsProvider>
               </ClientsDettesProvider>
               </ClientsProvider>

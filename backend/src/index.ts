@@ -36,7 +36,9 @@ import checklistsRouter from './routes/checklists'
 import statsRouter from './routes/stats'
 import settingsRouter from './routes/settings'
 import chatRouter from './routes/chat'
+import notesPersonnellesRouter from './routes/notesPersonnelles'
 import { ensureDocumentTemplates } from './lib/seedDocumentTemplates'
+import { startNoteRemindersJob } from './lib/noteRemindersJob'
 
 const app = express()
 
@@ -113,6 +115,7 @@ app.use('/checklists', checklistsRouter)
 app.use('/stats', statsRouter)
 app.use('/settings', settingsRouter)
 app.use('/chat', chatRouter)
+app.use('/notes-personnelles', notesPersonnellesRouter)
 app.use('/vehicules', ordreReparationExcelRouter)
 app.use('/vehicules', suivisRouter)
 app.use('/vehicules', suivisExcelRouter)
@@ -127,6 +130,7 @@ void ensureDocumentTemplates()
   .then(() => {
     const server = http.createServer(app)
     attachRealtime(server)
+    startNoteRemindersJob()
     server.listen(env.PORT, () => {
       console.log(`Backend listening on http://localhost:${env.PORT}`)
     })

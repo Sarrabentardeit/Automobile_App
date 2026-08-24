@@ -27,6 +27,7 @@ export type MenuRouteId =
   | 'utilisateurs'
   | 'equipe_membres'
   | 'chat'
+  | 'notes'
   | 'outils_ahmed'
   | 'checklists'
   | 'checklists_modeles'
@@ -72,7 +73,7 @@ export const MENU_STRUCTURE: MenuCategory[] = [
     icon: 'home-outline',
     collapsible: true,
     defaultOpen: true,
-    matchRoutes: ['dashboard', 'admin', 'calendar', 'chat'],
+    matchRoutes: ['dashboard', 'admin', 'calendar', 'chat', 'notes'],
     items: [
       {
         id: 'dashboard',
@@ -90,6 +91,7 @@ export const MENU_STRUCTURE: MenuCategory[] = [
       },
       { id: 'calendar', name: 'Calendrier', icon: 'calendar-outline', implemented: true },
       { id: 'chat', name: 'Chat', icon: 'chatbubbles-outline', implemented: true },
+      { id: 'notes', name: 'Mes notes', icon: 'document-text-outline', implemented: true },
     ],
   },
   {

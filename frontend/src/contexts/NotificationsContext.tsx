@@ -54,6 +54,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
           reclamationId?: number
           vehiculeId?: number
           conversationId?: number
+          clientDetteId?: number
+          notePersonnelleId?: number
           title?: string
           message: string
           date: string
@@ -71,7 +73,22 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
       seenUnreadIdsRef.current = new Set(nonChat.filter(n => !n.read).map(n => n.id))
       readyRef.current = true
-      setNotifications(nonChat)
+      setNotifications(
+        nonChat.map(n => ({
+          id: n.id,
+          userId: n.userId,
+          type: n.type,
+          reclamationId: n.reclamationId,
+          vehiculeId: n.vehiculeId,
+          conversationId: n.conversationId,
+          clientDetteId: n.clientDetteId,
+          notePersonnelleId: n.notePersonnelleId,
+          title: n.title,
+          message: n.message,
+          date: n.date,
+          read: n.read,
+        }))
+      )
     } catch {
       setNotifications([])
     }

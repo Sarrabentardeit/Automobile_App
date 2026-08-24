@@ -223,3 +223,29 @@ export function resolveVehiculeAssigneeIds(
   )
   return { technicien_ids, responsable_ids }
 }
+
+/** Libellé + texte pour la cloche (catégorie claire comme « Véhicule »). */
+export function formatNotificationDisplay(n: {
+  title?: string
+  message: string
+  type?: string
+  notePersonnelleId?: number
+  vehiculeId?: number
+}): { label: string | null; message: string } {
+  const isNote = n.notePersonnelleId != null || n.type === 'note_rappel'
+  if (isNote) {
+    const fromTitle = (n.title ?? '').replace(/^📝\s*/, '').trim()
+    const body = (n.message ?? '').replace(/^📝\s*/, '').trim()
+    const noteName =
+      fromTitle && fromTitle !== 'Note' && fromTitle !== 'Rappel' ? fromTitle : null
+    const message =
+      noteName && body && !body.toLowerCase().startsWith('rappel')
+        ? `Rappel : ${noteName} — ${body}`
+        : body || (noteName ? `Rappel : ${noteName}` : 'Rappel sur une note')
+    return { label: 'Note', message }
+  }
+  const label =
+    n.title?.trim() ||
+    (n.vehiculeId != null || n.type?.startsWith('vehicule_') ? 'Véhicule' : null)
+  return { label, message: n.message }
+}

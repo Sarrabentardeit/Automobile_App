@@ -13,6 +13,7 @@ function mapNotif(n: {
   vehiculeId: number | null
   conversationId?: number | null
   clientDetteId?: number | null
+  notePersonnelleId?: number | null
   title: string | null
   message: string
   createdAt: Date
@@ -26,6 +27,7 @@ function mapNotif(n: {
     vehiculeId: n.vehiculeId ?? undefined,
     conversationId: n.conversationId ?? undefined,
     clientDetteId: n.clientDetteId ?? undefined,
+    notePersonnelleId: n.notePersonnelleId ?? undefined,
     title: n.title ?? undefined,
     message: n.message,
     date: n.createdAt.toISOString(),

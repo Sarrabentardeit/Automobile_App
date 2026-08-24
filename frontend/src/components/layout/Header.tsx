@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useNotifications } from '@/contexts/NotificationsContext'
 import { ROLE_CONFIG } from '@/types'
+import { formatNotificationDisplay } from '@/lib/utils'
 import { Menu, Bell } from 'lucide-react'
 
 interface HeaderProps { onMenuClick: () => void }
@@ -72,8 +73,17 @@ export default function Header({ onMenuClick }: HeaderProps) {
                           if (n.reclamationId != null) navigate('/reclamation')
                         }}
                       >
-                        {n.title && <p className="text-xs font-semibold text-orange-600">{n.title}</p>}
-                        <p className="text-sm text-gray-800">{n.message}</p>
+                        {(() => {
+                          const { label, message } = formatNotificationDisplay(n)
+                          return (
+                            <>
+                              {label ? (
+                                <p className="text-xs font-semibold text-orange-600">{label}</p>
+                              ) : null}
+                              <p className="text-sm text-gray-800">{message}</p>
+                            </>
+                          )
+                        })()}
                         <p className="text-[11px] text-gray-400 mt-0.5">
                           {new Date(n.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                         </p>

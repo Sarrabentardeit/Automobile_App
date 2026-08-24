@@ -8,6 +8,7 @@ export type AppNotification = {
   vehiculeId?: number
   conversationId?: number
   clientDetteId?: number
+  notePersonnelleId?: number
   title?: string
   message: string
   date: string

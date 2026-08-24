@@ -39,6 +39,7 @@ import type { VehiculeOpenOptions } from '../navigation/vehiculeNav'
 import type { EtatVehicule } from '../types/vehicule'
 import ClientsListScreen from './ClientsListScreen'
 import ContactsImportantsScreen from './ContactsImportantsScreen'
+import NotesPersonnellesScreen from './NotesPersonnellesScreen'
 import EquipeMembresScreen from './EquipeMembresScreen'
 import ChatScreen from './ChatScreen'
 import ProduitsListScreen from './ProduitsListScreen'
@@ -78,6 +79,7 @@ type NavState =
       vehiculesEtat?: EtatVehicule
       conversationId?: number
       detteId?: number
+      noteId?: number
     }
   | {
       type: 'vehicule_detail'
@@ -144,6 +146,14 @@ export default function MainApp({
         type: 'menu',
         route: 'clients_dettes',
         detteId: target.detteId,
+      })
+      return
+    }
+    if (target.kind === 'note') {
+      setNav({
+        type: 'menu',
+        route: 'notes',
+        noteId: target.noteId,
       })
       return
     }
@@ -308,6 +318,14 @@ export default function MainApp({
           <ContactsImportantsScreen
             accessToken={accessToken}
             drawerOpen={drawerOpen}
+          />
+        )
+      case 'notes':
+        return (
+          <NotesPersonnellesScreen
+            accessToken={accessToken}
+            drawerOpen={drawerOpen}
+            initialNoteId={nav.type === 'menu' ? nav.noteId ?? null : null}
           />
         )
       case 'stock':

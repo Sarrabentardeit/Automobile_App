@@ -12,6 +12,7 @@ export type NotifyInput = {
   reclamationId?: number | null
   conversationId?: number | null
   clientDetteId?: number | null
+  notePersonnelleId?: number | null
 }
 
 type CreatedNotif = {
@@ -22,6 +23,7 @@ type CreatedNotif = {
   vehiculeId?: number
   conversationId?: number
   clientDetteId?: number
+  notePersonnelleId?: number
   title?: string
   message: string
   date: string
@@ -71,6 +73,7 @@ export async function createAndPush(input: NotifyInput): Promise<CreatedNotif> {
       vehiculeId: input.vehiculeId ?? null,
       conversationId: input.conversationId ?? null,
       clientDetteId: input.clientDetteId ?? null,
+      notePersonnelleId: input.notePersonnelleId ?? null,
       read: false,
     },
   })
@@ -83,6 +86,7 @@ export async function createAndPush(input: NotifyInput): Promise<CreatedNotif> {
     vehiculeId: created.vehiculeId ?? undefined,
     conversationId: created.conversationId ?? undefined,
     clientDetteId: created.clientDetteId ?? undefined,
+    notePersonnelleId: created.notePersonnelleId ?? undefined,
     title: created.title ?? undefined,
     message: created.message,
     date: created.createdAt.toISOString(),
@@ -118,6 +122,7 @@ export async function createAndPush(input: NotifyInput): Promise<CreatedNotif> {
         reclamationId: dto.reclamationId ?? null,
         conversationId: dto.conversationId ?? null,
         clientDetteId: dto.clientDetteId ?? null,
+        notePersonnelleId: dto.notePersonnelleId ?? null,
       })
     }
   } catch {

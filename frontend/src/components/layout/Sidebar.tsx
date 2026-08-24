@@ -3,11 +3,11 @@ import { useAuth } from '@/contexts/AuthContext'
 import type { Permissions, Role, TogglePermissionKey } from '@/types'
 import { ROLE_CONFIG } from '@/types'
 import { useState, useRef, useEffect } from 'react'
-import { LayoutDashboard, Car, Users, Wallet, X, LogOut, Package, Wrench, UsersRound, CalendarDays, AlertCircle, UserCircle, CreditCard, ClipboardList, Layers, Phone, Truck, Receipt, Bell, Shield, FileText, Import, Archive, SlidersHorizontal, FolderOpen, MessageSquare, ChevronDown, Banknote, Boxes, Settings2, Home } from 'lucide-react'
+import { LayoutDashboard, Car, Users, Wallet, X, LogOut, Package, Wrench, UsersRound, CalendarDays, AlertCircle, UserCircle, CreditCard, ClipboardList, Layers, Phone, Truck, Receipt, Bell, Shield, FileText, Import, Archive, SlidersHorizontal, FolderOpen, MessageSquare, ChevronDown, Banknote, Boxes, Settings2, Home, StickyNote } from 'lucide-react'
 import { useNotifications } from '@/contexts/NotificationsContext'
 import ProfileEditModal from '@/components/profile/ProfileEditModal'
 import { resolveUploadUrl } from '@/lib/api'
-import { cn } from '@/lib/utils'
+import { cn, formatNotificationDisplay } from '@/lib/utils'
 
 interface NavItemConfig {
   name: string
@@ -81,12 +81,14 @@ const NAV_STRUCTURE: NavCategory[] = [
       p.startsWith('/dashboard') ||
       p.startsWith('/admin') ||
       p.startsWith('/calendar') ||
-      p.startsWith('/chat'),
+      p.startsWith('/chat') ||
+      p.startsWith('/notes'),
     items: [
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, requiredPermission: 'canViewDashboard' },
       { name: 'Statistiques', href: '/admin', icon: Shield, requiredPermission: 'canManageUsers' },
       { name: 'Calendrier', href: '/calendar', icon: CalendarDays },
       { name: 'Chat', href: '/chat', icon: MessageSquare },
+      { name: 'Mes notes', href: '/notes', icon: StickyNote },
     ],
   },
   {
@@ -370,13 +372,24 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                           onClick={() => {
                             markAsRead(n.id)
                             setShowNotif(false)
-                            if (n.reclamationId != null) navigate('/reclamation')
+                            if (n.notePersonnelleId != null) navigate(`/notes?note=${n.notePersonnelleId}`)
+                            else if (n.type === 'note_rappel') navigate('/notes')
+                            else if (n.reclamationId != null) navigate('/reclamation')
                             else if (n.vehiculeId != null) navigate(`/vehicules/${n.vehiculeId}`)
                             else if (n.type?.startsWith('vehicule_')) navigate('/vehicules')
                           }}
                         >
-                          {n.title && <p className="text-xs font-semibold text-orange-600">{n.title}</p>}
-                          <p className="text-sm text-gray-800">{n.message}</p>
+                          {(() => {
+                            const { label, message } = formatNotificationDisplay(n)
+                            return (
+                              <>
+                                {label ? (
+                                  <p className="text-xs font-semibold text-orange-600">{label}</p>
+                                ) : null}
+                                <p className="text-sm text-gray-800">{message}</p>
+                              </>
+                            )
+                          })()}
                           <p className="text-[11px] text-gray-400 mt-0.5">
                             {new Date(n.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                           </p>

@@ -18,6 +18,7 @@ export type PushNavPayload = {
   vehiculeId?: number | null
   conversationId?: number | null
   clientDetteId?: number | null
+  notePersonnelleId?: number | null
   reclamationId?: number | null
   type?: string | null
 }
@@ -85,6 +86,7 @@ export function parsePushData(data: Record<string, unknown> | undefined): PushNa
     vehiculeId: num(data.vehiculeId),
     conversationId: num(data.conversationId),
     clientDetteId: num(data.clientDetteId),
+    notePersonnelleId: num(data.notePersonnelleId),
     reclamationId: num(data.reclamationId),
     type: typeof data.type === 'string' ? data.type : null,
   }
@@ -97,14 +99,17 @@ export function pushPayloadToNavTarget(
   | { kind: 'vehicule'; vehiculeId: number }
   | { kind: 'chat'; conversationId?: number }
   | { kind: 'dette'; detteId: number }
-  | { kind: 'route'; route: 'reclamation' | 'calendar' | 'clients_dettes' | 'devis' | 'chat' }
+  | { kind: 'note'; noteId?: number }
+  | { kind: 'route'; route: 'reclamation' | 'calendar' | 'clients_dettes' | 'devis' | 'chat' | 'notes' }
   | null {
   const p = parsePushData(data)
   if (p.conversationId != null) return { kind: 'chat', conversationId: p.conversationId }
   if (p.clientDetteId != null) return { kind: 'dette', detteId: p.clientDetteId }
+  if (p.notePersonnelleId != null) return { kind: 'note', noteId: p.notePersonnelleId }
   if (p.vehiculeId != null) return { kind: 'vehicule', vehiculeId: p.vehiculeId }
   if (p.reclamationId != null) return { kind: 'route', route: 'reclamation' }
   const t = (p.type ?? '').toLowerCase()
+  if (t.includes('note') || t.includes('rappel')) return { kind: 'note' }
   if (t.includes('chat') || t.includes('message')) return { kind: 'chat' }
   if (t.includes('dette') || t.includes('debt')) return { kind: 'route', route: 'clients_dettes' }
   if (t.includes('calendar') || t.includes('rdv') || t.includes('affectation')) {

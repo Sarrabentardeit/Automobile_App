@@ -24,6 +24,7 @@ export type NotificationNavigateTarget =
   | { kind: 'vehicule'; vehiculeId: number }
   | { kind: 'chat'; conversationId?: number }
   | { kind: 'dette'; detteId: number }
+  | { kind: 'note'; noteId?: number }
   | { kind: 'route'; route: MenuRouteId }
 
 type Props = {
@@ -35,14 +36,16 @@ type Props = {
 export function resolveNotificationTarget(
   n: Pick<
     AppNotification,
-    'vehiculeId' | 'reclamationId' | 'conversationId' | 'clientDetteId' | 'type'
+    'vehiculeId' | 'reclamationId' | 'conversationId' | 'clientDetteId' | 'notePersonnelleId' | 'type'
   >
 ): NotificationNavigateTarget | null {
   if (n.conversationId != null) return { kind: 'chat', conversationId: n.conversationId }
   if (n.clientDetteId != null) return { kind: 'dette', detteId: n.clientDetteId }
+  if (n.notePersonnelleId != null) return { kind: 'note', noteId: n.notePersonnelleId }
   if (n.vehiculeId != null) return { kind: 'vehicule', vehiculeId: n.vehiculeId }
   if (n.reclamationId != null) return { kind: 'route', route: 'reclamation' }
   const t = (n.type ?? '').toLowerCase()
+  if (t.includes('note') || t.includes('rappel')) return { kind: 'note' }
   if (t.includes('chat') || t.includes('message')) return { kind: 'chat' }
   if (t.includes('dette') || t.includes('debt')) return { kind: 'route', route: 'clients_dettes' }
   if (t.includes('calendar') || t.includes('rdv') || t.includes('affectation')) {
@@ -52,12 +55,31 @@ export function resolveNotificationTarget(
   return null
 }
 
+function formatNotifDisplay(n: AppNotification): { label: string | null; message: string } {
+  const isNote =
+    n.notePersonnelleId != null || (n.type ?? '').includes('note') || (n.type ?? '').includes('rappel')
+  if (isNote) {
+    const fromTitle = (n.title ?? '').replace(/^📝\s*/, '').trim()
+    const body = (n.message ?? '').replace(/^📝\s*/, '').trim()
+    const noteName =
+      fromTitle && fromTitle !== 'Note' && fromTitle !== 'Rappel' ? fromTitle : null
+    const message =
+      noteName && body && !body.toLowerCase().startsWith('rappel')
+        ? `Rappel : ${noteName} — ${body}`
+        : body || (noteName ? `Rappel : ${noteName}` : 'Rappel sur une note')
+    return { label: 'Note', message }
+  }
+  const label = n.title?.trim() || (n.vehiculeId != null ? 'Véhicule' : null)
+  return { label, message: n.message }
+}
+
 function linkLabel(n: AppNotification): string | null {
   const target = resolveNotificationTarget(n)
   if (!target) return null
   if (target.kind === 'vehicule') return 'Voir le véhicule →'
   if (target.kind === 'chat') return 'Ouvrir la conversation →'
   if (target.kind === 'dette') return 'Voir la dette →'
+  if (target.kind === 'note') return 'Ouvrir la note →'
   switch (target.route) {
     case 'reclamation':
       return 'Voir les réclamations →'
@@ -240,8 +262,15 @@ export default function NotificationsBell({
                       style={[styles.item, !n.read && styles.itemUnread]}
                       onPress={() => void handlePress(n)}
                     >
-                      {n.title ? <Text style={styles.itemTitle}>{n.title}</Text> : null}
-                      <Text style={styles.itemMessage}>{n.message}</Text>
+                      {(() => {
+                        const { label, message } = formatNotifDisplay(n)
+                        return (
+                          <>
+                            {label ? <Text style={styles.itemTitle}>{label}</Text> : null}
+                            <Text style={styles.itemMessage}>{message}</Text>
+                          </>
+                        )
+                      })()}
                       <Text style={styles.itemDate}>
                         {new Date(n.date).toLocaleString('fr-FR', {
                           day: '2-digit',
