@@ -22,11 +22,11 @@ export default function Modal({ open, onClose, title, subtitle, children, maxWid
   const widths = { sm: 'sm:max-w-sm', md: 'sm:max-w-lg', lg: 'sm:max-w-2xl', xl: 'sm:max-w-4xl', '2xl': 'sm:max-w-6xl' }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative bg-white w-full ${widths[maxWidth]} max-h-full sm:max-h-[90vh] flex flex-col shadow-2xl animate-in
-        rounded-t-2xl sm:rounded-2xl sm:m-4`}>
-        {/* Header - sticky on mobile */}
+      <div
+        className={`relative bg-white w-full ${widths[maxWidth]} max-h-[min(90dvh,calc(100%-1.5rem))] flex flex-col shadow-2xl animate-in rounded-2xl overflow-hidden`}
+      >
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-gray-100 flex-shrink-0">
           <div className="flex-1 min-w-0 mr-3">
             <h2 className="text-base sm:text-lg font-bold text-gray-900 truncate">{title}</h2>
@@ -36,8 +36,7 @@ export default function Modal({ open, onClose, title, subtitle, children, maxWid
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
-        {/* Content - scrollable */}
-        <div className="overflow-y-auto p-4 sm:p-5 flex-1 overscroll-contain">{children}</div>
+        <div className="overflow-y-auto p-4 sm:p-5 flex-1 overscroll-contain min-h-0">{children}</div>
       </div>
     </div>
   )

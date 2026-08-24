@@ -584,10 +584,11 @@ export default function NotesPersonnellesPage() {
           />
           <Textarea
             label="Contenu"
-            rows={5}
+            rows={4}
             value={form.contenu}
             onChange={e => setForm(f => ({ ...f, contenu: e.target.value }))}
             placeholder="Détails…"
+            className="min-h-[5rem] sm:min-h-0"
           />
 
           <div>
@@ -630,11 +631,11 @@ export default function NotesPersonnellesPage() {
             />
             Épingler en haut
           </label>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={closeForm}>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2 pb-1 sticky bottom-0 bg-white">
+            <Button variant="outline" onClick={closeForm} className="w-full sm:w-auto">
               Annuler
             </Button>
-            <Button onClick={save} disabled={saving}>
+            <Button onClick={save} disabled={saving} className="w-full sm:w-auto">
               {saving ? 'Enregistrement…' : 'Enregistrer'}
             </Button>
           </div>
