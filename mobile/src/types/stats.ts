@@ -56,6 +56,7 @@ export type GlobalStatCounts = {
   clientsDettes: number
   stockTotal: number
   outilsAhmed: number
+  outilsNouri: number
 }
 
 export type GlobalStatItem = {

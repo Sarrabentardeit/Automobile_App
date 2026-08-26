@@ -61,6 +61,7 @@ import DocumentsScreen from './DocumentsScreen'
 import StatistiquesScreen from './StatistiquesScreen'
 import UtilisateursScreen from './UtilisateursScreen'
 import OutilsAhmedScreen from './OutilsAhmedScreen'
+import OutilsNouriScreen from './OutilsNouriScreen'
 import ReclamationsScreen from './ReclamationsScreen'
 import StockGeneralScreen from './StockGeneralScreen'
 import VehiculesListScreen from './VehiculesListScreen'
@@ -454,6 +455,14 @@ export default function MainApp({
       case 'outils_ahmed':
         return (
           <OutilsAhmedScreen
+            accessToken={accessToken}
+            canViewEquipeOutils={!!permissions.canViewEquipeOutils}
+            drawerOpen={drawerOpen}
+          />
+        )
+      case 'outils_nouri':
+        return (
+          <OutilsNouriScreen
             accessToken={accessToken}
             canViewEquipeOutils={!!permissions.canViewEquipeOutils}
             drawerOpen={drawerOpen}

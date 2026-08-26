@@ -140,11 +140,15 @@ const NAV_STRUCTURE: NavCategory[] = [
     icon: UsersRound,
     collapsible: true,
     matchPath: (p) =>
-      p.startsWith('/utilisateurs') || p.startsWith('/equipe') || p.startsWith('/outils/ahmed'),
+      p.startsWith('/utilisateurs') ||
+      p.startsWith('/equipe') ||
+      p.startsWith('/outils/ahmed') ||
+      p.startsWith('/outils/nouri'),
     items: [
       { name: 'Membres', href: '/equipe/membres', icon: UsersRound, requiredPermission: 'canManageUsers' },
       { name: 'Comptes', href: '/utilisateurs', icon: Users, requiredPermission: 'canManageUsers' },
       { name: 'Opération Ahmed', href: '/outils/ahmed', icon: Wrench, requiredPermission: 'canViewEquipeOutils' },
+      { name: 'Opération Nouri', href: '/outils/nouri', icon: Wrench, requiredPermission: 'canViewEquipeOutils' },
     ],
   },
   {

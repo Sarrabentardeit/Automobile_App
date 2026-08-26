@@ -112,6 +112,11 @@ async function fetchOutilsAhmedCount(token: string): Promise<number> {
   return Array.isArray(list) ? list.length : 0
 }
 
+async function fetchOutilsNouriCount(token: string): Promise<number> {
+  const list = await apiFetch<unknown[]>('/outils/nouri', { token })
+  return Array.isArray(list) ? list.length : 0
+}
+
 const emptyVehiculeStats = (): VehiculeStats => ({
   total: 0,
   enCours: 0,
@@ -139,6 +144,7 @@ export async function fetchStatsDashboard(
     mouvements,
     produits,
     outilsAhmed,
+    outilsNouri,
     moneyIns,
     moneyOuts,
   ] = await Promise.all([
@@ -156,6 +162,7 @@ export async function fetchStatsDashboard(
     safe(() => fetchMouvementsStock(token, 100), []),
     safe(() => fetchProduits(token), []),
     safe(() => fetchOutilsAhmedCount(token), 0),
+    safe(() => fetchOutilsNouriCount(token), 0),
     safe(() => fetchMoneyIns(token), []),
     safe(() => fetchMoneyOuts(token), []),
   ])
@@ -174,6 +181,7 @@ export async function fetchStatsDashboard(
     clientsDettes: clientsDettes.length,
     stockTotal: mouvements.length + produits.length,
     outilsAhmed,
+    outilsNouri,
   }
 
   return {

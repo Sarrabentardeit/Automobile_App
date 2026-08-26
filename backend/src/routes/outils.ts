@@ -23,6 +23,15 @@ type OutilAhmedRow = {
   prix_ahmed: number
 }
 
+type OutilNouriRow = {
+  id: number
+  date: string
+  vehicule: string
+  type_travaux: string
+  prix_garage: number | null
+  prix_nouri: number
+}
+
 function toMohamedDto(r: OutilMohamedRow) {
   return {
     id: r.id,
@@ -42,6 +51,17 @@ function toAhmedDto(r: OutilAhmedRow) {
     typeTravaux: r.type_travaux,
     prixGarage: r.prix_garage ?? undefined,
     prixAhmed: r.prix_ahmed,
+  }
+}
+
+function toNouriDto(r: OutilNouriRow) {
+  return {
+    id: r.id,
+    date: r.date,
+    vehicule: r.vehicule,
+    typeTravaux: r.type_travaux,
+    prixGarage: r.prix_garage ?? undefined,
+    prixNouri: r.prix_nouri,
   }
 }
 
@@ -204,6 +224,89 @@ router.delete('/ahmed/:id', authenticate(), async (req, res) => {
     const existing = await db.outilAhmedEntry.findUnique({ where: { id } })
     if (!existing) return res.status(404).json({ error: 'Entrée introuvable' })
     await db.outilAhmedEntry.delete({ where: { id } })
+    return res.status(204).send()
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+router.get('/nouri', authenticate(), async (_req, res) => {
+  try {
+    const rows = (await db.outilNouriEntry.findMany({
+      orderBy: [{ date: 'desc' }, { id: 'desc' }],
+    })) as OutilNouriRow[]
+    return res.json(rows.map(toNouriDto))
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+router.post('/nouri', authenticate(), async (req, res) => {
+  try {
+    const body = req.body as {
+      date?: string
+      vehicule?: string
+      typeTravaux?: string
+      prixGarage?: number
+      prixNouri?: number
+    }
+    if (!body.date || typeof body.prixNouri !== 'number') {
+      return res.status(400).json({ error: 'date et prixNouri requis' })
+    }
+    const created = (await db.outilNouriEntry.create({
+      data: {
+        date: body.date,
+        vehicule: (body.vehicule ?? '').trim(),
+        type_travaux: (body.typeTravaux ?? '').trim(),
+        prix_garage: typeof body.prixGarage === 'number' ? body.prixGarage : null,
+        prix_nouri: body.prixNouri,
+      },
+    })) as OutilNouriRow
+    return res.status(201).json(toNouriDto(created))
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+router.put('/nouri/:id', authenticate(), async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    if (Number.isNaN(id)) return res.status(400).json({ error: 'ID invalide' })
+    const existing = await db.outilNouriEntry.findUnique({ where: { id } })
+    if (!existing) return res.status(404).json({ error: 'Entrée introuvable' })
+
+    const body = req.body as {
+      date?: string
+      vehicule?: string
+      typeTravaux?: string
+      prixGarage?: number
+      prixNouri?: number
+    }
+    const data: Record<string, unknown> = {}
+    if (body.date !== undefined) data.date = body.date
+    if (body.vehicule !== undefined) data.vehicule = body.vehicule.trim()
+    if (body.typeTravaux !== undefined) data.type_travaux = body.typeTravaux.trim()
+    if (body.prixGarage !== undefined) data.prix_garage = body.prixGarage
+    if (body.prixNouri !== undefined) data.prix_nouri = body.prixNouri
+
+    const updated = (await db.outilNouriEntry.update({ where: { id }, data })) as OutilNouriRow
+    return res.json(toNouriDto(updated))
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+router.delete('/nouri/:id', authenticate(), async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    if (Number.isNaN(id)) return res.status(400).json({ error: 'ID invalide' })
+    const existing = await db.outilNouriEntry.findUnique({ where: { id } })
+    if (!existing) return res.status(404).json({ error: 'Entrée introuvable' })
+    await db.outilNouriEntry.delete({ where: { id } })
     return res.status(204).send()
   } catch (err) {
     console.error(err)

@@ -29,6 +29,7 @@ export type MenuRouteId =
   | 'chat'
   | 'notes'
   | 'outils_ahmed'
+  | 'outils_nouri'
   | 'checklists'
   | 'checklists_modeles'
   | 'documents'
@@ -263,7 +264,7 @@ export const MENU_STRUCTURE: MenuCategory[] = [
     label: 'Équipe',
     icon: 'people-outline',
     collapsible: true,
-    matchRoutes: ['equipe_membres', 'utilisateurs', 'outils_ahmed'],
+    matchRoutes: ['equipe_membres', 'utilisateurs', 'outils_ahmed', 'outils_nouri'],
     items: [
       {
         id: 'equipe_membres',
@@ -282,6 +283,13 @@ export const MENU_STRUCTURE: MenuCategory[] = [
       {
         id: 'outils_ahmed',
         name: 'Opération Ahmed',
+        icon: 'construct-outline',
+        requiredPermission: 'canViewEquipeOutils',
+        implemented: true,
+      },
+      {
+        id: 'outils_nouri',
+        name: 'Opération Nouri',
         icon: 'construct-outline',
         requiredPermission: 'canViewEquipeOutils',
         implemented: true,

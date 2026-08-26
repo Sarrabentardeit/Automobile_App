@@ -44,6 +44,7 @@ import FournisseursPage from '@/pages/FournisseursPage'
 import TransactionsFournisseursPage from '@/pages/TransactionsFournisseursPage'
 import StockGeneralPage from '@/pages/StockGeneralPage'
 import OutilsAhmedPage from '@/pages/OutilsAhmedPage'
+import OutilsNouriPage from '@/pages/OutilsNouriPage'
 import AdminEspacePage from '@/pages/AdminEspacePage'
 import FacturationPage from '@/pages/FacturationPage'
 import FacturationPaiementsPartielsPage from '@/pages/FacturationPaiementsPartielsPage'
@@ -116,6 +117,7 @@ export default function App() {
               <Route path="/stock-general" element={<StockGeneralPage />} />
               <Route path="/outils/mohamed" element={<Navigate to="/outils/ahmed" replace />} />
               <Route path="/outils/ahmed" element={<OutilsAhmedPage />} />
+              <Route path="/outils/nouri" element={<OutilsNouriPage />} />
               <Route path="/checklists" element={<ChecklistsPage />} />
               <Route path="/checklists/history" element={<ChecklistsHistoryPage />} />
               <Route path="/checklists/modeles" element={<ChecklistTemplatesPage />} />

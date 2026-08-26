@@ -908,6 +908,17 @@ export interface OutilAhmed {
   prixAhmed: number // positif = revenu, négatif = paiement/avance
 }
 
+// ==================== OUTILS NOURI ====================
+/** Feuille NOURI : même structure qu’Ahmed, données séparées */
+export interface OutilNouri {
+  id: number
+  date: string // YYYY-MM-DD
+  vehicule: string
+  typeTravaux: string
+  prixGarage?: number
+  prixNouri: number // positif = revenu, négatif = paiement/avance
+}
+
 // ==================== TRANSACTIONS FOURNISSEURS ====================
 export type TransactionFournisseurType = 'achat' | 'revenue' | 'paiement'
 

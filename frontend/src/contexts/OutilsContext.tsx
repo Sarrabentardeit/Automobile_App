@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
-import type { OutilMohamed, OutilAhmed } from '@/types'
+import type { OutilMohamed, OutilAhmed, OutilNouri } from '@/types'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { useLazyLoader } from '@/lib/useLazyLoader'
@@ -7,6 +7,7 @@ import { useLazyLoader } from '@/lib/useLazyLoader'
 interface OutilsContextValue {
   outilsMohamed: OutilMohamed[]
   outilsAhmed: OutilAhmed[]
+  outilsNouri: OutilNouri[]
   loading: boolean
   ensureLoaded: () => void
   addOutilMohamed: (o: Omit<OutilMohamed, 'id'>) => Promise<OutilMohamed>
@@ -15,6 +16,9 @@ interface OutilsContextValue {
   addOutilAhmed: (o: Omit<OutilAhmed, 'id'>) => Promise<OutilAhmed>
   updateOutilAhmed: (id: number, o: Partial<OutilAhmed>) => Promise<OutilAhmed>
   removeOutilAhmed: (id: number) => Promise<boolean>
+  addOutilNouri: (o: Omit<OutilNouri, 'id'>) => Promise<OutilNouri>
+  updateOutilNouri: (id: number, o: Partial<OutilNouri>) => Promise<OutilNouri>
+  removeOutilNouri: (id: number) => Promise<boolean>
 }
 
 const Context = createContext<OutilsContextValue | null>(null)
@@ -23,6 +27,7 @@ export function OutilsProvider({ children }: { children: ReactNode }) {
   const { getAccessToken, isAuthenticated } = useAuth()
   const [outilsMohamed, setOutilsMohamed] = useState<OutilMohamed[]>([])
   const [outilsAhmed, setOutilsAhmed] = useState<OutilAhmed[]>([])
+  const [outilsNouri, setOutilsNouri] = useState<OutilNouri[]>([])
   const [loading, setLoading] = useState(false)
 
   const fetchOutils = useCallback(async () => {
@@ -30,20 +35,24 @@ export function OutilsProvider({ children }: { children: ReactNode }) {
     if (!token) {
       setOutilsMohamed([])
       setOutilsAhmed([])
+      setOutilsNouri([])
       setLoading(false)
       return
     }
     setLoading(true)
     try {
-      const [mohamed, ahmed] = await Promise.all([
+      const [mohamed, ahmed, nouri] = await Promise.all([
         apiFetch<OutilMohamed[]>('/outils/mohamed', { token }),
         apiFetch<OutilAhmed[]>('/outils/ahmed', { token }),
+        apiFetch<OutilNouri[]>('/outils/nouri', { token }),
       ])
       setOutilsMohamed(Array.isArray(mohamed) ? mohamed : [])
       setOutilsAhmed(Array.isArray(ahmed) ? ahmed : [])
+      setOutilsNouri(Array.isArray(nouri) ? nouri : [])
     } catch {
       setOutilsMohamed([])
       setOutilsAhmed([])
+      setOutilsNouri([])
     } finally {
       setLoading(false)
     }
@@ -53,6 +62,7 @@ export function OutilsProvider({ children }: { children: ReactNode }) {
     if (!isAuthenticated) {
       setOutilsMohamed([])
       setOutilsAhmed([])
+      setOutilsNouri([])
       setLoading(false)
     }
   }, [isAuthenticated])
@@ -127,11 +137,46 @@ export function OutilsProvider({ children }: { children: ReactNode }) {
     }
   }, [getAccessToken])
 
+  const addOutilNouri = useCallback(async (o: Omit<OutilNouri, 'id'>): Promise<OutilNouri> => {
+    const token = getAccessToken()
+    if (!token) throw new Error('Non authentifié')
+    const created = await apiFetch<OutilNouri>('/outils/nouri', {
+      method: 'POST',
+      token,
+      body: JSON.stringify(o),
+    })
+    setOutilsNouri(prev => [created, ...prev])
+    return created
+  }, [getAccessToken])
+  const updateOutilNouri = useCallback(async (id: number, o: Partial<OutilNouri>): Promise<OutilNouri> => {
+    const token = getAccessToken()
+    if (!token) throw new Error('Non authentifié')
+    const updated = await apiFetch<OutilNouri>(`/outils/nouri/${id}`, {
+      method: 'PUT',
+      token,
+      body: JSON.stringify(o),
+    })
+    setOutilsNouri(prev => prev.map(x => (x.id === id ? updated : x)))
+    return updated
+  }, [getAccessToken])
+  const removeOutilNouri = useCallback(async (id: number): Promise<boolean> => {
+    const token = getAccessToken()
+    if (!token) return false
+    try {
+      await apiFetch(`/outils/nouri/${id}`, { method: 'DELETE', token })
+      setOutilsNouri(prev => prev.filter(x => x.id !== id))
+      return true
+    } catch {
+      return false
+    }
+  }, [getAccessToken])
+
   return (
     <Context.Provider
       value={{
         outilsMohamed,
         outilsAhmed,
+        outilsNouri,
         loading,
         ensureLoaded,
         addOutilMohamed,
@@ -140,6 +185,9 @@ export function OutilsProvider({ children }: { children: ReactNode }) {
         addOutilAhmed,
         updateOutilAhmed,
         removeOutilAhmed,
+        addOutilNouri,
+        updateOutilNouri,
+        removeOutilNouri,
       }}
     >
       {children}

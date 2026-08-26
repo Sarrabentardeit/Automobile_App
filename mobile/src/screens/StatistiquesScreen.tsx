@@ -58,6 +58,7 @@ const GLOBAL_ITEMS: GlobalStatItem[] = [
   { key: 'clientsDettes', label: 'Clients dettes', icon: 'card-outline', color: '#be123c', bg: '#fff1f2', route: 'clients_dettes' },
   { key: 'stockTotal', label: 'Stock', icon: 'cube-outline', color: '#65a30d', bg: '#ecfccb', route: 'stock' },
   { key: 'outilsAhmed', label: 'Op. Ahmed', icon: 'construct-outline', color: '#4b5563', bg: '#f3f4f6', route: 'outils_ahmed' },
+  { key: 'outilsNouri', label: 'Op. Nouri', icon: 'construct-outline', color: '#0284c7', bg: '#f0f9ff', route: 'outils_nouri' },
 ]
 
 type Props = {
