@@ -169,8 +169,16 @@ function VehiculeRow({
           <Text style={styles.cardModel} numberOfLines={1}>
             {item.modele}
           </Text>
-          <View style={[styles.badge, { backgroundColor: cfg.color }]}>
-            <Text style={styles.badgeText}>{cfg.label}</Text>
+          <View style={styles.cardBadges}>
+            {item.vip ? (
+              <View style={styles.vipBadge}>
+                <Ionicons name="star" size={10} color="#78350f" />
+                <Text style={styles.vipBadgeText}>VIP</Text>
+              </View>
+            ) : null}
+            <View style={[styles.badge, { backgroundColor: cfg.color }]}>
+              <Text style={styles.badgeText}>{cfg.label}</Text>
+            </View>
           </View>
         </View>
         <Text style={styles.cardImmat} numberOfLines={1}>
@@ -293,6 +301,7 @@ export default function VehiculesListScreen({
   }, [initialFiltreEtat])
   const [technicienId, setTechnicienId] = useState<number | undefined>()
   const [serviceType, setServiceType] = useState<ServiceType | undefined>()
+  const [vipFilter, setVipFilter] = useState<'all' | 'vip' | 'normal'>('all')
   const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>('toutes')
   const [dateFilter, setDateFilter] = useState('')
   const [dateFilterDebounced, setDateFilterDebounced] = useState('')
@@ -328,6 +337,7 @@ export default function VehiculesListScreen({
       monthFilter: monthFilterDebounced,
       search: searchDebounced,
       serviceType,
+      vipFilter,
       userId: user.id,
       visibility,
       archives,
@@ -341,6 +351,7 @@ export default function VehiculesListScreen({
       monthFilterDebounced,
       searchDebounced,
       serviceType,
+      vipFilter,
       user.id,
       visibility,
       archives,
@@ -363,6 +374,7 @@ export default function VehiculesListScreen({
     filtreEtat,
     technicienId,
     serviceType,
+    vipFilter,
     dateFilterMode,
     dateFilterDebounced,
     monthFilterDebounced,
@@ -714,6 +726,40 @@ export default function VehiculesListScreen({
           })}
         </ScrollView>
       ) : null}
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.etatRow}
+      >
+        {(
+          [
+            { id: 'all', label: 'Tous' },
+            { id: 'vip', label: 'VIP' },
+            { id: 'normal', label: 'Normaux' },
+          ] as const
+        ).map(({ id, label }) => (
+          <Pressable
+            key={id}
+            onPress={() => setVipFilter(id)}
+            style={[
+              styles.etatChip,
+              vipFilter === id &&
+                (id === 'vip' ? styles.vipChipActive : styles.etatChipTousActive),
+            ]}
+          >
+            <Text
+              style={[
+                styles.etatChipText,
+                vipFilter === id &&
+                  (id === 'vip' ? styles.vipChipTextActive : styles.etatChipTextTousActive),
+              ]}
+            >
+              {label}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
 
       <View style={styles.searchWrap}>
         <Ionicons name="search" size={18} color="#9ca3af" />
@@ -1188,6 +1234,22 @@ const styles = StyleSheet.create({
   etatChipText: { fontSize: 11, fontWeight: '800', color: '#6b7280' },
   etatChipTextTousActive: { color: '#fff' },
   etatChipTextEtat: { fontSize: 11, fontWeight: '800' },
+  vipChipActive: {
+    backgroundColor: '#fbbf24',
+    borderColor: '#f59e0b',
+  },
+  vipChipTextActive: { color: '#78350f', fontWeight: '800' },
+  cardBadges: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
+  vipBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#fbbf24',
+  },
+  vipBadgeText: { fontSize: 10, fontWeight: '800', color: '#78350f' },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -111,6 +111,7 @@ type FilterOpts = {
   monthFilter?: string
   search: string
   serviceType?: string
+  vipFilter?: 'all' | 'vip' | 'normal'
   userId: number
   visibility: 'all' | 'own' | 'none'
   archives?: boolean
@@ -127,6 +128,7 @@ export function buildFilterQuery(opts: FilterOpts) {
     date_fin: p.date_fin,
     q: p.q,
     service_type: p.service_type,
+    vip: p.vip,
     marque: p.marque,
   }
 }
@@ -149,6 +151,8 @@ export function buildListParams(opts: FilterOpts & { page: number; limit: number
     date_debut,
     date_fin,
     service_type: opts.serviceType || undefined,
+    vip:
+      opts.vipFilter === 'vip' ? 'true' : opts.vipFilter === 'normal' ? 'false' : undefined,
     ...(opts.archives
       ? { etat: 'vert' as const }
       : opts.filtreEtat !== 'tous'

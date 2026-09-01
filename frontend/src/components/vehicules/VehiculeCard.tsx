@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { ETAT_CONFIG, type Vehicule } from '@/types'
 import { useUsers } from '@/contexts/UsersContext'
 import EtatBadge from './EtatBadge'
+import VipBadge from './VipBadge'
 import { Phone, Calendar, ArrowRightLeft, Eye, Pencil, Clock, Trash2, Wallet, ClipboardList } from 'lucide-react'
 import { daysSince, getUserDisplayNames, formatDuree, formatDate, stripVehiculeAssigneesMeta, parseVehiculeAssigneesFromText, resolveVehiculeAssigneeIds } from '@/lib/utils'
 import type { Permissions } from '@/types'
@@ -50,6 +51,7 @@ export default function VehiculeCard({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-bold text-gray-900 text-sm sm:text-base truncate">{v.modele}</h3>
+                {v.vip ? <VipBadge /> : null}
                 <EtatBadge etat={v.etat_actuel} />
               </div>
               <p className="text-xs sm:text-sm text-gray-500 font-mono mt-0.5 truncate">

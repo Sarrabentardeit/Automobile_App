@@ -29,6 +29,7 @@ export interface Vehicule {
   notes: string
   derniere_mise_a_jour: string
   avance_client?: number
+  vip?: boolean
 }
 
 export interface VehiculeDepenseLigne {
@@ -151,6 +152,7 @@ export interface VehiculeFormData {
   client_telephone: string
   notes: string
   service_type?: ServiceType
+  vip?: boolean
 }
 
 export type VehiculeImageUploadInput = {

@@ -90,6 +90,7 @@ export default function VehiculesArchivesPage() {
   const [rechercheDebounced, setRechercheDebounced] = useState('')
   const [technicienId, setTechnicienId] = useState<number | undefined>()
   const [serviceType, setServiceType] = useState<ServiceType | undefined>()
+  const [vipFilter, setVipFilter] = useState<'all' | 'vip' | 'normal'>('all')
   const [dateFilterMode, setDateFilterMode] = useState<
     'toutes' | 'aujourdhui' | 'hier' | 'semaine' | 'mois' | 'mois_choisi' | 'date'
   >('toutes')
@@ -134,6 +135,8 @@ export default function VehiculesArchivesPage() {
       if (date_fin) params.date_fin = date_fin
       if (rechercheDebounced) params.q = rechercheDebounced
       if (serviceType) params.service_type = serviceType
+      if (vipFilter === 'vip') params.vip = 'true'
+      else if (vipFilter === 'normal') params.vip = 'false'
       const res = await apiFetch<{ brands: BrandFolder[]; totalVehicles: number }>('/vehicules/brands', {
         token,
         params,
@@ -153,6 +156,7 @@ export default function VehiculesArchivesPage() {
     monthFilter,
     rechercheDebounced,
     serviceType,
+    vipFilter,
     permissions?.vehiculeVisibility,
     user?.id,
   ])
@@ -168,6 +172,7 @@ export default function VehiculesArchivesPage() {
       date_fin,
       q: rechercheDebounced || undefined,
       service_type: serviceType,
+      vip: vipFilter === 'vip' ? true : vipFilter === 'normal' ? false : undefined,
       marque: brandParam,
       page: vehiclePage,
       limit: VEHICLE_PAGE_SIZE,
@@ -181,6 +186,7 @@ export default function VehiculesArchivesPage() {
     monthFilter,
     rechercheDebounced,
     serviceType,
+    vipFilter,
     vehiclePage,
     permissions?.vehiculeVisibility,
     user?.id,
@@ -195,7 +201,7 @@ export default function VehiculesArchivesPage() {
   useEffect(() => {
     setVehiclePage(1)
     setFolderPage(1)
-  }, [tab, technicienId, dateFilterMode, dateFilter, monthFilter, rechercheDebounced, brandParam])
+  }, [tab, technicienId, dateFilterMode, dateFilter, monthFilter, rechercheDebounced, serviceType, vipFilter, brandParam])
 
   if (!user || !permissions) return null
 
@@ -356,6 +362,12 @@ export default function VehiculesArchivesPage() {
         serviceType={serviceType}
         onServiceChange={v => {
           setServiceType(v)
+          setVehiclePage(1)
+          setFolderPage(1)
+        }}
+        vipFilter={vipFilter}
+        onVipFilterChange={v => {
+          setVipFilter(v)
           setVehiclePage(1)
           setFolderPage(1)
         }}

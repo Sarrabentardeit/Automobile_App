@@ -294,6 +294,7 @@ function toVehicule(v: {
   notes: string
   derniere_mise_a_jour: string
   avance_client?: number | null
+  vip?: boolean | null
 }) {
   const parsedNotes = splitNotesAndAssignees(v.notes)
   const parsedDefaut = splitNotesAndAssignees(v.defaut)
@@ -329,6 +330,7 @@ function toVehicule(v: {
     notes: parsedNotes.notes,
     derniere_mise_a_jour: v.derniere_mise_a_jour,
     avance_client: v.avance_client ?? 0,
+    vip: v.vip ?? false,
   }
 }
 
@@ -378,6 +380,7 @@ function buildVehiculesWhere(query: {
   date_fin?: string
   q?: string
   service_type?: string
+  vip?: string
 }, includeEtat: boolean): Record<string, unknown> {
   const where: Record<string, unknown> = {}
   if (includeEtat && query.etat && ETATS.includes(query.etat as (typeof ETATS)[number])) {
@@ -396,6 +399,9 @@ function buildVehiculesWhere(query: {
   ) {
     where.service_type = query.service_type
   }
+
+  if (query.vip === 'true') where.vip = true
+  else if (query.vip === 'false') where.vip = false
 
   const andClauses: Record<string, unknown>[] = []
 
@@ -1141,12 +1147,13 @@ router.get('/', authenticate(), async (req, res) => {
     const date_fin = req.query.date_fin as string | undefined
     const q = (req.query.q as string)?.trim()
     const service_type = (req.query.service_type as string)?.trim()
+    const vip = (req.query.vip as string)?.trim()
     const marque = (req.query.marque as string)?.trim().toLowerCase()
     const page = Math.max(1, parseInt(req.query.page as string, 10) || 1)
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string, 10) || 20))
 
     const baseWhere = buildVehiculesWhere(
-      { etat, exclude_etat, technicien_id, type, date_debut, date_fin, q, service_type },
+      { etat, exclude_etat, technicien_id, type, date_debut, date_fin, q, service_type, vip },
       true
     )
 
@@ -1175,7 +1182,7 @@ router.get('/', authenticate(), async (req, res) => {
     const [list, total] = await Promise.all([
       db.vehicule.findMany({
         where: Object.keys(where).length ? where : undefined,
-        orderBy: { id: 'desc' },
+        orderBy: [{ vip: 'desc' }, { id: 'desc' }],
         skip: (page - 1) * limit,
         take: limit,
       }),
@@ -1201,9 +1208,10 @@ router.get('/brands', authenticate(), async (req, res) => {
     const date_fin = req.query.date_fin as string | undefined
     const q = (req.query.q as string)?.trim()
     const service_type = (req.query.service_type as string)?.trim()
+    const vip = (req.query.vip as string)?.trim()
 
     const where = buildVehiculesWhere(
-      { etat, exclude_etat, technicien_id, type, date_debut, date_fin, q, service_type },
+      { etat, exclude_etat, technicien_id, type, date_debut, date_fin, q, service_type, vip },
       true
     )
 
@@ -1231,10 +1239,11 @@ router.get('/counts', authenticate(), async (req, res) => {
     const date_fin = req.query.date_fin as string | undefined
     const q = (req.query.q as string)?.trim()
     const service_type = (req.query.service_type as string)?.trim()
+    const vip = (req.query.vip as string)?.trim()
     const includeEtat = String(req.query.includeEtat ?? 'false').toLowerCase() === 'true'
 
     const where = buildVehiculesWhere(
-      { etat, exclude_etat, technicien_id, type, date_debut, date_fin, q, service_type },
+      { etat, exclude_etat, technicien_id, type, date_debut, date_fin, q, service_type, vip },
       includeEtat
     )
 
@@ -1672,6 +1681,7 @@ router.post('/', authenticate(), async (req: AuthRequest, res) => {
       responsable_ids?: number[]
       client_telephone?: string
       notes?: string
+      vip?: boolean
     }
     if (!body.modele || !body.date_entree) {
       return res.status(400).json({ error: 'modele et date_entree sont requis' })
@@ -1701,6 +1711,7 @@ router.post('/', authenticate(), async (req: AuthRequest, res) => {
         date_sortie: null,
         notes: mergedNotes,
         derniere_mise_a_jour: now,
+        vip: body.vip === true,
       },
     })
 
@@ -1754,6 +1765,7 @@ router.put('/:id', authenticate(), async (req: AuthRequest, res) => {
       client_telephone: string
       notes: string
       date_entree: string
+      vip: boolean
     }>
 
     const existing = await db.vehicule.findUnique({ where: { id } })
@@ -1805,6 +1817,7 @@ router.put('/:id', authenticate(), async (req: AuthRequest, res) => {
       )
     }
     if (body.date_entree != null) data.date_entree = body.date_entree
+    if (body.vip !== undefined) data.vip = body.vip === true
 
     const v = await db.vehicule.update({ where: { id }, data })
     const actor = req.user

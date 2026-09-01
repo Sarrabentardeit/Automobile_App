@@ -22,6 +22,8 @@ export interface VehiculesFilters {
   date_fin?: string
   q?: string
   service_type?: string
+  /** true = VIP only, false = non-VIP only */
+  vip?: boolean
   /** Brand folder slug (e.g. volkswagen, autres) — list vehicles for one brand only */
   marque?: string
   page?: number
@@ -98,6 +100,8 @@ export function useVehicules() {
         if (filters?.date_fin) params.date_fin = filters.date_fin
         if (filters?.q) params.q = filters.q
         if (filters?.service_type) params.service_type = filters.service_type
+        if (filters?.vip === true) params.vip = 'true'
+        else if (filters?.vip === false) params.vip = 'false'
         if (filters?.marque) params.marque = filters.marque
 
         const res = await apiFetch<{ data: Vehicule[]; total: number; page: number; limit: number }>('/vehicules', {
@@ -195,6 +199,8 @@ export function useVehicules() {
         if (filters?.date_fin) params.date_fin = filters.date_fin
         if (filters?.q) params.q = filters.q
         if (filters?.service_type) params.service_type = filters.service_type
+        if (filters?.vip === true) params.vip = 'true'
+        else if (filters?.vip === false) params.vip = 'false'
         const data = await apiFetch<VehiculeFilteredCounts>('/vehicules/counts', { token, params })
         setFilteredCounts(data)
       } catch {
@@ -247,6 +253,7 @@ export function useVehicules() {
           client_telephone: data.client_telephone,
           notes: data.notes,
           service_type: data.service_type,
+          vip: data.vip === true,
         }),
       })
       setVehicules(prev => [v, ...prev])

@@ -504,6 +504,12 @@ export default function VehiculeDetailScreen({
               color={cfg.color}
             />
             <Text style={styles.heroModel}>{vehicule.modele}</Text>
+            {vehicule.vip ? (
+              <View style={styles.vipBadge}>
+                <Ionicons name="star" size={12} color="#78350f" />
+                <Text style={styles.vipBadgeText}>VIP</Text>
+              </View>
+            ) : null}
             <View style={[styles.heroBadge, { backgroundColor: cfg.color }]}>
               <Text style={styles.heroBadgeText}>{cfg.label}</Text>
             </View>
@@ -1311,6 +1317,17 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   heroBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, flexShrink: 0 },
+  vipBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#fbbf24',
+    flexShrink: 0,
+  },
+  vipBadgeText: { fontSize: 11, fontWeight: '800', color: '#78350f' },
   heroBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
   heroImmat: { fontSize: 13, color: '#6b7280', fontFamily: 'monospace', marginTop: 4 },
   heroDefaut: { fontSize: 14, color: '#374151', marginTop: 8, fontWeight: '500' },

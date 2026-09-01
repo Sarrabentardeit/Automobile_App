@@ -9,6 +9,7 @@ import { ETAT_CONFIG } from '@/types'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import EtatBadge from '@/components/vehicules/EtatBadge'
+import VipBadge from '@/components/vehicules/VipBadge'
 import VehiculeTimeline from '@/components/vehicules/VehiculeTimeline'
 import VehiculeStats from '@/components/vehicules/VehiculeStats'
 import ChangeEtatModal from '@/components/vehicules/ChangeEtatModal'
@@ -139,6 +140,7 @@ export default function VehiculeDetailPage() {
                 {vehicule.type === 'moto' ? <Bike className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: cfg.color }} /> : <Car className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: cfg.color }} />}
               </div>
               <h1 className="text-lg sm:text-2xl font-extrabold text-gray-900">{vehicule.modele}</h1>
+              {vehicule.vip ? <VipBadge size="md" /> : null}
               <EtatBadge etat={vehicule.etat_actuel} size="lg" />
             </div>
             <p className="text-gray-500 font-mono text-xs sm:text-sm">{vehicule.immatriculation || 'Sans immatriculation'}</p>

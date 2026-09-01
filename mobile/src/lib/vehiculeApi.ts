@@ -43,6 +43,7 @@ export function createVehicule(token: string, data: VehiculeFormData): Promise<V
       client_telephone: data.client_telephone,
       notes: data.notes,
       service_type: data.service_type,
+      vip: data.vip === true,
     },
   })
 }

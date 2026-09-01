@@ -47,6 +47,15 @@ export async function registerExpoPushToken(accessToken: string): Promise<string
       sound: 'default',
       vibrationPattern: [0, 120, 60, 120],
     })
+    await Notifications.setNotificationChannelAsync('reminders', {
+      name: 'Rappels notes',
+      description: 'Rappels de Mes notes',
+      importance: Notifications.AndroidImportance.MAX,
+      sound: 'default',
+      vibrationPattern: [0, 250, 120, 250, 120, 250],
+      enableVibrate: true,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    })
   }
 
   const projectId =

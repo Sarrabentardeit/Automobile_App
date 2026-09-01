@@ -7,6 +7,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -91,6 +92,7 @@ export default function VehiculeFormModal({
     client_telephone: vehicule?.client_telephone ?? '',
     notes: vehicule?.notes ?? '',
     service_type: (vehicule?.service_type as ServiceType | undefined) ?? 'diagnostic',
+    vip: vehicule?.vip ?? false,
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
@@ -134,6 +136,7 @@ export default function VehiculeFormModal({
       client_telephone: vehicule?.client_telephone ?? '',
       notes: vehicule?.notes ?? '',
       service_type: (vehicule?.service_type as ServiceType | undefined) ?? 'diagnostic',
+      vip: vehicule?.vip ?? false,
     })
     setPendingImages([])
     setErrors({})
@@ -330,6 +333,19 @@ export default function VehiculeFormModal({
                 </Text>
               </Pressable>
             ))}
+          </View>
+
+          <View style={styles.vipRow}>
+            <View style={styles.vipLabel}>
+              <Ionicons name="star" size={16} color="#d97706" />
+              <Text style={styles.vipTitle}>Véhicule VIP</Text>
+            </View>
+            <Switch
+              value={form.vip ?? false}
+              onValueChange={(v) => update('vip', v)}
+              trackColor={{ false: '#d1d5db', true: '#fbbf24' }}
+              thumbColor={form.vip ? '#f59e0b' : '#f4f4f5'}
+            />
           </View>
 
           {!isEdit ? (
@@ -657,6 +673,22 @@ const styles = StyleSheet.create({
   miniChipActive: { backgroundColor: '#f97316' },
   miniChipText: { fontSize: 11, fontWeight: '600', color: '#374151' },
   miniChipTextActive: { color: '#fff' },
+  vipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 4,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    backgroundColor: '#fffbeb',
+  },
+  vipTextWrap: { flex: 1 },
+  vipLabel: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  vipTitle: { fontSize: 14, fontWeight: '700', color: '#78350f' },
   etatChip: {
     paddingHorizontal: 8,
     paddingVertical: 6,

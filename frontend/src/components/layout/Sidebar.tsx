@@ -2,7 +2,8 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import type { Permissions, Role, TogglePermissionKey } from '@/types'
 import { ROLE_CONFIG } from '@/types'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { LayoutDashboard, Car, Users, Wallet, X, LogOut, Package, Wrench, UsersRound, CalendarDays, AlertCircle, UserCircle, CreditCard, ClipboardList, Layers, Phone, Truck, Receipt, Bell, Shield, FileText, Import, Archive, SlidersHorizontal, FolderOpen, MessageSquare, ChevronDown, Banknote, Boxes, Settings2, Home, StickyNote } from 'lucide-react'
 import { useNotifications } from '@/contexts/NotificationsContext'
 import ProfileEditModal from '@/components/profile/ProfileEditModal'
@@ -250,9 +251,34 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
     initialOpenSections(location.pathname)
   )
   const notifRef = useRef<HTMLDivElement>(null)
+  const notifPanelRef = useRef<HTMLDivElement>(null)
+  const [notifPos, setNotifPos] = useState<{ top: number; left: number } | null>(null)
 
   const myNotifs = myNotifications(user?.id ?? 0)
   const unread = unreadCount(user?.id ?? 0)
+
+  const updateNotifPos = useCallback(() => {
+    const el = notifRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const panelW = 320
+    const gap = 8
+    let left = rect.right + gap
+    if (left + panelW > window.innerWidth - 12) {
+      left = Math.max(12, rect.left - panelW - gap)
+    }
+    setNotifPos({ top: rect.top, left })
+  }, [])
+
+  const toggleNotif = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (showNotif) {
+      setShowNotif(false)
+      return
+    }
+    updateNotifPos()
+    setShowNotif(true)
+  }
 
   useEffect(() => {
     setOpenSections((prev) => {
@@ -274,11 +300,25 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
 
   useEffect(() => {
     const fn = (e: MouseEvent) => {
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setShowNotif(false)
+      const target = e.target as Node
+      if (notifRef.current?.contains(target)) return
+      if (notifPanelRef.current?.contains(target)) return
+      setShowNotif(false)
     }
     document.addEventListener('click', fn)
     return () => document.removeEventListener('click', fn)
   }, [])
+
+  useEffect(() => {
+    if (!showNotif) return
+    const onReposition = () => updateNotifPos()
+    window.addEventListener('resize', onReposition)
+    window.addEventListener('scroll', onReposition, true)
+    return () => {
+      window.removeEventListener('resize', onReposition)
+      window.removeEventListener('scroll', onReposition, true)
+    }
+  }, [showNotif, updateNotifPos])
 
   if (!user || !permissions) return null
 
@@ -338,7 +378,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
             </button>
             <div className="relative flex-shrink-0" ref={notifRef}>
               <button
-                onClick={(e) => { e.stopPropagation(); setShowNotif(!showNotif) }}
+                onClick={toggleNotif}
                 className={cn(
                   'relative p-2 rounded-xl transition-colors',
                   showNotif ? 'bg-white/15 text-white' : 'text-gray-400 hover:text-white hover:bg-white/10'
@@ -352,57 +392,74 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                   </span>
                 )}
               </button>
-              {showNotif && (
-                <div className="absolute top-0 left-full ml-2 w-80 max-h-80 overflow-y-auto bg-white rounded-2xl shadow-2xl border-2 border-orange-200 text-gray-900 z-[100]">
-                  <div className="p-3 border-b border-gray-200 flex items-center justify-between bg-orange-50 rounded-t-2xl">
-                    <span className="text-sm font-bold">Notifications</span>
-                    {unread > 0 && (
-                      <button
-                        onClick={() => markAllAsRead(user.id)}
-                        className="text-xs text-orange-600 hover:underline"
-                      >
-                        Tout marquer lu
-                      </button>
-                    )}
-                  </div>
-                  <div className="divide-y divide-gray-50">   
-                    {myNotifs.length === 0 ? (
-                      <p className="p-4 text-sm text-gray-500 text-center">Aucune notification</p>
-                    ) : (
-                      myNotifs.slice(0, 20).map(n => (
-                        <div
-                          key={n.id}
-                          className={cn('p-3 text-left cursor-pointer hover:bg-gray-50', !n.read && 'bg-orange-50/50')}
-                          onClick={() => {
-                            markAsRead(n.id)
-                            setShowNotif(false)
-                            if (n.notePersonnelleId != null) navigate(`/notes?note=${n.notePersonnelleId}`)
-                            else if (n.type === 'note_rappel') navigate('/notes')
-                            else if (n.reclamationId != null) navigate('/reclamation')
-                            else if (n.vehiculeId != null) navigate(`/vehicules/${n.vehiculeId}`)
-                            else if (n.type?.startsWith('vehicule_')) navigate('/vehicules')
-                          }}
-                        >
-                          {(() => {
-                            const { label, message } = formatNotificationDisplay(n)
-                            return (
-                              <>
-                                {label ? (
-                                  <p className="text-xs font-semibold text-orange-600">{label}</p>
-                                ) : null}
-                                <p className="text-sm text-gray-800">{message}</p>
-                              </>
-                            )
-                          })()}
-                          <p className="text-[11px] text-gray-400 mt-0.5">
-                            {new Date(n.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
+              {showNotif && notifPos
+                ? createPortal(
+                    <div
+                      ref={notifPanelRef}
+                      className="fixed w-80 overflow-y-auto bg-white rounded-2xl shadow-2xl border-2 border-orange-200 text-gray-900 z-[200]"
+                      style={{
+                        top: notifPos.top,
+                        left: notifPos.left,
+                        maxHeight: `min(20rem, calc(100vh - ${notifPos.top}px - 12px))`,
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="p-3 border-b border-gray-200 flex items-center justify-between bg-orange-50 rounded-t-2xl sticky top-0 z-10">
+                        <span className="text-sm font-bold">Notifications</span>
+                        {unread > 0 && (
+                          <button
+                            onClick={() => markAllAsRead(user.id)}
+                            className="text-xs text-orange-600 hover:underline"
+                          >
+                            Tout marquer lu
+                          </button>
+                        )}
+                      </div>
+                      <div className="divide-y divide-gray-50">
+                        {myNotifs.length === 0 ? (
+                          <p className="p-4 text-sm text-gray-500 text-center">Aucune notification</p>
+                        ) : (
+                          myNotifs.slice(0, 20).map(n => (
+                            <div
+                              key={n.id}
+                              className={cn('p-3 text-left cursor-pointer hover:bg-gray-50', !n.read && 'bg-orange-50/50')}
+                              onClick={() => {
+                                markAsRead(n.id)
+                                setShowNotif(false)
+                                if (n.notePersonnelleId != null) navigate(`/notes?note=${n.notePersonnelleId}`)
+                                else if (n.type === 'note_rappel') navigate('/notes')
+                                else if (n.reclamationId != null) navigate('/reclamation')
+                                else if (n.vehiculeId != null) navigate(`/vehicules/${n.vehiculeId}`)
+                                else if (n.type?.startsWith('vehicule_')) navigate('/vehicules')
+                              }}
+                            >
+                              {(() => {
+                                const { label, message } = formatNotificationDisplay(n)
+                                return (
+                                  <>
+                                    {label ? (
+                                      <p className="text-xs font-semibold text-orange-600">{label}</p>
+                                    ) : null}
+                                    <p className="text-sm text-gray-800">{message}</p>
+                                  </>
+                                )
+                              })()}
+                              <p className="text-[11px] text-gray-400 mt-0.5">
+                                {new Date(n.date).toLocaleDateString('fr-FR', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>,
+                    document.body
+                  )
+                : null}
             </div>
           </div>
         </div>

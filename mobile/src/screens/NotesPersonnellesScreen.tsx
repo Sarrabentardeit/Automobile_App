@@ -18,6 +18,12 @@ import {
   fetchNotesPersonnelles,
   updateNotePersonnelle,
 } from '../lib/notesPersonnellesApi'
+import {
+  cancelNoteLocalReminder,
+  scheduleNoteLocalReminder,
+  syncNoteLocalReminders,
+} from '../lib/noteLocalReminders'
+import { maybePromptBackgroundReminders } from '../lib/androidBackgroundReminders'
 import { theme } from '../theme/appTheme'
 import { NOTE_COULEURS, type NotePersonnelle, type NotePersonnelleInput } from '../types/notePersonnelle'
 
@@ -125,6 +131,7 @@ export default function NotesPersonnellesScreen({
   const load = useCallback(async () => {
     const list = await fetchNotesPersonnelles(accessToken)
     setNotes(list)
+    void syncNoteLocalReminders(list).catch(() => undefined)
   }, [accessToken])
 
   useEffect(() => {
@@ -206,10 +213,14 @@ export default function NotesPersonnellesScreen({
     if (editing) {
       const updated = await updateNotePersonnelle(accessToken, editing.id, data)
       setNotes(prev => sortNotesSmart(prev.map(n => (n.id === editing.id ? updated : n))))
+      void scheduleNoteLocalReminder(updated).catch(() => undefined)
+      if (data.rappelAt) void maybePromptBackgroundReminders()
       showMsg('Note modifiée')
     } else {
       const created = await createNotePersonnelle(accessToken, data)
       setNotes(prev => sortNotesSmart([created, ...prev]))
+      void scheduleNoteLocalReminder(created).catch(() => undefined)
+      if (data.rappelAt) void maybePromptBackgroundReminders()
       showMsg('Note ajoutée')
     }
   }
@@ -218,6 +229,8 @@ export default function NotesPersonnellesScreen({
     try {
       const updated = await updateNotePersonnelle(accessToken, n.id, { faite: !n.faite })
       setNotes(prev => prev.map(x => (x.id === n.id ? updated : x)))
+      if (updated.faite) void cancelNoteLocalReminder(updated.id).catch(() => undefined)
+      else void scheduleNoteLocalReminder(updated).catch(() => undefined)
       showMsg(n.faite ? 'Note réouverte' : 'Note faite')
     } catch (e) {
       showMsg(e instanceof Error ? e.message : 'Erreur', true)
@@ -235,6 +248,7 @@ export default function NotesPersonnellesScreen({
             try {
               await deleteNotePersonnelle(accessToken, n.id)
               setNotes(prev => prev.filter(x => x.id !== n.id))
+              void cancelNoteLocalReminder(n.id).catch(() => undefined)
               showMsg('Note supprimée')
             } catch (e) {
               showMsg(e instanceof Error ? e.message : 'Erreur', true)

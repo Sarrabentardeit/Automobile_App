@@ -13,7 +13,7 @@ import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Textarea from '@/components/ui/Textarea'
 import Button from '@/components/ui/Button'
-import { Save, Car, Bike, Camera, ImagePlus, X } from 'lucide-react'
+import { Save, Car, Bike, Camera, ImagePlus, X, Crown } from 'lucide-react'
 import { cn, getActiveEquipeUsers } from '@/lib/utils'
 
 interface Props {
@@ -114,6 +114,7 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
     client_telephone: vehicule?.client_telephone ?? '',
     notes: vehicule?.notes ?? '',
     service_type: vehicule?.service_type ?? 'diagnostic',
+    vip: vehicule?.vip ?? false,
   })
   const [selectedMarque, setSelectedMarque] = useState<string>(parsedModele.marque)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -227,9 +228,24 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
       onClose={onClose}
       title={isEdit ? 'Modifier le véhicule' : 'Ajouter un véhicule'}
       subtitle={isEdit ? `${vehicule.modele} - ${vehicule.immatriculation}` : undefined}
-      maxWidth="lg"
+      maxWidth="xl"
+      footer={
+        <div className="flex gap-2 sm:gap-3">
+          <Button type="button" variant="outline" onClick={onClose} className="flex-1 text-xs sm:text-sm">
+            Annuler
+          </Button>
+          <Button
+            type="submit"
+            form="vehicule-form"
+            className="flex-1 text-xs sm:text-sm"
+            icon={<Save className="w-4 h-4" />}
+          >
+            {isEdit ? 'Enregistrer' : 'Ajouter'}
+          </Button>
+        </div>
+      }
     >
-      <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
+      <form id="vehicule-form" onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
         {/* Type toggle */}
         <div className="space-y-1.5">
           <label className="block text-xs sm:text-sm font-medium text-gray-700">Type de véhicule</label>
@@ -304,21 +320,34 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
           </select>
         </div>
 
+        <label className="flex items-center justify-between gap-3 p-3 rounded-xl border border-amber-200 bg-amber-50/60 cursor-pointer">
+          <span className="inline-flex items-center gap-2 text-sm font-semibold text-amber-950">
+            <Crown className="w-4 h-4 text-amber-600" />
+            Véhicule VIP
+          </span>
+          <input
+            type="checkbox"
+            checked={form.vip ?? false}
+            onChange={e => update('vip', e.target.checked)}
+            className="h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+          />
+        </label>
+
         {/* Statut + Date d'entrée */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-4">
           <div className="space-y-1.5">
             <label className="block text-sm font-medium text-gray-700">
               Statut d'entrée <span className="text-red-500">*</span>
             </label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+            <div className="flex flex-wrap gap-1.5">
               {ETATS_ENTREE.map(etat => {
                 const cfg = ETAT_CONFIG[etat]
                 const isSelected = form.etat_initial === etat
                 return (
                   <button key={etat} type="button" onClick={() => update('etat_initial', etat)}
                     className={cn(
-                      'flex items-center gap-1.5 px-2.5 py-2 rounded-lg border-2 text-xs font-bold transition-all',
-                      isSelected ? 'scale-[1.02] shadow-md' : 'opacity-60 hover:opacity-90',
+                      'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border-2 text-[11px] sm:text-xs font-bold transition-all whitespace-nowrap',
+                      isSelected ? 'shadow-md' : 'opacity-70 hover:opacity-100',
                     )}
                     style={{
                       borderColor: cfg.color,
@@ -326,17 +355,19 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
                       color: cfg.color,
                     }}
                   >
-                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: cfg.color }} />
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: cfg.color }} />
                     {cfg.label}
                   </button>
                 )
               })}
             </div>
           </div>
-          <Input id="date_entree" label="Date d'entrée" type="date" value={form.date_entree} required
-            onChange={e => update('date_entree', e.target.value)}
-            error={errors.date_entree}
-          />
+          <div className="max-w-xs">
+            <Input id="date_entree" label="Date d'entrée" type="date" value={form.date_entree} required
+              onChange={e => update('date_entree', e.target.value)}
+              error={errors.date_entree}
+            />
+          </div>
         </div>
 
         {/* Assignment */}
@@ -467,14 +498,6 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
               ))}
             </div>
           )}
-        </div>
-
-        {/* Footer - sticky on mobile */}
-        <div className="flex gap-2 sm:gap-3 pt-3 border-t border-gray-100 sticky bottom-0 bg-white pb-safe">
-          <Button type="button" variant="outline" onClick={onClose} className="flex-1 text-xs sm:text-sm">Annuler</Button>
-          <Button type="submit" className="flex-1 text-xs sm:text-sm" icon={<Save className="w-4 h-4" />}>
-            {isEdit ? 'Enregistrer' : 'Ajouter'}
-          </Button>
         </div>
       </form>
     </Modal>

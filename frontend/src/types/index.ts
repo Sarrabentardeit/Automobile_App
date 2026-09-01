@@ -239,6 +239,8 @@ export interface Vehicule {
   derniere_mise_a_jour: string
   /** Acompte client (fiche financière) */
   avance_client?: number
+  /** Client prioritaire */
+  vip?: boolean
 }
 
 export interface VehiculeDepenseLigne {
@@ -387,6 +389,7 @@ export interface VehiculeFormData {
   client_telephone: string
   notes: string
   service_type?: ServiceType
+  vip?: boolean
 }
 
 export interface VehiculeImageUploadInput {

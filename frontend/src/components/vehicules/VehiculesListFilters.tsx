@@ -1,4 +1,4 @@
-import { CalendarDays, RotateCcw, Search, UserRound, Wrench } from 'lucide-react'
+import { CalendarDays, Crown, RotateCcw, Search, UserRound, Wrench } from 'lucide-react'
 import { SERVICE_OPTIONS, type ServiceType } from '@/types'
 import { cn } from '@/lib/utils'
 
@@ -33,6 +33,8 @@ type Props = {
   dateFieldLabel?: string
   serviceType?: ServiceType
   onServiceChange: (value: ServiceType | undefined) => void
+  vipFilter?: 'all' | 'vip' | 'normal'
+  onVipFilterChange?: (value: 'all' | 'vip' | 'normal') => void
   showTechnicien?: boolean
   techniciens?: TechOption[]
   technicienId?: number
@@ -55,6 +57,8 @@ export default function VehiculesListFilters({
   dateFieldLabel = 'Jour précis',
   serviceType,
   onServiceChange,
+  vipFilter = 'all',
+  onVipFilterChange,
   showTechnicien = false,
   techniciens = [],
   technicienId,
@@ -65,6 +69,7 @@ export default function VehiculesListFilters({
     Boolean(monthFilter) ||
     Boolean(dateFilter) ||
     Boolean(serviceType) ||
+    vipFilter !== 'all' ||
     technicienId != null ||
     Boolean(recherche.trim())
 
@@ -74,6 +79,7 @@ export default function VehiculesListFilters({
     onDateChange('')
     onDatePreset('toutes')
     onServiceChange(undefined)
+    onVipFilterChange?.('all')
     onTechnicienChange?.(undefined)
   }
 
@@ -127,6 +133,40 @@ export default function VehiculesListFilters({
             ))}
           </div>
         </div>
+
+        {onVipFilterChange ? (
+          <div className="space-y-2">
+            <p className={cn(fieldLabelClass, 'inline-flex items-center gap-1')}>
+              <Crown className="w-3 h-3" />
+              VIP
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  { id: 'all', label: 'Tous' },
+                  { id: 'vip', label: 'VIP' },
+                  { id: 'normal', label: 'Normaux' },
+                ] as const
+              ).map(({ id, label }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => onVipFilterChange(id)}
+                  className={cn(
+                    'h-9 px-3 rounded-lg text-xs font-semibold border transition-all',
+                    vipFilter === id
+                      ? id === 'vip'
+                        ? 'bg-amber-400 text-amber-950 border-amber-500 shadow-sm'
+                        : 'bg-orange-500 text-white border-orange-500 shadow-sm'
+                      : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-white'
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div
           className={cn(

@@ -53,7 +53,9 @@ async function sendExpoPush(
         channelId:
           String(data.type ?? '').includes('chat') || data.conversationId != null
             ? 'messages'
-            : 'default',
+            : String(data.type ?? '').includes('note') || data.notePersonnelleId != null
+              ? 'reminders'
+              : 'default',
       }),
     })
   } catch (err) {

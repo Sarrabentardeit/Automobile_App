@@ -7,10 +7,19 @@ interface ModalProps {
   title: string
   subtitle?: string
   children: ReactNode
+  footer?: ReactNode
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl'
 }
 
-export default function Modal({ open, onClose, title, subtitle, children, maxWidth = 'md' }: ModalProps) {
+export default function Modal({
+  open,
+  onClose,
+  title,
+  subtitle,
+  children,
+  footer,
+  maxWidth = 'md',
+}: ModalProps) {
   useEffect(() => {
     if (open) document.body.style.overflow = 'hidden'
     else document.body.style.overflow = ''
@@ -37,6 +46,9 @@ export default function Modal({ open, onClose, title, subtitle, children, maxWid
           </button>
         </div>
         <div className="overflow-y-auto p-4 sm:p-5 flex-1 overscroll-contain min-h-0">{children}</div>
+        {footer ? (
+          <div className="flex-shrink-0 border-t border-gray-100 p-4 sm:p-5 bg-white">{footer}</div>
+        ) : null}
       </div>
     </div>
   )

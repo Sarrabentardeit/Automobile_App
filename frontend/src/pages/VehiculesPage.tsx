@@ -71,6 +71,7 @@ function buildListFilters(opts: {
   userId: number
   visibility: string
   marque?: string
+  vipFilter?: 'all' | 'vip' | 'normal'
   page: number
   limit: number
 }): VehiculesFilters {
@@ -84,6 +85,7 @@ function buildListFilters(opts: {
     date_fin,
     q: opts.rechercheDebounced || undefined,
     service_type: opts.serviceType,
+    vip: opts.vipFilter === 'vip' ? true : opts.vipFilter === 'normal' ? false : undefined,
     marque: opts.marque,
     page: opts.page,
     limit: opts.limit,
@@ -135,6 +137,7 @@ export default function VehiculesPage() {
     return Number.isFinite(n) && n > 0 ? n : undefined
   })
   const [serviceType, setServiceType] = useState<ServiceType | undefined>()
+  const [vipFilter, setVipFilter] = useState<'all' | 'vip' | 'normal'>('all')
   const [dateFilterMode, setDateFilterMode] = useState<
     'toutes' | 'aujourdhui' | 'hier' | 'semaine' | 'mois' | 'mois_choisi' | 'date'
   >(() => {
@@ -176,10 +179,11 @@ export default function VehiculesPage() {
       monthFilter,
       rechercheDebounced,
       serviceType,
+      vipFilter,
       userId: user?.id ?? 0,
       visibility: permissions?.vehiculeVisibility ?? 'own',
     }),
-    [tab, filtreEtat, technicienId, dateFilterMode, dateFilter, monthFilter, rechercheDebounced, serviceType, user?.id, permissions?.vehiculeVisibility]
+    [tab, filtreEtat, technicienId, dateFilterMode, dateFilter, monthFilter, rechercheDebounced, serviceType, vipFilter, user?.id, permissions?.vehiculeVisibility]
   )
 
   useEffect(() => {
@@ -216,6 +220,8 @@ export default function VehiculesPage() {
       if (date_fin) params.date_fin = date_fin
       if (rechercheDebounced) params.q = rechercheDebounced
       if (serviceType) params.service_type = serviceType
+      if (vipFilter === 'vip') params.vip = 'true'
+      else if (vipFilter === 'normal') params.vip = 'false'
 
       const res = await apiFetch<{ brands: BrandFolder[]; totalVehicles: number }>('/vehicules/brands', {
         token,
@@ -237,6 +243,7 @@ export default function VehiculesPage() {
     monthFilter,
     rechercheDebounced,
     serviceType,
+    vipFilter,
     permissions?.vehiculeVisibility,
     user?.id,
   ])
@@ -271,7 +278,7 @@ export default function VehiculesPage() {
   useEffect(() => {
     setVehiclePage(1)
     setFolderPage(1)
-  }, [tab, filtreEtat, technicienId, dateFilterMode, dateFilter, monthFilter, rechercheDebounced, serviceType, brandParam])
+  }, [tab, filtreEtat, technicienId, dateFilterMode, dateFilter, monthFilter, rechercheDebounced, serviceType, vipFilter, brandParam])
 
   if (!user || !permissions) return null
 
@@ -448,6 +455,8 @@ export default function VehiculesPage() {
         dateFieldLabel="Jour précis"
         serviceType={serviceType}
         onServiceChange={setServiceType}
+        vipFilter={vipFilter}
+        onVipFilterChange={setVipFilter}
         showTechnicien={permissions.vehiculeVisibility === 'all' && techniciens.length > 0}
         techniciens={techniciens}
         technicienId={technicienId}
