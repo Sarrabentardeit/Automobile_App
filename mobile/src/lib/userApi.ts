@@ -10,6 +10,7 @@ type ApiUserRow = {
   role: string
   permissions?: unknown
   statut: string
+  avatarUrl?: string | null
   date_creation: string
   derniere_connexion?: string | null
 }
@@ -24,6 +25,7 @@ function mapApiUser(raw: ApiUserRow): AppAccount {
     role,
     permissions: mergePermissions(raw.role, raw.permissions),
     statut: raw.statut === 'inactif' ? 'inactif' : 'actif',
+    avatarUrl: raw.avatarUrl ?? null,
     date_creation: raw.date_creation,
     derniere_connexion: raw.derniere_connexion ?? null,
   }

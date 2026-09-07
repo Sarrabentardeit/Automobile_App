@@ -62,6 +62,7 @@ import StatistiquesScreen from './StatistiquesScreen'
 import UtilisateursScreen from './UtilisateursScreen'
 import OutilsAhmedScreen from './OutilsAhmedScreen'
 import OutilsNouriScreen from './OutilsNouriScreen'
+import MarquesScreen from './MarquesScreen'
 import ReclamationsScreen from './ReclamationsScreen'
 import StockGeneralScreen from './StockGeneralScreen'
 import VehiculesListScreen from './VehiculesListScreen'
@@ -282,6 +283,19 @@ export default function MainApp({
               })
             }
             onListChanged={() => setListRefreshKey((k) => k + 1)}
+          />
+        )
+      case 'marques':
+        return (
+          <MarquesScreen
+            accessToken={accessToken}
+            canManage={
+              !!permissions.canEditVehicule ||
+              !!permissions.canManageUsers ||
+              mapRole(user.role) === 'admin' ||
+              mapRole(user.role) === 'responsable'
+            }
+            refreshKey={listRefreshKey}
           />
         )
       case 'clients':

@@ -34,6 +34,7 @@ import {
   pinChatMessage,
   sendChatMessage,
   unpinChatMessage,
+  dmPeerAvatar,
   type ChatAttachmentInput,
   type ChatConversation,
   type ChatMember,
@@ -51,6 +52,7 @@ import { resolveUploadUrl } from '../lib/config'
 import { downloadChatFile } from '../lib/downloadChatFile'
 import { pickVehiculeImages } from '../lib/imageUpload'
 import { getSheetBottomInset, getStatusBarInset } from '../lib/safeArea'
+import { mediaUrl } from '../lib/vehiculeApi'
 import { theme } from '../theme/appTheme'
 
 type Props = {
@@ -569,6 +571,11 @@ export default function ChatScreen({
               >
                 {item.type === 'group' ? (
                   <Ionicons name="people" size={18} color="#fdba74" />
+                ) : dmPeerAvatar(item, userId) ? (
+                  <Image
+                    source={{ uri: mediaUrl(dmPeerAvatar(item, userId)!) }}
+                    style={styles.avatarImg}
+                  />
                 ) : (
                   <Text style={styles.avatarText}>{initials(item.title)}</Text>
                 )}
@@ -901,7 +908,14 @@ export default function ChatScreen({
                       onPress={() => void handleNewDm(m.id)}
                     >
                       <View style={[styles.avatar, styles.avatarDm]}>
-                        <Text style={styles.avatarText}>{initials(m.nom)}</Text>
+                        {m.avatarUrl ? (
+                          <Image
+                            source={{ uri: mediaUrl(m.avatarUrl) }}
+                            style={styles.avatarImg}
+                          />
+                        ) : (
+                          <Text style={styles.avatarText}>{initials(m.nom)}</Text>
+                        )}
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.rowTitle}>{m.nom}</Text>
@@ -1101,6 +1115,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImg: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
   },
   avatarGroup: { backgroundColor: '#1e293b' },
   avatarDm: { backgroundColor: '#ffedd5' },

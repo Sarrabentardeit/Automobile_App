@@ -37,7 +37,9 @@ import statsRouter from './routes/stats'
 import settingsRouter from './routes/settings'
 import chatRouter from './routes/chat'
 import notesPersonnellesRouter from './routes/notesPersonnelles'
+import marquesRouter from './routes/marques'
 import { ensureDocumentTemplates } from './lib/seedDocumentTemplates'
+import { ensureMarquesSeed } from './lib/vehiculeBrands'
 import { startNoteRemindersJob } from './lib/noteRemindersJob'
 
 const app = express()
@@ -116,6 +118,7 @@ app.use('/stats', statsRouter)
 app.use('/settings', settingsRouter)
 app.use('/chat', chatRouter)
 app.use('/notes-personnelles', notesPersonnellesRouter)
+app.use('/marques', marquesRouter)
 app.use('/vehicules', ordreReparationExcelRouter)
 app.use('/vehicules', suivisRouter)
 app.use('/vehicules', suivisExcelRouter)
@@ -126,7 +129,7 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
   res.status(500).json({ error: 'Unexpected error' })
 })
 
-void ensureDocumentTemplates()
+void Promise.all([ensureDocumentTemplates(), ensureMarquesSeed()])
   .then(() => {
     const server = http.createServer(app)
     attachRealtime(server)
@@ -136,7 +139,7 @@ void ensureDocumentTemplates()
     })
   })
   .catch((err) => {
-    console.error('[templates] startup seed failed:', err)
+    console.error('[startup] seed failed:', err)
     process.exit(1)
   })
 

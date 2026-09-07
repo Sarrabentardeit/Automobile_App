@@ -46,7 +46,7 @@ export function brandToSlug(brand: string): string {
   return brand.trim().toLowerCase().replace(/\s+/g, '-')
 }
 
-export type BrandFolder = { name: string; slug: string; count: number }
+export type BrandFolder = { name: string; slug: string; count: number; logoUrl?: string | null }
 
 export function groupVehiculesByBrand(vehicules: Vehicule[]): BrandFolder[] {
   const counts = new Map<string, number>()

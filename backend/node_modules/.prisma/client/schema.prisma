@@ -668,3 +668,14 @@ model ChecklistAuditLog {
   snapshot    Json?
   createdAt   DateTime       @default(now())
 }
+
+/// Marques véhicules (logos + liste gérable)
+model Marque {
+  id        Int      @id @default(autoincrement())
+  nom       String   @unique
+  slug      String   @unique
+  logoUrl   String?
+  actif     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

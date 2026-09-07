@@ -1,7 +1,8 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { theme } from '../../theme/appTheme'
+import { mediaUrl } from '../../lib/vehiculeApi'
 import {
   countPermissions,
   isPermissionsCustomized,
@@ -44,9 +45,13 @@ export default function UserListItem({ user, onPress }: Props) {
     >
       <View style={styles.accent} />
       <View style={styles.body}>
-        <LinearGradient colors={[c1, c2]} style={styles.avatar}>
-          <Text style={styles.avatarText}>{initial}</Text>
-        </LinearGradient>
+        {user.avatarUrl ? (
+          <Image source={{ uri: mediaUrl(user.avatarUrl) }} style={styles.avatarImg} />
+        ) : (
+          <LinearGradient colors={[c1, c2]} style={styles.avatar}>
+            <Text style={styles.avatarText}>{initial}</Text>
+          </LinearGradient>
+        )}
 
         <View style={styles.info}>
           <View style={styles.topRow}>
@@ -125,6 +130,12 @@ const styles = StyleSheet.create({
     borderRadius: 23,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  avatarImg: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#e5e7eb',
   },
   avatarText: { fontSize: 18, fontWeight: '800', color: '#fff' },
   info: { flex: 1, minWidth: 0 },

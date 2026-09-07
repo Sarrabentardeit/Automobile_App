@@ -15,7 +15,8 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import CenteredBlurModal from './ui/CenteredBlurModal'
 import ModalBlurBackdrop from './ui/ModalBlurBackdrop'
-import { BRAND_OPTIONS, parseMarqueModele } from '../constants/brands'
+import { BRAND_OPTIONS as FALLBACK_BRANDS, parseMarqueModele as parseFallback } from '../constants/brands'
+import { fetchMarques, marqueLogoUri, type Marque } from '../lib/marquesApi'
 import { pickVehiculeImages } from '../lib/imageUpload'
 import { getModalLayout } from '../lib/modalLayout'
 import { getSheetBottomInset, getStatusBarInset } from '../lib/safeArea'
@@ -44,6 +45,20 @@ import {
 const today = () => new Date().toISOString().split('T')[0]
 const MAX_IMAGES = 12
 
+function parseMarqueModele(fullModele: string, brandNames: string[]) {
+  const raw = (fullModele || '').trim()
+  if (!raw) return { marque: '', modele: '' }
+  const sorted = [...brandNames].sort((a, b) => b.length - a.length)
+  for (const marque of sorted) {
+    const lower = marque.toLowerCase()
+    if (raw.toLowerCase() === lower) return { marque, modele: '' }
+    if (raw.toLowerCase().startsWith(`${lower} `)) {
+      return { marque, modele: raw.slice(marque.length).trim() }
+    }
+  }
+  return parseFallback(fullModele)
+}
+
 type Props = {
   visible: boolean
   vehicule: Vehicule | null
@@ -66,7 +81,11 @@ export default function VehiculeFormModal({
   onSaved,
 }: Props) {
   const isEdit = !!vehicule
-  const parsed = parseMarqueModele(vehicule?.modele ?? '')
+  const [marquesList, setMarquesList] = useState<Marque[]>([])
+  const brandNames = marquesList.length
+    ? marquesList.map((m) => m.nom)
+    : [...FALLBACK_BRANDS]
+  const parsed = parseMarqueModele(vehicule?.modele ?? '', brandNames)
 
   const [users, setUsers] = useState<AppUser[]>([])
   const [marque, setMarque] = useState(parsed.marque)
@@ -112,7 +131,7 @@ export default function VehiculeFormModal({
   useEffect(() => {
     if (!visible) return
     setShowMarquePicker(false)
-    const p = parseMarqueModele(vehicule?.modele ?? '')
+    const p = parseMarqueModele(vehicule?.modele ?? '', [...FALLBACK_BRANDS])
     setMarque(p.marque)
     setForm({
       modele: p.modele,
@@ -141,6 +160,15 @@ export default function VehiculeFormModal({
     setPendingImages([])
     setErrors({})
     void fetchAssignableUsers(accessToken).then(setUsers)
+    void fetchMarques(accessToken)
+      .then((list) => {
+        setMarquesList(list)
+        const names = list.map((m) => m.nom)
+        const parsedApi = parseMarqueModele(vehicule?.modele ?? '', names)
+        setMarque(parsedApi.marque)
+        setForm((f) => ({ ...f, modele: parsedApi.modele || f.modele }))
+      })
+      .catch(() => setMarquesList([]))
   }, [visible, vehicule, accessToken])
 
   const update = <K extends keyof VehiculeFormData>(key: K, value: VehiculeFormData[K]) => {
@@ -286,9 +314,22 @@ export default function VehiculeFormModal({
 
           <Text style={styles.label}>Marque</Text>
           <Pressable style={styles.select} onPress={() => setShowMarquePicker(true)}>
-            <Text style={[styles.selectText, !marque && styles.selectPlaceholder]}>
-              {marque || 'Sélectionner une marque'}
-            </Text>
+            <View style={styles.selectLeft}>
+              {(() => {
+                const logo = marqueLogoUri(marquesList.find((x) => x.nom === marque)?.logoUrl)
+                if (!marque) return null
+                return logo ? (
+                  <Image source={{ uri: logo }} style={styles.selectBrandLogo} />
+                ) : (
+                  <View style={styles.selectBrandLogoPlaceholder}>
+                    <Ionicons name="car-sport-outline" size={14} color="#9ca3af" />
+                  </View>
+                )
+              })()}
+              <Text style={[styles.selectText, !marque && styles.selectPlaceholder]}>
+                {marque || 'Sélectionner une marque'}
+              </Text>
+            </View>
             <Ionicons name="chevron-down" size={18} color="#6b7280" />
           </Pressable>
 
@@ -477,8 +518,9 @@ export default function VehiculeFormModal({
                 <Text style={styles.pickerItemText}>— Aucune —</Text>
                 {!marque ? <Ionicons name="checkmark" size={20} color="#f97316" /> : null}
               </Pressable>
-              {BRAND_OPTIONS.map((m) => {
+              {brandNames.map((m) => {
                 const selected = marque === m
+                const logo = marqueLogoUri(marquesList.find((x) => x.nom === m)?.logoUrl)
                 return (
                   <Pressable
                     key={m}
@@ -488,7 +530,16 @@ export default function VehiculeFormModal({
                       setShowMarquePicker(false)
                     }}
                   >
-                    <Text style={styles.pickerItemText}>{m}</Text>
+                    <View style={styles.pickerItemLeft}>
+                      {logo ? (
+                        <Image source={{ uri: logo }} style={styles.pickerBrandLogo} />
+                      ) : (
+                        <View style={styles.pickerBrandLogoPlaceholder}>
+                          <Ionicons name="car-sport-outline" size={16} color="#9ca3af" />
+                        </View>
+                      )}
+                      <Text style={styles.pickerItemText}>{m}</Text>
+                    </View>
                     {selected ? <Ionicons name="checkmark" size={20} color="#f97316" /> : null}
                   </Pressable>
                 )
@@ -627,6 +678,16 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 8,
   },
+  selectLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  selectBrandLogo: { width: 28, height: 28, borderRadius: 6, backgroundColor: '#f3f4f6' },
+  selectBrandLogoPlaceholder: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   selectText: { fontSize: 15, color: '#111827', flex: 1 },
   selectPlaceholder: { color: '#9ca3af' },
   pickerOverlay: {
@@ -662,7 +723,17 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f3f4f6',
   },
   pickerItemActive: { backgroundColor: '#fff7ed' },
-  pickerItemText: { fontSize: 16, color: '#111827' },
+  pickerItemLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  pickerBrandLogo: { width: 28, height: 28, borderRadius: 6, backgroundColor: '#f3f4f6' },
+  pickerBrandLogoPlaceholder: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pickerItemText: { fontSize: 16, color: '#111827', flexShrink: 1 },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
   miniChip: {
     paddingHorizontal: 10,

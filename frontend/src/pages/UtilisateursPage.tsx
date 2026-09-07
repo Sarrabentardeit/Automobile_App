@@ -11,6 +11,7 @@ import Input from '@/components/ui/Input'
 import { useAuth } from '@/contexts/AuthContext'
 import { Search, UserPlus, Pencil, Ban, CheckCircle, Shield, Eye, RotateCcw, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import UserAvatar from '@/components/ui/UserAvatar'
 
 function countPerms(p: Permissions): number {
   const toggles = ALL_TOGGLE_KEYS.filter(k => p[k]).length
@@ -247,9 +248,7 @@ export default function UtilisateursPage() {
             return (
               <div key={u.id} className="grid grid-cols-7 gap-4 px-5 py-4 border-b border-gray-50 hover:bg-gray-50/50 transition-colors items-center">
                 <div className="col-span-2 flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-sm font-bold text-gray-600 flex-shrink-0">
-                    {u.nom_complet.charAt(0).toUpperCase()}
-                  </div>
+                  <UserAvatar name={u.nom_complet} avatarUrl={u.avatarUrl} size="md" />
                   <div className="min-w-0">
                     <p className="font-semibold text-gray-900 truncate">{u.nom_complet}</p>
                     <p className="text-xs text-gray-500 truncate">{u.email}</p>
@@ -311,9 +310,7 @@ export default function UtilisateursPage() {
             return (
               <div key={u.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-3.5">
                 <div className="flex items-center gap-3 mb-2.5">
-                  <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-sm font-bold text-gray-600 flex-shrink-0">
-                    {u.nom_complet.charAt(0).toUpperCase()}
-                  </div>
+                  <UserAvatar name={u.nom_complet} avatarUrl={u.avatarUrl} size="md" />
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-gray-900 text-sm truncate">{u.nom_complet}</p>
                     <p className="text-[11px] text-gray-500 truncate">{u.email}</p>

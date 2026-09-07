@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type {
   Vehicule,
   VehiculeFormData,
@@ -9,12 +9,15 @@ import type {
 } from '@/types'
 import { ETAT_CONFIG } from '@/types'
 import { useUsers } from '@/contexts/UsersContext'
+import { useAuth } from '@/contexts/AuthContext'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Textarea from '@/components/ui/Textarea'
 import Button from '@/components/ui/Button'
 import { Save, Car, Bike, Camera, ImagePlus, X, Crown } from 'lucide-react'
 import { cn, getActiveEquipeUsers } from '@/lib/utils'
+import { BRAND_OPTIONS as FALLBACK_BRANDS } from '@/lib/vehiculeBrands'
+import { fetchMarques, marqueLogoUrl, type Marque } from '@/lib/marquesApi'
 
 interface Props {
   vehicule: Vehicule | null
@@ -27,51 +30,12 @@ const today = () => new Date().toISOString().split('T')[0]
 const ETATS_ENTREE: EtatVehicule[] = ['orange', 'mauve', 'sous_traitance', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'vert', 'retour']
 const MAX_IMAGES = 12
 const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024
-const BRAND_OPTIONS = [
-  'Audi',
-  'Bmw',
-  'Changan',
-  'Cherry',
-  'Chevrolet',
-  'Citroen',
-  'Dacia',
-  'Fiat',
-  'Ford',
-  'Haval',
-  'Honda',
-  'Hyundai',
-  'Jeep',
-  'Kia',
-  'Mazda',
-  'Mercedes',
-  'Mg',
-  'Mini',
-  'Mitsubishi',
-  'Nissan',
-  'Opel',
-  'Peugeot',
-  'Porsche',
-  'Range',
-  'Renault',
-  'Ssangyong',
-  'Seat',
-  'Skoda',
-  'Suzuki',
-  'Toyota',
-  'Volkswagen',
-  'Volvo',
-  'Jetour',
-  'Geely',
-  'Isuzu',
-  'Mahindra',
-  'Tata',
-  'Lada',
-] as const
 
-function parseMarqueModele(fullModele: string): { marque: string; modele: string } {
+function parseMarqueModele(fullModele: string, brandNames: string[]): { marque: string; modele: string } {
   const raw = (fullModele || '').trim()
   if (!raw) return { marque: '', modele: '' }
-  for (const marque of BRAND_OPTIONS) {
+  const sorted = [...brandNames].sort((a, b) => b.length - a.length)
+  for (const marque of sorted) {
     const lower = marque.toLowerCase()
     if (raw.toLowerCase() === lower) return { marque, modele: '' }
     if (raw.toLowerCase().startsWith(`${lower} `)) {
@@ -98,8 +62,14 @@ interface PendingImage {
 
 export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
   const { users } = useUsers()
+  const { getAccessToken } = useAuth()
   const isEdit = !!vehicule
-  const parsedModele = parseMarqueModele(vehicule?.modele ?? '')
+  const [marques, setMarques] = useState<Marque[]>([])
+  const brandNames = useMemo(
+    () => (marques.length ? marques.map(m => m.nom) : [...FALLBACK_BRANDS]),
+    [marques]
+  )
+  const parsedModele = parseMarqueModele(vehicule?.modele ?? '', brandNames)
   const [form, setForm] = useState<VehiculeFormData>({
     modele: parsedModele.modele,
     immatriculation: vehicule?.immatriculation ?? '',
@@ -121,6 +91,30 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([])
   const [imageCategory, setImageCategory] = useState<VehiculeImageCategory>('etat_exterieur')
   const [imageNote, setImageNote] = useState('')
+
+  useEffect(() => {
+    const token = getAccessToken()
+    if (!token) return
+    void fetchMarques(token)
+      .then(list => {
+        setMarques(list)
+        if (vehicule?.modele) {
+          const parsed = parseMarqueModele(
+            vehicule.modele,
+            list.map(m => m.nom)
+          )
+          if (parsed.marque) setSelectedMarque(parsed.marque)
+          if (parsed.modele !== undefined) {
+            setForm(f => ({ ...f, modele: parsed.modele || f.modele }))
+          }
+        }
+      })
+      .catch(() => setMarques([]))
+  }, [getAccessToken, vehicule?.modele])
+
+  const selectedMarqueMeta = marques.find(
+    m => m.nom.toLowerCase() === selectedMarque.toLowerCase()
+  )
 
   const responsables = getActiveEquipeUsers(users)
   const techniciens = responsables
@@ -269,18 +263,27 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-1.5">
             <label className="block text-xs sm:text-sm font-medium text-gray-700">Marque</label>
-            <select
-              value={selectedMarque}
-              onChange={e => setSelectedMarque(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm bg-white"
-            >
-              <option value="">Sélectionner une marque</option>
-              {BRAND_OPTIONS.map(m => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2">
+              {selectedMarqueMeta?.logoUrl ? (
+                <img
+                  src={marqueLogoUrl(selectedMarqueMeta.logoUrl)}
+                  alt=""
+                  className="w-10 h-10 rounded-lg object-contain bg-gray-50 border border-gray-200 flex-shrink-0 p-0.5"
+                />
+              ) : null}
+              <select
+                value={selectedMarque}
+                onChange={e => setSelectedMarque(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm bg-white"
+              >
+                <option value="">Sélectionner une marque</option>
+                {brandNames.map(m => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <Input id="modele" label="Modèle" value={form.modele} required
             onChange={e => update('modele', e.target.value)} placeholder="Ex: Passat, 308, GSXF 750..."

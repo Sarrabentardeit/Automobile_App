@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useVehiculesContext } from '@/contexts/VehiculesContext'
 import { useUsers } from '@/contexts/UsersContext'
 import { useToast } from '@/contexts/ToastContext'
-import { apiFetch } from '@/lib/api'
+import { apiFetch, resolveUploadUrl } from '@/lib/api'
 import { downloadVehiculesCsv } from '@/lib/exportVehiculesCsv'
 import type { VehiculeType, Vehicule, ServiceType } from '@/types'
 import type { VehiculesFilters } from '@/hooks/useVehicules'
@@ -403,7 +403,15 @@ export default function VehiculesArchivesPage() {
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <Folder className="w-5 h-5 text-orange-500 flex-shrink-0" />
+                    {folder.logoUrl ? (
+                      <img
+                        src={resolveUploadUrl(folder.logoUrl)}
+                        alt=""
+                        className="w-10 h-10 rounded-lg object-contain bg-gray-50 border border-gray-100 flex-shrink-0 p-0.5"
+                      />
+                    ) : (
+                      <Folder className="w-5 h-5 text-orange-500 flex-shrink-0" />
+                    )}
                     <h3 className="font-bold text-gray-900 truncate">{folder.name}</h3>
                   </div>
                   <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">

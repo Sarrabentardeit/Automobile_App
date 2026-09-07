@@ -147,7 +147,7 @@ async function assertParticipant(conversationId: number, userId: number) {
 const conversationInclude = {
   participants: {
     include: {
-      user: { select: { id: true, fullName: true, email: true, role: true } },
+      user: { select: { id: true, fullName: true, email: true, role: true, avatarUrl: true } },
     },
   },
   messages: {
@@ -175,7 +175,13 @@ function serializeConversation(
     participants: Array<{
       userId: number
       lastReadAt: Date | null
-      user: { id: number; fullName: string; email: string; role: string }
+      user: {
+        id: number
+        fullName: string
+        email: string
+        role: string
+        avatarUrl?: string | null
+      }
     }>
     messages: Array<{
       id: number
@@ -229,6 +235,7 @@ function serializeConversation(
       userId: p.userId,
       nom: userLabel(p.user),
       role: p.user.role,
+      avatarUrl: p.user.avatarUrl ?? null,
       lastReadAt: p.lastReadAt?.toISOString() ?? null,
     })),
     lastMessage: last
@@ -306,17 +313,32 @@ router.get('/members', authenticate(), async (req: AuthRequest, res) => {
     const me = req.user!.sub
     const users = await db.user.findMany({
       where: { id: { not: me } },
-      select: { id: true, fullName: true, email: true, role: true, statut: true },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        role: true,
+        statut: true,
+        avatarUrl: true,
+      },
       orderBy: [{ statut: 'asc' }, { fullName: 'asc' }],
     })
     return res.json({
       data: users.map(
-        (u: { id: number; fullName: string; email: string; role: string; statut: string }) => ({
+        (u: {
+          id: number
+          fullName: string
+          email: string
+          role: string
+          statut: string
+          avatarUrl?: string | null
+        }) => ({
           id: u.id,
           nom: userLabel(u),
           role: u.role,
           email: u.email,
           statut: u.statut === 'inactif' ? 'inactif' : 'actif',
+          avatarUrl: u.avatarUrl ?? null,
         })
       ),
     })

@@ -18,6 +18,7 @@ export type BrandFolder = {
   name: string
   slug: string
   count: number
+  logoUrl?: string | null
 }
 
 export type BrandFoldersResponse = {

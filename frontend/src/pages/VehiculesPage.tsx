@@ -7,7 +7,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { useNotifications } from '@/contexts/NotificationsContext'
 import { ETAT_CONFIG, type EtatVehicule, type VehiculeType, type Vehicule, type ServiceType } from '@/types'
 import type { VehiculesFilters } from '@/hooks/useVehicules'
-import { apiFetch } from '@/lib/api'
+import { apiFetch, resolveUploadUrl } from '@/lib/api'
 import { BRAND_FOLDER_PAGE_SIZE, type BrandFolder } from '@/lib/vehiculeBrands'
 import VehiculeCard from '@/components/vehicules/VehiculeCard'
 import VehiculeForm from '@/components/vehicules/VehiculeForm'
@@ -485,7 +485,15 @@ export default function VehiculesPage() {
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <Folder className="w-5 h-5 text-orange-500 flex-shrink-0" />
+                    {folder.logoUrl ? (
+                      <img
+                        src={resolveUploadUrl(folder.logoUrl)}
+                        alt=""
+                        className="w-10 h-10 rounded-lg object-contain bg-gray-50 border border-gray-100 flex-shrink-0 p-0.5"
+                      />
+                    ) : (
+                      <Folder className="w-5 h-5 text-orange-500 flex-shrink-0" />
+                    )}
                     <h3 className="font-bold text-gray-900 truncate">{folder.name}</h3>
                   </div>
                   <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">

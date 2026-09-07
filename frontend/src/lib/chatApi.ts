@@ -6,6 +6,7 @@ export type ChatMember = {
   role: string
   email: string
   statut?: 'actif' | 'inactif'
+  avatarUrl?: string | null
 }
 
 export type ChatAttachment = {
@@ -43,6 +44,7 @@ export type ChatConversation = {
     userId: number
     nom: string
     role: string
+    avatarUrl?: string | null
     lastReadAt: string | null
   }>
   lastMessage: {
@@ -184,6 +186,16 @@ export function getMessageReadReceipt(
   const when = new Date(Math.max(...times))
   const hhmm = when.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
   return { status: 'read', label: `Lu · ${hhmm}` }
+}
+
+/** Photo du correspondant en conversation privée. */
+export function dmPeerAvatar(
+  conversation: ChatConversation | null | undefined,
+  myUserId?: number
+): string | null {
+  if (!conversation || conversation.type !== 'direct' || !myUserId) return null
+  const other = conversation.participants.find(p => p.userId !== myUserId)
+  return other?.avatarUrl ?? null
 }
 
 export function applyParticipantRead(

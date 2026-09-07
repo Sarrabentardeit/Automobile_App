@@ -44,6 +44,7 @@ function mapApiUser(raw: {
   role: string
   permissions?: unknown
   statut: string
+  avatarUrl?: string | null
   date_creation: string
   derniere_connexion?: string | null
 }): User {
@@ -55,6 +56,7 @@ function mapApiUser(raw: {
     role: ['admin', 'responsable', 'technicien', 'financier'].includes(raw.role) ? (raw.role as User['role']) : 'technicien',
     permissions: mergePermissions(raw.role, raw.permissions),
     statut: raw.statut === 'inactif' ? 'inactif' : 'actif',
+    avatarUrl: raw.avatarUrl ?? null,
     date_creation: raw.date_creation,
     derniere_connexion: raw.derniere_connexion ?? null,
   }

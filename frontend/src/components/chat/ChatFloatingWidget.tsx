@@ -26,6 +26,7 @@ import {
   markChatRead,
   openDirectChat,
   sendChatMessage,
+  dmPeerAvatar,
   type ChatConversation,
   type ChatMember,
   type ChatMessage,
@@ -34,6 +35,7 @@ import { downloadUploadFile, resolveUploadUrl } from '@/lib/api'
 import { playMessageSound } from '@/lib/appSounds'
 import { isRealtimeConnected } from '@/lib/realtimeClient'
 import { cn } from '@/lib/utils'
+import UserAvatar from '@/components/ui/UserAvatar'
 
 function formatTime(iso: string) {
   const d = new Date(iso)
@@ -46,12 +48,6 @@ function formatTime(iso: string) {
     return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
   }
   return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
-}
-
-function initials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length >= 2) return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
-  return name.slice(0, 2).toUpperCase()
 }
 
 type ComposeMode = null | 'dm' | 'group'
@@ -424,9 +420,12 @@ export default function ChatFloatingWidget() {
                       onClick={() => void handleOpenDm(m.id)}
                       className="w-full flex items-center gap-2 px-3 py-2 hover:bg-orange-50 text-left"
                     >
-                      <span className="w-7 h-7 rounded-full bg-slate-800 text-white text-[10px] font-bold flex items-center justify-center">
-                        {initials(m.nom)}
-                      </span>
+                      <UserAvatar
+                        name={m.nom}
+                        avatarUrl={m.avatarUrl}
+                        size="sm"
+                        fallbackClassName="bg-slate-800 text-white"
+                      />
                       <span className="text-xs font-semibold truncate">{m.nom}</span>
                     </button>
                   ))}
@@ -497,7 +496,7 @@ export default function ChatFloatingWidget() {
                     >
                       <span
                         className={cn(
-                          'w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-[11px] font-bold',
+                          'w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-[11px] font-bold overflow-hidden',
                           c.type === 'group'
                             ? 'bg-slate-800 text-orange-300'
                             : 'bg-orange-100 text-orange-800'
@@ -506,7 +505,14 @@ export default function ChatFloatingWidget() {
                         {c.type === 'group' ? (
                           <Users className="w-3.5 h-3.5" />
                         ) : (
-                          initials(c.title)
+                          <UserAvatar
+                            name={c.title}
+                            avatarUrl={dmPeerAvatar(c, user?.id)}
+                            size="sm"
+                            rounded="xl"
+                            className="w-9 h-9"
+                            fallbackClassName="bg-orange-100 text-orange-800"
+                          />
                         )}
                       </span>
                       <span className="min-w-0 flex-1">

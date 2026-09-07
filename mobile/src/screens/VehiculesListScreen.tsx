@@ -23,6 +23,7 @@ import {
   changeEtat,
   deleteVehicule,
   fetchUsers,
+  mediaUrl,
   type AppUser,
 } from '../lib/vehiculeApi'
 import {
@@ -84,7 +85,11 @@ function BrandFolderCard({
     >
       <View style={styles.brandCardTop}>
         <View style={styles.brandCardTitleRow}>
-          <Ionicons name="folder-open" size={20} color="#f97316" />
+          {folder.logoUrl ? (
+            <Image source={{ uri: mediaUrl(folder.logoUrl) }} style={styles.brandLogo} />
+          ) : (
+            <Ionicons name="folder-open" size={20} color="#f97316" />
+          )}
           <Text style={styles.brandCardName} numberOfLines={1}>
             {folder.name}
           </Text>
@@ -1459,6 +1464,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     minWidth: 0,
+  },
+  brandLogo: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: '#f9fafb',
   },
   brandCardName: { flex: 1, fontSize: 16, fontWeight: '800', color: '#111827' },
   brandCountBadge: {

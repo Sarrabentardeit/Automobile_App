@@ -55,6 +55,7 @@ import ChecklistsHistoryPage from '@/pages/ChecklistsHistoryPage'
 import ChecklistTemplatesPage from '@/pages/ChecklistTemplatesPage'
 import DocumentsPage from '@/pages/DocumentsPage'
 import NotesPersonnellesPage from '@/pages/NotesPersonnellesPage'
+import MarquesPage from '@/pages/MarquesPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 
 export default function App() {
@@ -99,6 +100,7 @@ export default function App() {
               <Route path="/vehicules/archives" element={<VehiculesArchivesPage />} />
               <Route path="/vehicules/archives/marque/:brand" element={<VehiculesArchivesPage />} />
               <Route path="/vehicules/:id" element={<VehiculeDetailPage />} />
+              <Route path="/marques" element={<MarquesPage />} />
               <Route path="/utilisateurs" element={<UtilisateursPage />} />
               <Route path="/caisse" element={<CaissePage />} />
               <Route path="/equipe/membres" element={<EquipeMembresPage />} />

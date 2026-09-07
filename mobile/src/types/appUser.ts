@@ -10,6 +10,7 @@ export type AppAccount = {
   role: Role
   permissions: Permissions
   statut: UserStatut
+  avatarUrl?: string | null
   date_creation: string
   derniere_connexion: string | null
 }

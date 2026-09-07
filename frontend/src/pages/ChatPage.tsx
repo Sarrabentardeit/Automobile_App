@@ -38,12 +38,14 @@ import {
   pinChatMessage,
   sendChatMessage,
   unpinChatMessage,
+  dmPeerAvatar,
   type ChatAttachmentInput,
   type ChatConversation,
   type ChatMember,
   type ChatMessage,
 } from '@/lib/chatApi'
 import { cn } from '@/lib/utils'
+import UserAvatar from '@/components/ui/UserAvatar'
 
 function formatTime(iso: string) {
   const d = new Date(iso)
@@ -68,12 +70,6 @@ function formatDayLabel(iso: string) {
   if (same(d, today)) return "Aujourd'hui"
   if (same(d, yesterday)) return 'Hier'
   return d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
-}
-
-function initials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length >= 2) return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
-  return name.slice(0, 2).toUpperCase()
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -600,9 +596,13 @@ export default function ChatPage() {
                     onClick={() => void handleOpenDm(m.id)}
                     className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-orange-50 text-left"
                   >
-                    <span className="w-8 h-8 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center">
-                      {initials(m.nom)}
-                    </span>
+                    <UserAvatar
+                      name={m.nom}
+                      avatarUrl={m.avatarUrl}
+                      size="sm"
+                      className="w-8 h-8 text-xs"
+                      fallbackClassName="bg-slate-800 text-white"
+                    />
                     <span className="min-w-0">
                       <span className="block text-sm font-semibold text-gray-900 truncate">{m.nom}</span>
                       <span className="block text-[11px] text-gray-500 truncate">
@@ -690,7 +690,7 @@ export default function ChatPage() {
                   >
                     <span
                       className={cn(
-                        'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0',
+                        'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden',
                         c.type === 'group'
                           ? 'bg-slate-800 text-orange-300'
                           : 'bg-orange-100 text-orange-700'
@@ -699,7 +699,14 @@ export default function ChatPage() {
                       {c.type === 'group' ? (
                         <Users className="w-4 h-4" />
                       ) : (
-                        <span className="text-xs font-bold">{initials(c.title)}</span>
+                        <UserAvatar
+                          name={c.title}
+                          avatarUrl={dmPeerAvatar(c, user?.id)}
+                          size="md"
+                          rounded="xl"
+                          className="w-10 h-10"
+                          fallbackClassName="bg-orange-100 text-orange-700"
+                        />
                       )}
                     </span>
                     <span className="min-w-0 flex-1">
@@ -742,7 +749,7 @@ export default function ChatPage() {
               <header className="px-4 py-3 border-b border-gray-100 flex items-center gap-3 bg-white">
                 <span
                   className={cn(
-                    'w-10 h-10 rounded-xl flex items-center justify-center',
+                    'w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden',
                     selected.type === 'group'
                       ? 'bg-slate-800 text-orange-300'
                       : 'bg-orange-100 text-orange-800 text-xs font-bold'
@@ -751,7 +758,14 @@ export default function ChatPage() {
                   {selected.type === 'group' ? (
                     <Users className="w-4 h-4" />
                   ) : (
-                    initials(selected.title)
+                    <UserAvatar
+                      name={selected.title}
+                      avatarUrl={dmPeerAvatar(selected, user?.id)}
+                      size="md"
+                      rounded="xl"
+                      className="w-10 h-10"
+                      fallbackClassName="bg-orange-100 text-orange-800"
+                    />
                   )}
                 </span>
                 <div className="min-w-0 flex-1">
