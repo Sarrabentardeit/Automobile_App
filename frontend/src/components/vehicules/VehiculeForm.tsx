@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
   Vehicule,
   VehiculeFormData,
@@ -14,7 +14,7 @@ import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Textarea from '@/components/ui/Textarea'
 import Button from '@/components/ui/Button'
-import { Save, Car, Bike, Camera, ImagePlus, X, Crown } from 'lucide-react'
+import { Save, Car, Bike, Camera, ImagePlus, X, Crown, ChevronDown, Tag } from 'lucide-react'
 import { cn, getActiveEquipeUsers } from '@/lib/utils'
 import { BRAND_OPTIONS as FALLBACK_BRANDS } from '@/lib/vehiculeBrands'
 import { fetchMarques, marqueLogoUrl, type Marque } from '@/lib/marquesApi'
@@ -87,6 +87,8 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
     vip: vehicule?.vip ?? false,
   })
   const [selectedMarque, setSelectedMarque] = useState<string>(parsedModele.marque)
+  const [marquePickerOpen, setMarquePickerOpen] = useState(false)
+  const marquePickerRef = useRef<HTMLDivElement>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([])
   const [imageCategory, setImageCategory] = useState<VehiculeImageCategory>('etat_exterieur')
@@ -112,9 +114,26 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
       .catch(() => setMarques([]))
   }, [getAccessToken, vehicule?.modele])
 
+  useEffect(() => {
+    if (!marquePickerOpen) return
+    const onDoc = (e: MouseEvent) => {
+      if (!marquePickerRef.current?.contains(e.target as Node)) {
+        setMarquePickerOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [marquePickerOpen])
+
   const selectedMarqueMeta = marques.find(
     m => m.nom.toLowerCase() === selectedMarque.toLowerCase()
   )
+
+  const marqueLogoByName = useMemo(() => {
+    const map = new Map<string, string | null>()
+    for (const m of marques) map.set(m.nom.toLowerCase(), m.logoUrl ?? null)
+    return map
+  }, [marques])
 
   const responsables = getActiveEquipeUsers(users)
   const techniciens = responsables
@@ -261,28 +280,90 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
 
         {/* Main info */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="space-y-1.5">
+          <div className="space-y-1.5" ref={marquePickerRef}>
             <label className="block text-xs sm:text-sm font-medium text-gray-700">Marque</label>
-            <div className="flex items-center gap-2">
-              {selectedMarqueMeta?.logoUrl ? (
-                <img
-                  src={marqueLogoUrl(selectedMarqueMeta.logoUrl)}
-                  alt=""
-                  className="w-10 h-10 rounded-lg object-contain bg-gray-50 border border-gray-200 flex-shrink-0 p-0.5"
-                />
-              ) : null}
-              <select
-                value={selectedMarque}
-                onChange={e => setSelectedMarque(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm bg-white"
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setMarquePickerOpen(o => !o)}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-left text-sm hover:border-gray-300 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
               >
-                <option value="">Sélectionner une marque</option>
-                {brandNames.map(m => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
+                {selectedMarqueMeta?.logoUrl ? (
+                  <img
+                    src={marqueLogoUrl(selectedMarqueMeta.logoUrl)}
+                    alt=""
+                    className="w-8 h-8 rounded-lg object-contain bg-gray-50 border border-gray-100 flex-shrink-0 p-0.5"
+                  />
+                ) : selectedMarque ? (
+                  <span className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center flex-shrink-0">
+                    <Tag className="w-3.5 h-3.5 text-orange-400" />
+                  </span>
+                ) : null}
+                <span
+                  className={cn(
+                    'flex-1 truncate',
+                    selectedMarque ? 'text-gray-900' : 'text-gray-400'
+                  )}
+                >
+                  {selectedMarque || 'Sélectionner une marque'}
+                </span>
+                <ChevronDown
+                  className={cn(
+                    'w-4 h-4 text-gray-400 flex-shrink-0 transition-transform',
+                    marquePickerOpen && 'rotate-180'
+                  )}
+                />
+              </button>
+
+              {marquePickerOpen ? (
+                <div className="absolute z-30 mt-1.5 w-full max-h-64 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedMarque('')
+                      setMarquePickerOpen(false)
+                    }}
+                    className={cn(
+                      'w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left hover:bg-orange-50',
+                      !selectedMarque && 'bg-orange-50 text-orange-700 font-semibold'
+                    )}
+                  >
+                    <span className="w-8 h-8" />
+                    Sélectionner une marque
+                  </button>
+                  {brandNames.map(name => {
+                    const logo = marqueLogoByName.get(name.toLowerCase())
+                    const active = selectedMarque === name
+                    return (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => {
+                          setSelectedMarque(name)
+                          setMarquePickerOpen(false)
+                        }}
+                        className={cn(
+                          'w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-orange-50 border-t border-gray-50',
+                          active && 'bg-orange-50 text-orange-700 font-semibold'
+                        )}
+                      >
+                        {logo ? (
+                          <img
+                            src={marqueLogoUrl(logo)}
+                            alt=""
+                            className="w-8 h-8 rounded-lg object-contain bg-gray-50 border border-gray-100 flex-shrink-0 p-0.5"
+                          />
+                        ) : (
+                          <span className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center flex-shrink-0">
+                            <Tag className="w-3.5 h-3.5 text-gray-300" />
+                          </span>
+                        )}
+                        <span className="truncate">{name}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : null}
             </div>
           </div>
           <Input id="modele" label="Modèle" value={form.modele} required
