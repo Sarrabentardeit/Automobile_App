@@ -488,15 +488,17 @@ export default function DashboardInsights({
 
       {showAlerts ? (
         <section className="rounded-2xl border border-gray-200/80 bg-white shadow-sm overflow-hidden">
-          <div className="px-4 sm:px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="text-sm font-bold text-gray-900">Alertes</h2>
-            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-              {data?.alerts?.length ?? 0} active{(data?.alerts?.length ?? 0) > 1 ? 's' : ''}
-            </span>
+          <div className="px-4 sm:px-5 py-3.5 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white">
+            <div>
+              <h2 className="text-sm sm:text-base font-bold text-gray-900">Alertes</h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {data?.alerts?.length ?? 0} active{(data?.alerts?.length ?? 0) > 1 ? 's' : ''}
+              </p>
+            </div>
           </div>
-          <div className="divide-y divide-gray-50">
+          <div className="divide-y divide-gray-100">
             {loading && !data ? (
-              <p className="px-4 py-6 text-sm text-gray-400 text-center">…</p>
+              <p className="px-4 py-6 text-sm text-gray-400 text-center">Chargement…</p>
             ) : (data?.alerts.length ?? 0) === 0 ? (
               <p className="px-4 py-6 text-sm text-emerald-600 text-center font-medium">
                 Aucune alerte
@@ -509,11 +511,11 @@ export default function DashboardInsights({
                     key={a.id}
                     type="button"
                     onClick={() => navigate(a.href)}
-                    className="w-full px-4 sm:px-5 py-3 flex items-center gap-3 hover:bg-slate-50/80 text-left transition-colors"
+                    className="w-full px-4 sm:px-5 py-3.5 flex items-start gap-3 hover:bg-slate-50/80 text-left transition-colors"
                   >
                     <span
                       className={cn(
-                        'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0',
+                        'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5',
                         a.severity === 'high'
                           ? 'bg-rose-50 text-rose-600'
                           : a.type === 'stock'
@@ -524,13 +526,15 @@ export default function DashboardInsights({
                       <Icon className="w-4 h-4" />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-semibold text-gray-900 truncate">
+                      <span className="block text-sm font-semibold text-gray-900 leading-snug">
                         {a.title}
                       </span>
-                      <span className="block text-xs text-gray-500 truncate">{a.subtitle}</span>
+                      <span className="block text-xs sm:text-sm text-gray-500 mt-1 leading-relaxed whitespace-normal">
+                        {a.subtitle}
+                      </span>
                     </span>
                     {a.count != null ? (
-                      <span className="text-sm font-extrabold text-gray-900 tabular-nums">
+                      <span className="text-base font-extrabold text-gray-900 tabular-nums flex-shrink-0">
                         {a.count}
                       </span>
                     ) : null}

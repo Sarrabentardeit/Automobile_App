@@ -283,15 +283,15 @@ export default function DashboardTodayStrip() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
-                    <p className="text-lg sm:text-xl font-extrabold text-gray-900 tabular-nums leading-none">
+                    <p className="text-xl sm:text-2xl font-extrabold text-gray-900 tabular-nums leading-none">
                       {t.value == null ? '—' : t.value}
                     </p>
                     {t.alert ? (
-                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500 flex-shrink-0" />
+                      <span className="w-2 h-2 rounded-full bg-orange-500 flex-shrink-0" />
                     ) : null}
                   </div>
-                  <p className="text-[11px] font-semibold text-gray-700 mt-0.5">{t.label}</p>
-                  <p className="text-[10px] text-gray-400 truncate">{t.hint}</p>
+                  <p className="text-xs sm:text-sm font-semibold text-gray-800 mt-1">{t.label}</p>
+                  <p className="text-[11px] sm:text-xs text-gray-500 truncate">{t.hint}</p>
                 </div>
               </div>
             </button>

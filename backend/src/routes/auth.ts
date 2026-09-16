@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
+import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import { prisma } from '../lib/prisma'
 import { env } from '../config/env'
@@ -11,10 +12,27 @@ const ACCESS_TOKEN_TTL_SECONDS = 60 * 60 // 1h
 const REFRESH_TOKEN_TTL_DAYS = 30
 
 function createTokens(user: { id: number; email: string; role: string; fullName?: string }) {
-  const payload: AuthPayload = { sub: user.id, email: user.email, role: user.role, fullName: user.fullName }
+  // jti unique → évite collision JWT identiques (même seconde / double refresh)
+  const payload: AuthPayload & { jti: string } = {
+    sub: user.id,
+    email: user.email,
+    role: user.role,
+    fullName: user.fullName,
+    jti: crypto.randomUUID(),
+  }
   const accessToken = jwt.sign(payload, env.JWT_ACCESS_SECRET, { expiresIn: ACCESS_TOKEN_TTL_SECONDS })
-  const refreshToken = jwt.sign(payload, env.JWT_REFRESH_SECRET, { expiresIn: `${REFRESH_TOKEN_TTL_DAYS}d` })
+  const refreshToken = jwt.sign(payload, env.JWT_REFRESH_SECRET, {
+    expiresIn: `${REFRESH_TOKEN_TTL_DAYS}d`,
+  })
   return { accessToken, refreshToken }
+}
+
+async function storeRefreshToken(userId: number, token: string) {
+  const expiresAt = new Date()
+  expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_TTL_DAYS)
+  await prisma.refreshToken.create({
+    data: { token, userId, expiresAt },
+  })
 }
 
 router.post('/register', async (req, res) => {
@@ -44,16 +62,7 @@ router.post('/register', async (req, res) => {
     })
 
     const { accessToken, refreshToken } = createTokens({ ...user, fullName: user.fullName })
-
-    const expiresAt = new Date()
-    expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_TTL_DAYS)
-    await prisma.refreshToken.create({
-      data: {
-        token: refreshToken,
-        userId: user.id,
-        expiresAt
-      }
-    })
+    await storeRefreshToken(user.id, refreshToken)
 
     const perms = ((user as any).permissions as object) ?? {}
     return res.status(201).json({
@@ -93,15 +102,7 @@ router.post('/login', async (req, res) => {
     }
 
     const { accessToken, refreshToken } = createTokens({ ...user, fullName: user.fullName })
-    const expiresAt = new Date()
-    expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_TTL_DAYS)
-    await prisma.refreshToken.create({
-      data: {
-        token: refreshToken,
-        userId: user.id,
-        expiresAt
-      }
-    })
+    await storeRefreshToken(user.id, refreshToken)
 
     const perms = ((user as any).permissions as object) ?? {}
     return res.json({
@@ -144,17 +145,25 @@ router.post('/refresh', async (req, res) => {
     const tokens = createTokens({ ...user, fullName: user.fullName })
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_TTL_DAYS)
-    await prisma.$transaction([
-      prisma.refreshToken.deleteMany({ where: { token: refreshToken } }),
-      prisma.refreshToken.create({
+
+    // Rotation atomique : si un autre refresh a déjà consommé le token → count=0
+    const rotated = await prisma.$transaction(async tx => {
+      const deleted = await tx.refreshToken.deleteMany({ where: { token: refreshToken } })
+      if (deleted.count === 0) return null
+      await tx.refreshToken.create({
         data: {
           token: tokens.refreshToken,
           userId: user.id,
           expiresAt,
         },
-      }),
-    ])
-    return res.json(tokens)
+      })
+      return tokens
+    })
+
+    if (!rotated) {
+      return res.status(401).json({ error: 'Invalid or expired refresh token' })
+    }
+    return res.json(rotated)
   } catch (err) {
     console.error(err)
     return res.status(401).json({ error: 'Invalid or expired refresh token' })

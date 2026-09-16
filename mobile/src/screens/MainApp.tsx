@@ -290,8 +290,8 @@ export default function MainApp({
           <MarquesScreen
             accessToken={accessToken}
             canManage={
-              !!permissions.canEditVehicule ||
-              !!permissions.canManageUsers ||
+              !!permissions?.canEditVehicule ||
+              !!permissions?.canManageUsers ||
               mapRole(user.role) === 'admin' ||
               mapRole(user.role) === 'responsable'
             }

@@ -15,10 +15,13 @@ export function marqueLogoUri(logoUrl?: string | null): string | null {
 }
 
 export function fetchMarques(token: string, opts?: { all?: boolean }): Promise<Marque[]> {
-  return apiFetch<{ data: Marque[] }>('/marques', {
+  return apiFetch<{ data?: Marque[] } | Marque[]>('/marques', {
     token,
     params: opts?.all ? { all: '1' } : undefined,
-  }).then((r) => r.data ?? [])
+  }).then((r) => {
+    if (Array.isArray(r)) return r
+    return Array.isArray(r?.data) ? r.data : []
+  })
 }
 
 export function createMarque(

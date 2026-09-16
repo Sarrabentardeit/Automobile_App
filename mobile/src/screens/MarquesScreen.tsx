@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   Image,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -13,7 +13,6 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
-import * as FileSystem from 'expo-file-system/legacy'
 import CenteredBlurModal from '../components/ui/CenteredBlurModal'
 import {
   createMarque,
@@ -34,6 +33,17 @@ type Props = {
   refreshKey?: number
 }
 
+function asMarqueList(value: unknown): Marque[] {
+  if (!Array.isArray(value)) return []
+  return value.filter(
+    (m): m is Marque =>
+      !!m &&
+      typeof m === 'object' &&
+      typeof (m as Marque).id === 'number' &&
+      typeof (m as Marque).nom === 'string'
+  )
+}
+
 export default function MarquesScreen({ accessToken, canManage = false, refreshKey = 0 }: Props) {
   const [marques, setMarques] = useState<Marque[]>([])
   const [loading, setLoading] = useState(true)
@@ -47,6 +57,7 @@ export default function MarquesScreen({ accessToken, canManage = false, refreshK
   const [previewUri, setPreviewUri] = useState<string | null>(null)
   const [removeLogo, setRemoveLogo] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const { cardMaxHeight, footerPaddingBottom } = getModalLayout({
     maxCard: 520,
@@ -54,14 +65,18 @@ export default function MarquesScreen({ accessToken, canManage = false, refreshK
   })
 
   const load = useCallback(async () => {
-    const list = await fetchMarques(accessToken, { all: true })
+    const list = asMarqueList(await fetchMarques(accessToken, { all: true }))
     setMarques(list)
+    setLoadError(null)
   }, [accessToken])
 
   useEffect(() => {
     setLoading(true)
     void load()
-      .catch(() => setMarques([]))
+      .catch((e) => {
+        setMarques([])
+        setLoadError(e instanceof Error ? e.message : 'Chargement impossible')
+      })
       .finally(() => setLoading(false))
   }, [load, refreshKey])
 
@@ -104,26 +119,25 @@ export default function MarquesScreen({ accessToken, canManage = false, refreshK
   }
 
   const pickLogo = async () => {
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.85,
-      base64: true,
-    })
-    if (res.canceled || !res.assets[0]) return
-    const asset = res.assets[0]
-    let dataUrl = asset.base64
-      ? `data:${asset.mimeType ?? 'image/jpeg'};base64,${asset.base64}`
-      : null
-    if (!dataUrl && asset.uri) {
-      const b64 = await FileSystem.readAsStringAsync(asset.uri, {
-        encoding: FileSystem.EncodingType.Base64,
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.85,
+        base64: true,
       })
-      dataUrl = `data:image/jpeg;base64,${b64}`
+      if (res.canceled || !res.assets[0]) return
+      const asset = res.assets[0]
+      if (!asset.base64) {
+        Alert.alert('Erreur', 'Impossible de lire l’image')
+        return
+      }
+      const dataUrl = `data:${asset.mimeType ?? 'image/jpeg'};base64,${asset.base64}`
+      setLogoDataUrl(dataUrl)
+      setPreviewUri(asset.uri)
+      setRemoveLogo(false)
+    } catch (e) {
+      Alert.alert('Erreur', e instanceof Error ? e.message : 'Sélection impossible')
     }
-    if (!dataUrl) return
-    setLogoDataUrl(dataUrl)
-    setPreviewUri(asset.uri)
-    setRemoveLogo(false)
   }
 
   const save = async () => {
@@ -152,6 +166,15 @@ export default function MarquesScreen({ accessToken, canManage = false, refreshK
     } finally {
       setSaving(false)
     }
+  }
+
+  const onRefresh = () => {
+    setRefreshing(true)
+    void load()
+      .catch((e) => {
+        setLoadError(e instanceof Error ? e.message : 'Chargement impossible')
+      })
+      .finally(() => setRefreshing(false))
   }
 
   return (
@@ -185,92 +208,83 @@ export default function MarquesScreen({ accessToken, canManage = false, refreshK
       {loading ? (
         <ActivityIndicator color={theme.primary} style={{ marginTop: 40 }} />
       ) : (
-        <FlatList
-          data={pageItems}
-          keyExtractor={(item) => String(item.id)}
-          numColumns={2}
-          columnWrapperStyle={{ gap: 10 }}
-          contentContainerStyle={{ padding: 12, gap: 10, paddingBottom: 40 }}
+        <ScrollView
+          contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => {
-                setRefreshing(true)
-                void load().finally(() => setRefreshing(false))
-              }}
+              onRefresh={onRefresh}
               tintColor={theme.primary}
+              colors={[theme.primary]}
             />
           }
-          ListEmptyComponent={
+        >
+          {loadError ? (
+            <View style={styles.emptyWrap}>
+              <Text style={styles.empty}>{loadError}</Text>
+              <Pressable style={styles.retryBtn} onPress={onRefresh}>
+                <Text style={styles.retryText}>Réessayer</Text>
+              </Pressable>
+            </View>
+          ) : pageItems.length === 0 ? (
             <Text style={styles.empty}>Aucune marque</Text>
-          }
-          ListFooterComponent={
-            filtered.length > 0 && totalPages > 1 ? (
-              <View style={styles.pagination}>
-                <Text style={styles.paginationLabel}>
-                  Page {page} / {totalPages} ({filtered.length})
-                </Text>
-                <View style={styles.paginationBtns}>
+          ) : (
+            <View style={styles.grid}>
+              {pageItems.map((item) => {
+                const logoUri = marqueLogoUri(item.logoUrl)
+                return (
                   <Pressable
-                    style={[styles.pageBtn, page <= 1 && styles.pageBtnDisabled]}
-                    disabled={page <= 1}
-                    onPress={() => setPage((p) => Math.max(1, p - 1))}
+                    key={item.id}
+                    style={[styles.card, !item.actif && styles.cardInactive]}
+                    onPress={() => {
+                      if (canManage) openEdit(item)
+                    }}
                   >
-                    <Ionicons name="chevron-back" size={20} color="#374151" />
-                  </Pressable>
-                  <Pressable
-                    style={[
-                      styles.pageBtn,
-                      page >= totalPages && styles.pageBtnDisabled,
-                    ]}
-                    disabled={page >= totalPages}
-                    onPress={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  >
-                    <Ionicons name="chevron-forward" size={20} color="#374151" />
-                  </Pressable>
-                </View>
-              </View>
-            ) : null
-          }
-          renderItem={({ item }) => (
-            <Pressable
-              style={[styles.card, !item.actif && styles.cardInactive]}
-              onPress={() => (canManage ? openEdit(item) : undefined)}
-            >
-              <View style={styles.logoBox}>
-                {item.logoUrl ? (
-                  <Image
-                    source={{ uri: marqueLogoUri(item.logoUrl)! }}
-                    style={styles.logoImg}
-                  />
-                ) : (
-                  <Ionicons name="pricetag-outline" size={28} color="#fdba74" />
-                )}
-              </View>
-              <Text style={styles.cardName} numberOfLines={1}>
-                {item.nom}
-              </Text>
-              {!item.actif ? (
-                <Text style={styles.inactive}>Inactive</Text>
-              ) : null}
-              {canManage ? (
-                <View style={styles.cardActions}>
-                  <Pressable
-                    onPress={() => openEdit(item)}
-                    style={styles.miniBtn}
-                  >
-                    <Ionicons name="pencil" size={14} color={theme.textSecondary} />
-                  </Pressable>
-                  {item.actif ? (
-                    <Pressable
-                      onPress={() => {
-                        Alert.alert('Désactiver', `Désactiver « ${item.nom} » ?`, [
-                          { text: 'Annuler', style: 'cancel' },
-                          {
-                            text: 'Désactiver',
-                            style: 'destructive',
-                            onPress: () => {
-                              void deactivateMarque(accessToken, item.id)
+                    <View style={styles.logoBox}>
+                      {logoUri ? (
+                        <Image source={{ uri: logoUri }} style={styles.logoImg} />
+                      ) : (
+                        <Ionicons name="pricetag-outline" size={28} color="#fdba74" />
+                      )}
+                    </View>
+                    <Text style={styles.cardName} numberOfLines={1}>
+                      {item.nom}
+                    </Text>
+                    {!item.actif ? <Text style={styles.inactive}>Inactive</Text> : null}
+                    {canManage ? (
+                      <View style={styles.cardActions}>
+                        <Pressable onPress={() => openEdit(item)} style={styles.miniBtn}>
+                          <Ionicons name="pencil" size={14} color={theme.textSecondary} />
+                        </Pressable>
+                        {item.actif ? (
+                          <Pressable
+                            onPress={() => {
+                              Alert.alert('Désactiver', `Désactiver « ${item.nom} » ?`, [
+                                { text: 'Annuler', style: 'cancel' },
+                                {
+                                  text: 'Désactiver',
+                                  style: 'destructive',
+                                  onPress: () => {
+                                    void deactivateMarque(accessToken, item.id)
+                                      .then(load)
+                                      .catch((e) =>
+                                        Alert.alert(
+                                          'Erreur',
+                                          e instanceof Error ? e.message : 'Erreur'
+                                        )
+                                      )
+                                  },
+                                },
+                              ])
+                            }}
+                            style={styles.miniBtn}
+                          >
+                            <Ionicons name="trash-outline" size={14} color={theme.danger} />
+                          </Pressable>
+                        ) : (
+                          <Pressable
+                            onPress={() => {
+                              void updateMarque(accessToken, item.id, { actif: true })
                                 .then(load)
                                 .catch((e) =>
                                   Alert.alert(
@@ -278,33 +292,44 @@ export default function MarquesScreen({ accessToken, canManage = false, refreshK
                                     e instanceof Error ? e.message : 'Erreur'
                                   )
                                 )
-                            },
-                          },
-                        ])
-                      }}
-                      style={styles.miniBtn}
-                    >
-                      <Ionicons name="trash-outline" size={14} color={theme.danger} />
-                    </Pressable>
-                  ) : (
-                    <Pressable
-                      onPress={() => {
-                        void updateMarque(accessToken, item.id, { actif: true })
-                          .then(load)
-                          .catch((e) =>
-                            Alert.alert('Erreur', e instanceof Error ? e.message : 'Erreur')
-                          )
-                      }}
-                      style={styles.miniBtn}
-                    >
-                      <Ionicons name="refresh" size={14} color={theme.success} />
-                    </Pressable>
-                  )}
-                </View>
-              ) : null}
-            </Pressable>
+                            }}
+                            style={styles.miniBtn}
+                          >
+                            <Ionicons name="refresh" size={14} color={theme.success} />
+                          </Pressable>
+                        )}
+                      </View>
+                    ) : null}
+                  </Pressable>
+                )
+              })}
+            </View>
           )}
-        />
+
+          {filtered.length > 0 && totalPages > 1 ? (
+            <View style={styles.pagination}>
+              <Text style={styles.paginationLabel}>
+                Page {page} / {totalPages} ({filtered.length})
+              </Text>
+              <View style={styles.paginationBtns}>
+                <Pressable
+                  style={[styles.pageBtn, page <= 1 && styles.pageBtnDisabled]}
+                  disabled={page <= 1}
+                  onPress={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  <Ionicons name="chevron-back" size={20} color="#374151" />
+                </Pressable>
+                <Pressable
+                  style={[styles.pageBtn, page >= totalPages && styles.pageBtnDisabled]}
+                  disabled={page >= totalPages}
+                  onPress={() => setPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  <Ionicons name="chevron-forward" size={20} color="#374151" />
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+        </ScrollView>
       )}
 
       <CenteredBlurModal visible={showForm} onClose={() => setShowForm(false)} maxWidth={420}>
@@ -396,12 +421,27 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   searchInput: { flex: 1, fontSize: 15, color: theme.text, padding: 0 },
-  empty: { textAlign: 'center', color: theme.textMuted, marginTop: 40 },
+  listContent: { padding: 12, paddingBottom: 40 },
+  emptyWrap: { alignItems: 'center', marginTop: 40, gap: 12 },
+  empty: { textAlign: 'center', color: theme.textMuted },
+  retryBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: theme.primary,
+  },
+  retryText: { color: '#fff', fontWeight: '700' },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 10,
+  },
   pagination: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 8,
+    marginTop: 14,
     paddingVertical: 8,
     gap: 12,
   },
@@ -419,13 +459,12 @@ const styles = StyleSheet.create({
   },
   pageBtnDisabled: { opacity: 0.35 },
   card: {
-    flex: 1,
+    width: '48.5%',
     backgroundColor: theme.surface,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: theme.border,
     padding: 12,
-    minWidth: '45%',
   },
   cardInactive: { opacity: 0.55 },
   logoBox: {

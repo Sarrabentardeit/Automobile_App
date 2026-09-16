@@ -8,6 +8,34 @@ const STORAGE_ACCESS = 'elmecano_access_token'
 const STORAGE_REFRESH = 'elmecano_refresh_token'
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
 
+/** Un seul refresh en vol : plusieurs 401 parallèles partagent la même promesse. */
+let refreshInFlight: Promise<string | null> | null = null
+
+async function refreshAccessTokenOnce(): Promise<string | null> {
+  if (refreshInFlight) return refreshInFlight
+  refreshInFlight = (async () => {
+    const refreshToken = localStorage.getItem(STORAGE_REFRESH)
+    if (!refreshToken) return null
+    try {
+      const res = await fetch(`${API_BASE}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.accessToken) return null
+      localStorage.setItem(STORAGE_ACCESS, json.accessToken)
+      if (json.refreshToken) localStorage.setItem(STORAGE_REFRESH, json.refreshToken)
+      return json.accessToken as string
+    } catch {
+      return null
+    }
+  })().finally(() => {
+    refreshInFlight = null
+  })
+  return refreshInFlight
+}
+
 interface AuthContextType {
   user: User | null
   permissions: Permissions | null
@@ -211,24 +239,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // useLayoutEffect garantit que le bridge est prêt avant tout useEffect dans les composants enfants
   useLayoutEffect(() => {
     setAuthBridge({
-      refresh: async () => {
-        const refreshToken = localStorage.getItem(STORAGE_REFRESH)
-        if (!refreshToken) return null
-        try {
-          const res = await fetch(`${API_BASE}/auth/refresh`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refreshToken }),
-          })
-          const json = await res.json().catch(() => ({}))
-          if (!res.ok || !json.accessToken) return null
-          localStorage.setItem(STORAGE_ACCESS, json.accessToken)
-          if (json.refreshToken) localStorage.setItem(STORAGE_REFRESH, json.refreshToken)
-          return json.accessToken as string
-        } catch {
-          return null
-        }
-      },
+      refresh: () => refreshAccessTokenOnce(),
       onSessionExpired: () => {
         setUser(null)
         localStorage.removeItem(STORAGE_USER)
