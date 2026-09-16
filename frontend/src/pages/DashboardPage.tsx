@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useVehiculesContext } from '@/contexts/VehiculesContext'
 import { useUsers } from '@/contexts/UsersContext'
 import { ETAT_CONFIG, type EtatVehicule, type Vehicule } from '@/types'
-import Card from '@/components/ui/Card'
 import Modal from '@/components/ui/Modal'
 import DashboardMonthlyStats from '@/components/dashboard/DashboardMonthlyStats'
 import DashboardInsights, {
@@ -12,8 +11,7 @@ import DashboardInsights, {
   DashboardInsightsProvider,
 } from '@/components/dashboard/DashboardInsights'
 import DashboardTodayStrip from '@/components/dashboard/DashboardTodayStrip'
-import { DashboardSection } from '@/components/dashboard/DashboardSection'
-import { AlertTriangle, Clock, Users, ArrowRight, LayoutDashboard } from 'lucide-react'
+import { Users, ArrowRight, ArrowUpRight } from 'lucide-react'
 import { daysSince, getActiveEquipeUsers, cn, stripVehiculeAssigneesMeta } from '@/lib/utils'
 import { formatRelativeDateTime } from '@/lib/formatRelativeDate'
 import { apiFetch } from '@/lib/api'
@@ -53,6 +51,46 @@ function isAssignedTo(
     (v.technicien_ids ?? []).includes(userId) ||
     (v.responsable_ids ?? []).includes(userId)
   )
+}
+
+function labelEtat(etat: EtatVehicule) {
+  return etat === 'rouge' ? 'À RÉSOUDRE' : ETAT_CONFIG[etat].label
+}
+
+function Panel({
+  title,
+  subtitle,
+  action,
+  children,
+  className,
+}: {
+  title: ReactNode
+  subtitle?: string
+  action?: ReactNode
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <section
+      className={cn(
+        'rounded-2xl bg-white border border-black/[0.06] overflow-hidden',
+        className
+      )}
+    >
+      <div className="px-5 py-4 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-sm font-medium text-gray-900">{title}</h2>
+          {subtitle ? <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p> : null}
+        </div>
+        {action}
+      </div>
+      <div className="border-t border-black/[0.04]">{children}</div>
+    </section>
+  )
+}
+
+function EmptyRow({ children }: { children: ReactNode }) {
+  return <p className="px-5 py-10 text-sm text-gray-400 text-center">{children}</p>
 }
 
 export default function DashboardPage() {
@@ -179,15 +217,13 @@ export default function DashboardPage() {
     : myVehicules.filter(v => daysSince(v.date_entree) > 7 && v.etat_actuel !== 'vert')
 
   const recentActivity = (dashboardSummary?.recentActivity ?? []).slice(0, 8)
-
-  const labelEtatDashboard = (etat: EtatVehicule) =>
-    etat === 'rouge' ? 'À RÉSOUDRE' : ETAT_CONFIG[etat].label
-
   const maxLoad = Math.max(1, ...teamRows.map(r => r.total))
 
-  const openMember = (row: TeamMemberDetail) => {
-    setSelectedMember(row)
-  }
+  const todayLabel = new Date().toLocaleDateString('fr-FR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  })
 
   const closeMember = () => {
     setSelectedMember(null)
@@ -196,290 +232,290 @@ export default function DashboardPage() {
 
   return (
     <DashboardInsightsProvider>
-      <div className="space-y-4 sm:space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+      <div className="mx-auto w-full max-w-[1280px] space-y-8 pb-10">
+        {/* Header */}
+        <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 pt-1">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
-              <LayoutDashboard className="w-6 h-6 text-orange-500" />
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-[0.08em] mb-1.5">
+              Vue d’ensemble
+            </p>
+            <h1 className="text-[28px] sm:text-[32px] font-semibold text-gray-950 tracking-tight leading-none">
               {permissions.vehiculeVisibility === 'own' ? 'Mes véhicules' : 'Dashboard'}
             </h1>
-            <p className="text-gray-500 mt-0.5 text-sm">
-              {permissions.vehiculeVisibility === 'own'
-                ? `Bonjour ${user.nom_complet}`
-                : `Bienvenue ${user.nom_complet}`}
+            <p className="text-sm text-gray-500 mt-2 capitalize">
+              {todayLabel}
+              <span className="text-gray-300 mx-2">·</span>
+              <span className="normal-case">{user.nom_complet}</span>
             </p>
           </div>
           {permissions.canManageUsers ? (
             <button
               type="button"
               onClick={() => navigate('/admin')}
-              className="text-xs font-semibold text-slate-600 hover:text-slate-900 border border-gray-200 bg-white px-3 py-1.5 rounded-lg"
+              className="inline-flex items-center gap-1.5 self-start sm:self-auto text-sm font-medium text-gray-600 hover:text-gray-950 px-3.5 py-2 rounded-full border border-black/[0.08] bg-white hover:bg-gray-50 transition-colors"
             >
-              Stock global → Statistiques
+              Statistiques globales
+              <ArrowUpRight className="w-3.5 h-3.5" />
             </button>
           ) : null}
-        </div>
+        </header>
 
+        {/* KPIs */}
         <DashboardInsights showAlerts={false} />
 
-        <DashboardTodayStrip />
-
-        <DashboardMonthlyStats />
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 items-start">
-          <DashboardAlertsPanel />
-          <DashboardSection
-            title="Activité récente"
-            subtitle="Derniers changements d’état · touchez pour ouvrir"
-          >
-            <div className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
-              {recentActivity.length === 0 ? (
-                <p className="p-4 text-sm text-gray-400 text-center">Aucune activité</p>
-              ) : (
-                recentActivity.map((h, i) => {
-                  const etat = (h.etat_nouveau as EtatVehicule) || 'orange'
-                  const cfg = ETAT_CONFIG[etat]
-                  return (
+        {/* Priorités */}
+        <div>
+          <p className="text-xs font-medium text-gray-400 uppercase tracking-[0.08em] mb-3 px-0.5">
+            Priorités
+          </p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
+            <Panel
+              title={
+                <span className="inline-flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                  Urgents
+                </span>
+              }
+              subtitle={`${urgents.length} à traiter`}
+              action={
+                <button
+                  type="button"
+                  onClick={() => navigate('/vehicules?etat=rouge')}
+                  className="text-xs font-medium text-orange-600 hover:text-orange-700 inline-flex items-center gap-1"
+                >
+                  Voir tout <ArrowRight className="w-3 h-3" />
+                </button>
+              }
+            >
+              <div className="max-h-60 overflow-y-auto divide-y divide-black/[0.04]">
+                {urgents.length === 0 ? (
+                  <EmptyRow>Rien d’urgent</EmptyRow>
+                ) : (
+                  urgents.slice(0, 5).map(v => (
                     <button
-                      key={`${h.id}-${i}`}
+                      key={v.id}
                       type="button"
-                      onClick={() => navigate(`/vehicules/${h.vehicule_id}`)}
-                      className="w-full px-4 sm:px-5 py-3 flex items-start gap-3 hover:bg-slate-50 text-left transition-colors"
+                      onClick={() => navigate(`/vehicules/${v.id}`)}
+                      className="w-full px-5 py-3 flex items-center gap-3 hover:bg-gray-50/80 text-left transition-colors"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-900 truncate">{v.modele}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{v.immatriculation}</p>
+                      </div>
+                      <span className="text-xs font-medium text-rose-600 tabular-nums">
+                        {daysSince(v.date_entree)}j
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </Panel>
+
+            <Panel
+              title={
+                <span className="inline-flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  Anciens
+                </span>
+              }
+              subtitle={`${anciens.length} depuis plus de 7 jours`}
+            >
+              <div className="max-h-60 overflow-y-auto divide-y divide-black/[0.04]">
+                {anciens.length === 0 ? (
+                  <EmptyRow>Aucun ancien</EmptyRow>
+                ) : (
+                  anciens.slice(0, 5).map(v => (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => navigate(`/vehicules/${v.id}`)}
+                      className="w-full px-5 py-3 flex items-center gap-3 hover:bg-gray-50/80 text-left transition-colors"
                     >
                       <div
-                        className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1.5"
-                        style={{ backgroundColor: cfg?.color ?? '#94a3b8' }}
+                        className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: ETAT_CONFIG[v.etat_actuel].color }}
                       />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 truncate">
-                          {h.vehicleModel || `Véhicule #${h.vehicule_id}`}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-900 truncate">{v.modele}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {v.immatriculation} · {labelEtat(v.etat_actuel)}
                         </p>
-                        <div className="mt-1 flex flex-wrap items-center gap-2">
-                          <span
-                            className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold text-white"
-                            style={{ backgroundColor: cfg?.color ?? '#94a3b8' }}
+                      </div>
+                      <span className="text-xs font-medium text-amber-600 tabular-nums">
+                        {daysSince(v.date_entree)}j
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </Panel>
+
+            <div className="lg:col-span-2 xl:col-span-1">
+              <DashboardAlertsPanel />
+            </div>
+          </div>
+        </div>
+
+        {/* Aujourd’hui */}
+        <div>
+          <p className="text-xs font-medium text-gray-400 uppercase tracking-[0.08em] mb-3 px-0.5">
+            Opérationnel
+          </p>
+          <DashboardTodayStrip />
+        </div>
+
+        {/* Analyse */}
+        <div>
+          <p className="text-xs font-medium text-gray-400 uppercase tracking-[0.08em] mb-3 px-0.5">
+            Analyse
+          </p>
+          <DashboardMonthlyStats />
+        </div>
+
+        {/* Suivi */}
+        <div>
+          <p className="text-xs font-medium text-gray-400 uppercase tracking-[0.08em] mb-3 px-0.5">
+            Suivi
+          </p>
+          <div
+            className={cn(
+              'grid grid-cols-1 gap-4 items-start',
+              permissions.canManageUsers && 'xl:grid-cols-[0.9fr_1.1fr]'
+            )}
+          >
+            <Panel
+              title="Activité récente"
+              subtitle="Changements d’état"
+            >
+              <div className="max-h-72 overflow-y-auto divide-y divide-black/[0.04]">
+                {recentActivity.length === 0 ? (
+                  <EmptyRow>Aucune activité</EmptyRow>
+                ) : (
+                  recentActivity.map((h, i) => {
+                    const etat = (h.etat_nouveau as EtatVehicule) || 'orange'
+                    const cfg = ETAT_CONFIG[etat]
+                    return (
+                      <button
+                        key={`${h.id}-${i}`}
+                        type="button"
+                        onClick={() => navigate(`/vehicules/${h.vehicule_id}`)}
+                        className="w-full px-5 py-3.5 flex items-center gap-3 hover:bg-gray-50/80 text-left transition-colors group"
+                      >
+                        <div
+                          className="w-2 h-2 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: cfg?.color ?? '#94a3b8' }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {h.vehicleModel || `Véhicule #${h.vehicule_id}`}
+                          </p>
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span className="text-xs text-gray-500">{labelEtat(etat)}</span>
+                            <span className="text-gray-300">·</span>
+                            <span className="text-xs text-gray-400">
+                              {formatRelativeDateTime(h.date_changement)}
+                            </span>
+                          </div>
+                        </div>
+                        <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 flex-shrink-0 transition-colors" />
+                      </button>
+                    )
+                  })
+                )}
+              </div>
+            </Panel>
+
+            {permissions.canManageUsers ? (
+              <Panel
+                title={
+                  <span className="inline-flex items-center gap-2">
+                    <Users className="w-3.5 h-3.5 text-gray-400" />
+                    Équipe atelier
+                  </span>
+                }
+                subtitle="Charge hors archivés"
+                action={
+                  <button
+                    type="button"
+                    onClick={() => navigate('/utilisateurs')}
+                    className="text-xs font-medium text-gray-500 hover:text-gray-900 inline-flex items-center gap-1"
+                  >
+                    Gérer <ArrowRight className="w-3 h-3" />
+                  </button>
+                }
+              >
+                <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {teamRows.map(row => {
+                    const loadRatio = row.total / maxLoad
+                    return (
+                      <button
+                        key={row.id}
+                        type="button"
+                        onClick={() => setSelectedMember(row)}
+                        className={cn(
+                          'text-left rounded-xl border p-3.5 transition-colors hover:bg-gray-50/90',
+                          row.urgents > 0 ? 'border-rose-200/80' : 'border-black/[0.06]'
+                        )}
+                      >
+                        <div className="flex items-center gap-2.5 mb-3">
+                          <div
+                            className={cn(
+                              'w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0',
+                              row.urgents > 0
+                                ? 'bg-rose-50 text-rose-700'
+                                : row.total > 0
+                                  ? 'bg-orange-50 text-orange-700'
+                                  : 'bg-gray-100 text-gray-500'
+                            )}
                           >
-                            {labelEtatDashboard(etat)}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {formatRelativeDateTime(h.date_changement)}
+                            {row.nom.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 truncate">{row.nom}</p>
+                            <p className="text-[11px] text-gray-400 capitalize">{row.role}</p>
+                          </div>
+                          <span
+                            className={cn(
+                              'text-[10px] font-medium px-2 py-0.5 rounded-full',
+                              row.total === 0
+                                ? 'bg-gray-100 text-gray-500'
+                                : row.urgents > 0
+                                  ? 'bg-rose-50 text-rose-700'
+                                  : 'bg-emerald-50 text-emerald-700'
+                            )}
+                          >
+                            {row.total === 0 ? 'Libre' : row.urgents > 0 ? 'Urgent' : 'Actif'}
                           </span>
                         </div>
-                      </div>
-                      <ArrowRight className="w-4 h-4 text-gray-300 flex-shrink-0 mt-1" />
-                    </button>
-                  )
-                })
-              )}
-            </div>
-          </DashboardSection>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
-          <DashboardSection
-            title={
-              <span className="inline-flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-red-500" />
-                Urgents
-              </span>
-            }
-            subtitle={`${urgents.length} véhicule${urgents.length !== 1 ? 's' : ''} à traiter`}
-            action={
-              <button
-                type="button"
-                onClick={() => navigate('/vehicules?etat=rouge')}
-                className="text-xs text-orange-600 hover:underline flex items-center gap-1 font-semibold"
-              >
-                Voir <ArrowRight className="w-3 h-3" />
-              </button>
-            }
-          >
-            <div className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
-              {urgents.length === 0 ? (
-                <p className="p-4 text-sm text-gray-400 text-center">Aucun véhicule urgent</p>
-              ) : (
-                urgents.slice(0, 5).map(v => (
-                  <button
-                    key={v.id}
-                    type="button"
-                    onClick={() => navigate(`/vehicules/${v.id}`)}
-                    className="w-full px-4 py-3 flex items-center gap-3 hover:bg-red-50/50 transition-colors text-left"
-                  >
-                    <div className="w-2.5 h-2.5 rounded-full bg-red-500 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{v.modele}</p>
-                      <p className="text-xs text-gray-500">{v.immatriculation}</p>
-                    </div>
-                    <span className="text-xs text-red-600 font-bold tabular-nums">
-                      {daysSince(v.date_entree)} j
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-          </DashboardSection>
-
-          <DashboardSection
-            title={
-              <span className="inline-flex items-center gap-2">
-                <Clock className="w-4 h-4 text-amber-500" />
-                Anciens (&gt; 7 jours)
-              </span>
-            }
-            subtitle={`${anciens.length} en atelier depuis plus d’une semaine`}
-          >
-            <div className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
-              {anciens.length === 0 ? (
-                <p className="p-4 text-sm text-gray-400 text-center">Aucun véhicule ancien</p>
-              ) : (
-                anciens.slice(0, 5).map(v => (
-                  <button
-                    key={v.id}
-                    type="button"
-                    onClick={() => navigate(`/vehicules/${v.id}`)}
-                    className="w-full px-4 py-3 flex items-center gap-3 hover:bg-amber-50/50 transition-colors text-left"
-                  >
-                    <div
-                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: ETAT_CONFIG[v.etat_actuel].color }}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{v.modele}</p>
-                      <p className="text-xs text-gray-500">
-                        {v.immatriculation} · {labelEtatDashboard(v.etat_actuel)}
-                      </p>
-                    </div>
-                    <span className="text-xs text-amber-600 font-bold tabular-nums">
-                      {daysSince(v.date_entree)} j
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-          </DashboardSection>
-        </div>
-
-        {/* Équipe */}
-        {permissions.canManageUsers && (
-          <Card padding="none" className="overflow-hidden border-stone-200/80 shadow-sm">
-            <div className="px-4 sm:px-5 py-3.5 border-b border-stone-100 bg-[#faf8f5] flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-sm sm:text-base font-bold text-stone-900 flex items-center gap-2">
-                  <Users className="w-4 h-4 text-stone-600" />
-                  Équipe atelier
-                </h2>
-                <p className="text-xs text-stone-500 mt-0.5">
-                  Charge par membre · hors archivés
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => navigate('/utilisateurs')}
-                className="text-xs font-medium text-stone-600 hover:text-stone-900 flex items-center gap-1"
-              >
-                Utilisateurs <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div className="p-3 sm:p-4 grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {teamRows.map(row => {
-                const loadRatio = row.total / maxLoad
-                const etatChips = ETATS_ACTIFS.filter(e => (row.byEtat[e] ?? 0) > 0)
-                return (
-                  <button
-                    key={row.id}
-                    type="button"
-                    onClick={() => openMember(row)}
-                    className={cn(
-                      'text-left rounded-2xl border bg-white p-3.5 transition-all hover:shadow-md focus:outline-none focus:ring-2 focus:ring-stone-300',
-                      row.urgents > 0
-                        ? 'border-red-200 hover:border-red-300'
-                        : row.total > 0
-                          ? 'border-stone-200 hover:border-stone-300'
-                          : 'border-stone-100 opacity-90'
-                    )}
-                  >
-                    <div className="flex items-start gap-3 mb-3">
-                      <div
-                        className={cn(
-                          'w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0',
-                          row.total === 0
-                            ? 'bg-stone-100 text-stone-500'
-                            : row.urgents > 0
-                              ? 'bg-red-100 text-red-700'
-                              : 'bg-amber-100 text-amber-900'
-                        )}
-                      >
-                        {row.nom.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-stone-900 truncate leading-tight">
-                          {row.nom}
-                        </p>
-                        <p className="text-[11px] text-stone-400 capitalize mt-0.5">{row.role}</p>
-                      </div>
-                      <span
-                        className={cn(
-                          'text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0',
-                          row.total === 0
-                            ? 'bg-stone-100 text-stone-500'
-                            : row.urgents > 0
-                              ? 'bg-red-50 text-red-700'
-                              : 'bg-emerald-50 text-emerald-700'
-                        )}
-                      >
-                        {row.total === 0 ? 'Libre' : row.urgents > 0 ? 'Urgent' : 'Actif'}
-                      </span>
-                    </div>
-
-                    <div className="flex items-baseline gap-1.5 mb-2">
-                      <span className="text-3xl font-bold text-stone-900 tabular-nums tracking-tight">
-                        {row.total}
-                      </span>
-                      <span className="text-xs text-stone-500 font-medium">
-                        véhicule{row.total !== 1 ? 's' : ''}
-                      </span>
-                    </div>
-
-                    <div className="h-1 rounded-full bg-stone-100 overflow-hidden mb-2.5">
-                      <div
-                        className={cn(
-                          'h-full rounded-full transition-all',
-                          row.urgents > 0
-                            ? 'bg-red-400'
-                            : row.total > 0
-                              ? 'bg-amber-500'
-                              : 'bg-stone-200'
-                        )}
-                        style={{ width: `${Math.max(row.total === 0 ? 0 : 6, loadRatio * 100)}%` }}
-                      />
-                    </div>
-
-                    {etatChips.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
-                        {etatChips.map(etat => (
-                          <span
-                            key={etat}
-                            className="text-[9px] font-bold px-1.5 py-0.5 rounded-md border"
-                            style={{
-                              color: ETAT_CONFIG[etat].color,
-                              borderColor: `${ETAT_CONFIG[etat].color}33`,
-                              backgroundColor: `${ETAT_CONFIG[etat].color}12`,
-                            }}
-                          >
-                            {row.byEtat[etat]} {labelEtatDashboard(etat)}
+                        <div className="flex items-baseline gap-1 mb-2">
+                          <span className="text-2xl font-semibold text-gray-950 tabular-nums tracking-tight">
+                            {row.total}
                           </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-[10px] text-stone-400">Aucun véhicule actif</p>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-          </Card>
-        )}
+                          <span className="text-xs text-gray-400">véh.</span>
+                        </div>
+                        <div className="h-1 rounded-full bg-gray-100 overflow-hidden">
+                          <div
+                            className={cn(
+                              'h-full rounded-full',
+                              row.urgents > 0
+                                ? 'bg-rose-400'
+                                : row.total > 0
+                                  ? 'bg-orange-400'
+                                  : 'bg-gray-200'
+                            )}
+                            style={{
+                              width: `${Math.max(row.total === 0 ? 0 : 8, loadRatio * 100)}%`,
+                            }}
+                          />
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </Panel>
+            ) : null}
+          </div>
+        </div>
 
         <Modal
           open={selectedMember != null}
@@ -501,90 +537,70 @@ export default function DashboardPage() {
                   return (
                     <span
                       key={etat}
-                      className="text-xs font-bold px-2.5 py-1 rounded-full border"
+                      className="text-xs font-medium px-2.5 py-1 rounded-full border"
                       style={{
                         color: ETAT_CONFIG[etat].color,
-                        borderColor: `${ETAT_CONFIG[etat].color}44`,
-                        backgroundColor: `${ETAT_CONFIG[etat].color}14`,
+                        borderColor: `${ETAT_CONFIG[etat].color}33`,
+                        backgroundColor: `${ETAT_CONFIG[etat].color}10`,
                       }}
                     >
-                      {n} {labelEtatDashboard(etat)}
+                      {n} {labelEtat(etat)}
                     </span>
                   )
                 })}
               </div>
 
-              <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-500 mb-2">
-                  Véhicules de {selectedMember.nom}
-                </h3>
-                {memberVehiclesLoading ? (
-                  <p className="text-sm text-stone-500 py-6 text-center">
-                    Chargement des véhicules…
-                  </p>
-                ) : memberVehicles.length === 0 ? (
-                  <p className="text-sm text-stone-500 py-6 text-center">
-                    Aucun véhicule actif trouvé pour ce membre.
-                  </p>
-                ) : (
-                  <ul className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
-                    {memberVehicles.map(v => {
-                      const etat = v.etat_actuel as EtatVehicule
-                      const cfg = ETAT_CONFIG[etat]
-                      const defaut = stripVehiculeAssigneesMeta(v.defaut || v.notes || '').trim()
-                      return (
-                        <li key={v.id}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              closeMember()
-                              navigate(`/vehicules/${v.id}`)
-                            }}
-                            className="w-full text-left rounded-xl border border-stone-200 bg-white px-3.5 py-3 hover:border-amber-300 hover:bg-amber-50/40 transition-colors"
-                          >
-                            <div className="flex items-start gap-3">
-                              <div
-                                className="w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0"
-                                style={{ backgroundColor: cfg?.color ?? '#a8a29e' }}
-                              />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center justify-between gap-2">
-                                  <p className="text-sm font-bold text-stone-900 truncate">
-                                    {v.modele || '—'}
-                                  </p>
-                                  <span
-                                    className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0"
-                                    style={{
-                                      color: cfg?.color,
-                                      backgroundColor: `${cfg?.color ?? '#a8a29e'}18`,
-                                    }}
-                                  >
-                                    {cfg ? labelEtatDashboard(etat) : v.etat_actuel}
-                                  </span>
-                                </div>
-                                <p className="text-xs font-semibold text-stone-600 mt-0.5">
-                                  {v.immatriculation}
+              {memberVehiclesLoading ? (
+                <p className="text-sm text-gray-500 py-8 text-center">Chargement…</p>
+              ) : memberVehicles.length === 0 ? (
+                <p className="text-sm text-gray-500 py-8 text-center">Aucun véhicule actif</p>
+              ) : (
+                <ul className="space-y-2 max-h-[50vh] overflow-y-auto">
+                  {memberVehicles.map(v => {
+                    const etat = v.etat_actuel as EtatVehicule
+                    const cfg = ETAT_CONFIG[etat]
+                    const defaut = stripVehiculeAssigneesMeta(v.defaut || v.notes || '').trim()
+                    return (
+                      <li key={v.id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            closeMember()
+                            navigate(`/vehicules/${v.id}`)
+                          }}
+                          className="w-full text-left rounded-xl border border-black/[0.06] bg-white px-3.5 py-3 hover:bg-gray-50 transition-colors"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div
+                              className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0"
+                              style={{ backgroundColor: cfg?.color ?? '#a8a29e' }}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-medium text-gray-900 truncate">
+                                  {v.modele || '—'}
                                 </p>
-                                <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-[11px] text-stone-400">
-                                  <span>Entrée {v.date_entree || '—'}</span>
-                                  <span>{daysSince(v.date_entree)} j</span>
-                                  {v.type ? <span className="capitalize">{v.type}</span> : null}
-                                </div>
-                                {defaut ? (
-                                  <p className="text-xs text-stone-500 mt-1.5 line-clamp-2">{defaut}</p>
-                                ) : null}
+                                <span className="text-[10px] font-medium text-gray-500">
+                                  {cfg ? labelEtat(etat) : v.etat_actuel}
+                                </span>
                               </div>
-                              <ArrowRight className="w-4 h-4 text-stone-300 flex-shrink-0 mt-1" />
+                              <p className="text-xs text-gray-500 mt-0.5">{v.immatriculation}</p>
+                              <p className="text-[11px] text-gray-400 mt-1">
+                                Entrée {v.date_entree || '—'} · {daysSince(v.date_entree)} j
+                              </p>
+                              {defaut ? (
+                                <p className="text-xs text-gray-500 mt-1.5 line-clamp-2">{defaut}</p>
+                              ) : null}
                             </div>
-                          </button>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                )}
-              </div>
+                          </div>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
 
-              <div className="flex justify-end pt-1 border-t border-stone-100">
+              <div className="flex justify-end pt-2 border-t border-black/[0.04]">
                 <button
                   type="button"
                   onClick={() => {
@@ -592,7 +608,7 @@ export default function DashboardPage() {
                     closeMember()
                     navigate(`/vehicules?technicien=${id}`)
                   }}
-                  className="text-sm font-medium text-stone-700 hover:text-stone-900 underline"
+                  className="text-sm font-medium text-orange-600 hover:text-orange-700"
                 >
                   Voir dans Véhicules →
                 </button>

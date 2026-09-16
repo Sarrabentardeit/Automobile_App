@@ -149,7 +149,7 @@ export default function DashboardTodayStrip() {
         hint: hintRdv,
         icon: CalendarDays,
         href: '/calendar',
-        accent: 'text-indigo-600 bg-indigo-50',
+        accent: 'text-gray-600 bg-gray-50',
         show: true,
         alert: (i?.rdv.count ?? 0) > 0,
       },
@@ -182,7 +182,7 @@ export default function DashboardTodayStrip() {
         hint: hintDevis,
         icon: ClipboardList,
         href: '/devis',
-        accent: 'text-cyan-700 bg-cyan-50',
+        accent: 'text-gray-600 bg-gray-50',
         show: Boolean(permissions?.canViewFinance),
         alert: (i?.devis.count ?? 0) > 0,
       },
@@ -209,19 +209,19 @@ export default function DashboardTodayStrip() {
         : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
 
   return (
-    <section className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
-      <div className="px-3 sm:px-4 py-2.5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-gradient-to-r from-slate-50 to-white">
-        <div className="flex items-center gap-1 p-0.5 rounded-xl bg-white border border-gray-200/80 w-fit">
+    <section className="rounded-2xl border border-black/[0.06] bg-white overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-black/[0.04] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div className="flex items-center gap-0.5 p-0.5 rounded-full bg-gray-100/90 w-fit">
           {TABS.map(tab => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setPeriod(tab.id)}
               className={cn(
-                'h-7 px-2.5 sm:px-3 rounded-lg text-[11px] sm:text-xs font-bold transition-colors',
+                'h-7 px-3 rounded-full text-xs font-medium transition-colors',
                 period === tab.id
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                  ? 'bg-white text-gray-950 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-800'
               )}
             >
               {tab.label}
@@ -236,33 +236,33 @@ export default function DashboardTodayStrip() {
                 type="button"
                 onClick={() => shiftMonth(-1)}
                 disabled={!canGoPrev}
-                className="h-7 w-7 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center text-gray-600 disabled:opacity-30"
+                className="h-7 w-7 rounded-lg text-gray-400 hover:bg-gray-50 hover:text-gray-800 flex items-center justify-center disabled:opacity-30"
                 aria-label="Mois précédent"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
-              <span className="text-[11px] sm:text-xs font-bold text-gray-800 min-w-[6.5rem] text-center tabular-nums">
+              <span className="text-xs font-medium text-gray-800 min-w-[6.5rem] text-center tabular-nums">
                 {formatRangeLabel(period, data, month, year)}
               </span>
               <button
                 type="button"
                 onClick={() => shiftMonth(1)}
                 disabled={!canGoNext}
-                className="h-7 w-7 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center text-gray-600 disabled:opacity-30"
+                className="h-7 w-7 rounded-lg text-gray-400 hover:bg-gray-50 hover:text-gray-800 flex items-center justify-center disabled:opacity-30"
                 aria-label="Mois suivant"
               >
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </>
           ) : (
-            <span className="text-[10px] sm:text-[11px] text-slate-400 tabular-nums font-medium">
+            <span className="text-xs text-gray-400 tabular-nums font-medium">
               {formatRangeLabel(period, data, month, year)}
             </span>
           )}
         </div>
       </div>
 
-      <div className={cn('grid divide-x divide-y sm:divide-y-0 divide-gray-100', cols)}>
+      <div className={cn('grid divide-x divide-y sm:divide-y-0 divide-black/[0.04]', cols)}>
         {tiles.map(t => {
           const Icon = t.icon
           return (
@@ -270,9 +270,9 @@ export default function DashboardTodayStrip() {
               key={t.key}
               type="button"
               onClick={() => navigate(t.href)}
-              className="px-3.5 py-3 sm:py-3.5 text-left hover:bg-slate-50/90 transition-colors focus:outline-none focus:bg-slate-50"
+              className="px-5 py-4 text-left hover:bg-gray-50/70 transition-colors focus:outline-none"
             >
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-3">
                 <span
                   className={cn(
                     'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
@@ -283,15 +283,15 @@ export default function DashboardTodayStrip() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
-                    <p className="text-xl sm:text-2xl font-extrabold text-gray-900 tabular-nums leading-none">
+                    <p className="text-[28px] font-semibold text-gray-950 tabular-nums leading-none tracking-tight">
                       {t.value == null ? '—' : t.value}
                     </p>
                     {t.alert ? (
-                      <span className="w-2 h-2 rounded-full bg-orange-500 flex-shrink-0" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500 flex-shrink-0" />
                     ) : null}
                   </div>
-                  <p className="text-xs sm:text-sm font-semibold text-gray-800 mt-1">{t.label}</p>
-                  <p className="text-[11px] sm:text-xs text-gray-500 truncate">{t.hint}</p>
+                  <p className="text-xs font-medium text-gray-600 mt-2">{t.label}</p>
+                  <p className="text-[11px] text-gray-400 truncate mt-0.5">{t.hint}</p>
                 </div>
               </div>
             </button>

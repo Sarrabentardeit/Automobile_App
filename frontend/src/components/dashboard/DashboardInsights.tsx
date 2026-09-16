@@ -86,8 +86,8 @@ function DeltaBadge({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full',
-        good ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+        'inline-flex items-center gap-0.5 text-[11px] font-semibold px-1.5 py-0.5 rounded-md',
+        good ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-600'
       )}
     >
       {up ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
@@ -336,9 +336,9 @@ export default function DashboardInsights({
         delta: k?.entrees.delta ?? null,
         deltaPct: k?.entrees.deltaPct ?? null,
         icon: Car,
-        tone: 'bg-sky-50 text-sky-700',
+        tone: 'bg-gray-50 text-gray-600',
         sparkKey: 'entrees' as const,
-        sparkColor: '#0ea5e9',
+        sparkColor: '#64748b',
         href: '/vehicules',
       },
       {
@@ -350,7 +350,7 @@ export default function DashboardInsights({
         icon: CheckCircle2,
         tone: 'bg-emerald-50 text-emerald-700',
         sparkKey: 'valides' as const,
-        sparkColor: '#22c55e',
+        sparkColor: '#10b981',
         href: '/vehicules/archives',
       },
       {
@@ -364,7 +364,7 @@ export default function DashboardInsights({
             : null,
         betterWhenDown: true,
         icon: Clock3,
-        tone: 'bg-violet-50 text-violet-700',
+        tone: 'bg-gray-50 text-gray-600',
         suffix: 'j',
         href: null as string | null,
       },
@@ -375,7 +375,7 @@ export default function DashboardInsights({
         delta: null,
         deltaPct: null,
         icon: AlertTriangle,
-        tone: 'bg-rose-50 text-rose-700',
+        tone: 'bg-rose-50 text-rose-600',
         href: '/vehicules?etat=rouge',
         live: true,
       },
@@ -391,36 +391,34 @@ export default function DashboardInsights({
   return (
     <div className={cn('space-y-4', className)}>
       {showKpis ? (
-        <section className="space-y-2.5">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Indicateurs mois
-            </p>
-            <div className="flex items-center gap-1">
+        <section className="rounded-2xl border border-black/[0.06] bg-white overflow-hidden">
+          <div className="px-5 py-4 border-b border-black/[0.04] flex items-center justify-between gap-2">
+            <p className="text-sm font-medium text-gray-900">Indicateurs du mois</p>
+            <div className="flex items-center gap-0.5">
               <button
                 type="button"
                 onClick={() => shiftMonth(-1)}
                 disabled={!canGoPrev}
-                className="h-8 w-8 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center text-gray-600 disabled:opacity-30 disabled:pointer-events-none"
+                className="h-8 w-8 rounded-lg text-gray-400 hover:bg-gray-50 hover:text-gray-800 flex items-center justify-center disabled:opacity-30 disabled:pointer-events-none"
                 aria-label="Mois précédent"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              <span className="min-w-[7.5rem] text-center text-sm font-bold text-gray-900 tabular-nums px-1">
+              <span className="min-w-[7.5rem] text-center text-sm font-medium text-gray-900 tabular-nums px-1">
                 {moisLabel}
               </span>
               <button
                 type="button"
                 onClick={() => shiftMonth(1)}
                 disabled={!canGoNext}
-                className="h-8 w-8 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center text-gray-600 disabled:opacity-30 disabled:pointer-events-none"
+                className="h-8 w-8 rounded-lg text-gray-400 hover:bg-gray-50 hover:text-gray-800 flex items-center justify-center disabled:opacity-30 disabled:pointer-events-none"
                 aria-label="Mois suivant"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5 sm:gap-3">
+          <div className="grid grid-cols-2 xl:grid-cols-4 divide-x divide-y xl:divide-y-0 divide-black/[0.04]">
             {cards.map(card => {
               const Icon = card.icon
               const display =
@@ -431,12 +429,19 @@ export default function DashboardInsights({
                     : `${card.value}${card.suffix ?? ''}`
               const body = (
                 <>
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <span className={cn('w-9 h-9 rounded-xl flex items-center justify-center', card.tone)}>
+                  <div className="flex items-start justify-between gap-2 mb-4">
+                    <span
+                      className={cn(
+                        'w-8 h-8 rounded-lg flex items-center justify-center',
+                        card.tone
+                      )}
+                    >
                       <Icon className="w-4 h-4" />
                     </span>
                     {'live' in card && card.live ? (
-                      <span className="text-[10px] font-semibold text-gray-400">live</span>
+                      <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+                        live
+                      </span>
                     ) : (
                       <DeltaBadge
                         delta={card.delta}
@@ -445,16 +450,16 @@ export default function DashboardInsights({
                       />
                     )}
                   </div>
-                  <p className="text-2xl sm:text-[1.75rem] font-extrabold text-gray-900 tabular-nums leading-none">
+                  <p className="text-[32px] font-semibold text-gray-950 tabular-nums leading-none tracking-tight">
                     {display}
                   </p>
-                  <p className="text-[11px] text-gray-500 font-medium mt-1">{card.label}</p>
+                  <p className="text-xs text-gray-500 mt-2.5">{card.label}</p>
                   {card.sparkKey ? (
-                    <div className="mt-2 -mb-1">
+                    <div className="mt-4 -mb-1 opacity-70">
                       <MiniSpark data={spark} dataKey={card.sparkKey} color={card.sparkColor!} />
                     </div>
                   ) : (
-                    <p className="text-[10px] text-gray-400 mt-2">
+                    <p className="text-[11px] text-gray-400 mt-4">
                       {'live' in card && card.live
                         ? 'Stock actuel'
                         : data?.kpis.tempsMoyenJours.prev != null
@@ -469,15 +474,12 @@ export default function DashboardInsights({
                   key={card.key}
                   type="button"
                   onClick={() => navigate(card.href!)}
-                  className="text-left rounded-2xl border border-gray-200/80 bg-white p-3.5 sm:p-4 shadow-sm hover:shadow-md hover:border-gray-300 transition-all"
+                  className="text-left p-5 hover:bg-gray-50/70 transition-colors"
                 >
                   {body}
                 </button>
               ) : (
-                <div
-                  key={card.key}
-                  className="rounded-2xl border border-gray-200/80 bg-white p-3.5 sm:p-4 shadow-sm"
-                >
+                <div key={card.key} className="p-5">
                   {body}
                 </div>
               )
@@ -487,20 +489,18 @@ export default function DashboardInsights({
       ) : null}
 
       {showAlerts ? (
-        <section className="rounded-2xl border border-gray-200/80 bg-white shadow-sm overflow-hidden">
-          <div className="px-4 sm:px-5 py-3.5 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white">
-            <div>
-              <h2 className="text-sm sm:text-base font-bold text-gray-900">Alertes</h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                {data?.alerts?.length ?? 0} active{(data?.alerts?.length ?? 0) > 1 ? 's' : ''}
-              </p>
-            </div>
+        <section className="rounded-2xl border border-black/[0.06] bg-white overflow-hidden">
+          <div className="px-5 py-4 border-b border-black/[0.04]">
+            <h2 className="text-sm font-medium text-gray-900">Alertes</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {data?.alerts?.length ?? 0} active{(data?.alerts?.length ?? 0) > 1 ? 's' : ''}
+            </p>
           </div>
-          <div className="divide-y divide-gray-100">
+          <div className="divide-y divide-black/[0.04]">
             {loading && !data ? (
-              <p className="px-4 py-6 text-sm text-gray-400 text-center">Chargement…</p>
+              <p className="px-5 py-10 text-sm text-gray-400 text-center">Chargement…</p>
             ) : (data?.alerts.length ?? 0) === 0 ? (
-              <p className="px-4 py-6 text-sm text-emerald-600 text-center font-medium">
+              <p className="px-5 py-10 text-sm text-emerald-600 text-center font-medium">
                 Aucune alerte
               </p>
             ) : (
@@ -511,30 +511,30 @@ export default function DashboardInsights({
                     key={a.id}
                     type="button"
                     onClick={() => navigate(a.href)}
-                    className="w-full px-4 sm:px-5 py-3.5 flex items-start gap-3 hover:bg-slate-50/80 text-left transition-colors"
+                    className="w-full px-5 py-3.5 flex items-start gap-3 hover:bg-gray-50/80 text-left transition-colors"
                   >
                     <span
                       className={cn(
-                        'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5',
+                        'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5',
                         a.severity === 'high'
                           ? 'bg-rose-50 text-rose-600'
                           : a.type === 'stock'
                             ? 'bg-amber-50 text-amber-700'
-                            : 'bg-orange-50 text-orange-700'
+                            : 'bg-orange-50 text-orange-600'
                       )}
                     >
-                      <Icon className="w-4 h-4" />
+                      <Icon className="w-3.5 h-3.5" />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-semibold text-gray-900 leading-snug">
+                      <span className="block text-sm font-medium text-gray-900 leading-snug">
                         {a.title}
                       </span>
-                      <span className="block text-xs sm:text-sm text-gray-500 mt-1 leading-relaxed whitespace-normal">
+                      <span className="block text-xs text-gray-500 mt-1 leading-relaxed whitespace-normal">
                         {a.subtitle}
                       </span>
                     </span>
                     {a.count != null ? (
-                      <span className="text-base font-extrabold text-gray-900 tabular-nums flex-shrink-0">
+                      <span className="text-sm font-semibold text-gray-900 tabular-nums flex-shrink-0">
                         {a.count}
                       </span>
                     ) : null}

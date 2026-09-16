@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
-/** En-tête de section unifié pour le dashboard. */
+/** Shell section dashboard — bords doux, typo medium (style pro). */
 export function DashboardSection({
   title,
   subtitle,
@@ -9,6 +9,7 @@ export function DashboardSection({
   children,
   className,
   bodyClassName,
+  compact,
 }: {
   title: ReactNode
   subtitle?: ReactNode
@@ -16,18 +17,27 @@ export function DashboardSection({
   children: ReactNode
   className?: string
   bodyClassName?: string
+  /** En-tête plus compact (bandes action) */
+  compact?: boolean
 }) {
   return (
     <section
       className={cn(
-        'rounded-2xl border border-gray-200/80 bg-white shadow-sm overflow-hidden',
+        'rounded-2xl border border-black/[0.06] bg-white overflow-hidden',
         className
       )}
     >
-      <div className="px-4 sm:px-5 py-3.5 border-b border-gray-100 flex items-start sm:items-center justify-between gap-3 bg-gradient-to-r from-slate-50 to-white">
+      <div
+        className={cn(
+          'flex items-start sm:items-center justify-between gap-3 border-b border-black/[0.04]',
+          compact ? 'px-5 py-3' : 'px-5 py-4'
+        )}
+      >
         <div className="min-w-0">
-          <h2 className="text-sm sm:text-base font-bold text-gray-900">{title}</h2>
-          {subtitle ? <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p> : null}
+          <h2 className="text-sm font-medium text-gray-900">{title}</h2>
+          {subtitle ? (
+            <p className="text-xs text-gray-500 mt-0.5 leading-snug">{subtitle}</p>
+          ) : null}
         </div>
         {action ? <div className="flex-shrink-0">{action}</div> : null}
       </div>
