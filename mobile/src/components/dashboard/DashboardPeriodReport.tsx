@@ -11,7 +11,7 @@ import type { Permissions } from '../../types/permissions'
 type IonIcon = ComponentProps<typeof Ionicons>['name']
 
 const TABS: { id: DashboardTodayPeriod; label: string }[] = [
-  { id: 'day', label: 'Jour' },
+  { id: 'day', label: 'Aujourd’hui' },
   { id: 'week', label: 'Semaine' },
   { id: 'month', label: 'Mois' },
 ]
@@ -219,7 +219,6 @@ export default function DashboardPeriodReport({
   return (
     <View style={styles.card}>
       <View style={styles.head}>
-        <Text style={styles.title}>Rapport</Text>
         <View style={styles.tabs}>
           {TABS.map((tab) => {
             const active = period === tab.id
@@ -234,33 +233,34 @@ export default function DashboardPeriodReport({
             )
           })}
         </View>
-      </View>
-
-      <View style={styles.rangeRow}>
-        {period === 'month' ? (
-          <>
-            <Pressable
-              onPress={() => shiftMonth(-1)}
-              disabled={!canGoPrev}
-              style={[styles.navBtn, !canGoPrev && styles.navBtnDisabled]}
-              hitSlop={8}
-            >
-              <Ionicons name="chevron-back" size={16} color={theme.textMuted} />
-            </Pressable>
-            <Text style={styles.rangeLabel}>{formatRangeLabel(period, data, month, year)}</Text>
-            <Pressable
-              onPress={() => shiftMonth(1)}
-              disabled={!canGoNext}
-              style={[styles.navBtn, !canGoNext && styles.navBtnDisabled]}
-              hitSlop={8}
-            >
-              <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
-            </Pressable>
-          </>
-        ) : (
-          <Text style={styles.rangeHint}>{formatRangeLabel(period, data, month, year)}</Text>
-        )}
-        {loading ? <ActivityIndicator size="small" color={theme.primary} style={styles.spinner} /> : null}
+        <View style={styles.rangeRow}>
+          {period === 'month' ? (
+            <>
+              <Pressable
+                onPress={() => shiftMonth(-1)}
+                disabled={!canGoPrev}
+                style={[styles.navBtn, !canGoPrev && styles.navBtnDisabled]}
+                hitSlop={8}
+              >
+                <Ionicons name="chevron-back" size={14} color={theme.textSubtle} />
+              </Pressable>
+              <Text style={styles.rangeLabel}>{formatRangeLabel(period, data, month, year)}</Text>
+              <Pressable
+                onPress={() => shiftMonth(1)}
+                disabled={!canGoNext}
+                style={[styles.navBtn, !canGoNext && styles.navBtnDisabled]}
+                hitSlop={8}
+              >
+                <Ionicons name="chevron-forward" size={14} color={theme.textSubtle} />
+              </Pressable>
+            </>
+          ) : (
+            <Text style={styles.rangeHint}>{formatRangeLabel(period, data, month, year)}</Text>
+          )}
+          {loading ? (
+            <ActivityIndicator size="small" color={theme.primary} style={styles.spinner} />
+          ) : null}
+        </View>
       </View>
 
       <View style={styles.grid}>
@@ -271,7 +271,7 @@ export default function DashboardPeriodReport({
             style={({ pressed }) => [styles.tile, pressed && styles.pressed]}
           >
             <View style={[styles.tileIcon, { backgroundColor: t.bg }]}>
-              <Ionicons name={t.icon} size={16} color={t.color} />
+              <Ionicons name={t.icon} size={15} color={t.color} />
             </View>
             <View style={styles.tileBody}>
               <View style={styles.tileValueRow}>
@@ -286,125 +286,98 @@ export default function DashboardPeriodReport({
           </Pressable>
         ))}
       </View>
-
-      {permissions.canManageUsers ? (
-        <Pressable
-          style={({ pressed }) => [styles.statsLink, pressed && styles.pressed]}
-          onPress={() => onNavigate('admin')}
-        >
-          <Text style={styles.statsLinkText}>Voir les statistiques détaillées</Text>
-          <Ionicons name="arrow-forward" size={16} color={theme.primary} />
-        </Pressable>
-      ) : null}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: theme.surface,
-    borderRadius: theme.radius.lg,
+    backgroundColor: '#fff',
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: theme.borderLight,
-    marginBottom: 14,
+    borderColor: 'rgba(0,0,0,0.06)',
     overflow: 'hidden',
-    ...theme.shadow.sm,
   },
   head: {
     paddingHorizontal: 14,
     paddingTop: 12,
     paddingBottom: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: theme.borderLight,
+    borderBottomColor: 'rgba(0,0,0,0.04)',
     gap: 10,
   },
-  title: { fontSize: 15, fontWeight: '800', color: theme.text },
   tabs: {
     flexDirection: 'row',
     alignSelf: 'flex-start',
-    backgroundColor: theme.surfaceMuted,
-    borderRadius: 12,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 999,
     padding: 3,
-    borderWidth: 1,
-    borderColor: theme.borderLight,
   },
   tab: {
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 9,
+    paddingVertical: 6,
+    borderRadius: 999,
   },
   tabActive: {
-    backgroundColor: theme.text,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  tabText: { fontSize: 12, fontWeight: '700', color: theme.textMuted },
-  tabTextActive: { color: '#fff' },
+  tabText: { fontSize: 12, fontWeight: '500', color: theme.textMuted },
+  tabTextActive: { color: '#030712', fontWeight: '600' },
   rangeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    minHeight: 40,
+    justifyContent: 'flex-end',
+    gap: 6,
+    minHeight: 28,
   },
   rangeLabel: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '600',
     color: theme.text,
-    minWidth: 120,
+    minWidth: 100,
     textAlign: 'center',
   },
-  rangeHint: { fontSize: 12, fontWeight: '600', color: theme.textMuted },
+  rangeHint: { fontSize: 12, fontWeight: '500', color: theme.textSubtle },
   navBtn: {
-    width: 30,
-    height: 30,
+    width: 28,
+    height: 28,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: theme.border,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.surface,
   },
   navBtnDisabled: { opacity: 0.3 },
-  spinner: { position: 'absolute', right: 14 },
+  spinner: { marginLeft: 4 },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: theme.borderLight,
   },
   tile: {
     width: '50%',
     flexDirection: 'row',
     gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderRightWidth: StyleSheet.hairlineWidth,
-    borderColor: theme.borderLight,
+    borderColor: 'rgba(0,0,0,0.04)',
   },
   tileIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
   tileBody: { flex: 1, minWidth: 0 },
   tileValueRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  tileValue: { fontSize: 20, fontWeight: '800', color: theme.text },
+  tileValue: { fontSize: 22, fontWeight: '700', color: '#030712', letterSpacing: -0.3 },
   alertDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: theme.primary },
-  tileLabel: { fontSize: 12, fontWeight: '700', color: theme.textSecondary, marginTop: 2 },
+  tileLabel: { fontSize: 12, fontWeight: '500', color: theme.textSecondary, marginTop: 4 },
   tileHint: { fontSize: 10, color: theme.textSubtle, marginTop: 1 },
   pressed: { opacity: 0.85 },
-  statsLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: theme.borderLight,
-  },
-  statsLinkText: { fontSize: 13, fontWeight: '700', color: theme.primary },
 })

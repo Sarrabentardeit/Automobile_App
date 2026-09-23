@@ -460,11 +460,11 @@ export default function VehiculesArchivesPage() {
       </div>
 
       {!isBrandView && folderTotalPages > 1 && (
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs sm:text-sm text-gray-500">
+        <div className="flex items-center justify-between gap-3 pr-16 sm:pr-0 pb-2">
+          <p className="text-xs sm:text-sm text-gray-500 min-w-0">
             Marques — page {folderPage} sur {folderTotalPages} ({brandFolders.length} dossiers)
           </p>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-shrink-0">
             <button
               onClick={() => setFolderPage(p => Math.max(1, p - 1))}
               disabled={folderPage <= 1}
@@ -484,11 +484,11 @@ export default function VehiculesArchivesPage() {
       )}
 
       {isBrandView && vehicleTotalPages > 1 && (
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs sm:text-sm text-gray-500">
+        <div className="flex items-center justify-between gap-3 pr-16 sm:pr-0 pb-2">
+          <p className="text-xs sm:text-sm text-gray-500 min-w-0">
             Véhicules — page {vehiclePage} sur {vehicleTotalPages} ({total} résultats)
           </p>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-shrink-0">
             <button
               onClick={() => setVehiclePage(p => Math.max(1, p - 1))}
               disabled={vehiclePage <= 1}

@@ -8,36 +8,26 @@ function Bone({ style }: { style?: object }) {
 export default function DashboardSkeleton() {
   return (
     <View style={styles.wrap}>
-      <Bone style={styles.hero} />
-      <View style={styles.statsRow}>
-        <Bone style={styles.stat} />
-        <Bone style={styles.stat} />
-        <Bone style={styles.stat} />
-      </View>
-      <Bone style={styles.strip} />
-      <View style={styles.grid}>
-        <Bone style={styles.tile} />
-        <Bone style={styles.tile} />
-        <Bone style={styles.tile} />
-        <Bone style={styles.tile} />
-      </View>
-      <Bone style={styles.section} />
-      <Bone style={styles.section} />
+      <Bone style={styles.kpi} />
+      <Bone style={styles.label} />
+      <Bone style={styles.panel} />
+      <Bone style={styles.panel} />
+      <Bone style={styles.label} />
+      <Bone style={styles.report} />
+      <Bone style={styles.label} />
+      <Bone style={styles.panel} />
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: 14 },
+  wrap: { gap: 12 },
   bone: {
     backgroundColor: theme.borderLight,
-    borderRadius: theme.radius.md,
+    borderRadius: 16,
   },
-  hero: { height: 100 },
-  statsRow: { flexDirection: 'row', gap: 10 },
-  stat: { flex: 1, height: 72 },
-  strip: { height: 88 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  tile: { width: '47%', height: 72 },
-  section: { height: 140 },
+  kpi: { height: 78 },
+  label: { height: 12, width: 88, borderRadius: 6 },
+  panel: { height: 160 },
+  report: { height: 200 },
 })

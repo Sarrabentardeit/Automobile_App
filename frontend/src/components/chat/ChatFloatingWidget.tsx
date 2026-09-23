@@ -279,7 +279,7 @@ export default function ChatFloatingWidget() {
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="fixed bottom-5 right-5 z-[60] w-14 h-14 rounded-full bg-orange-500 text-white shadow-lg shadow-orange-500/30 hover:bg-orange-600 transition-all flex items-center justify-center"
+        className="fixed bottom-20 right-4 sm:bottom-5 sm:right-5 z-[60] w-14 h-14 rounded-full bg-orange-500 text-white shadow-lg shadow-orange-500/30 hover:bg-orange-600 transition-all flex items-center justify-center"
         title="Chat équipe"
         aria-label="Ouvrir le chat"
       >
@@ -292,7 +292,7 @@ export default function ChatFloatingWidget() {
       </button>
 
       {open ? (
-        <div className="fixed bottom-[5.5rem] right-5 z-[60] w-[min(100vw-1.5rem,380px)] h-[min(70vh,520px)] flex flex-col rounded-2xl border border-gray-200 bg-white shadow-2xl overflow-hidden">
+        <div className="fixed bottom-[8.75rem] right-4 sm:bottom-[5.5rem] sm:right-5 z-[60] w-[min(100vw-1.5rem,380px)] h-[min(70vh,520px)] flex flex-col rounded-2xl border border-gray-200 bg-white shadow-2xl overflow-hidden">
           <header className="flex items-center gap-2 px-3 py-2.5 bg-slate-900 text-white">
             {selected ? (
               <button
