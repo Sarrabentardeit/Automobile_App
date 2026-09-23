@@ -460,7 +460,7 @@ export default function VehiculesArchivesPage() {
       </div>
 
       {!isBrandView && folderTotalPages > 1 && (
-        <div className="flex items-center justify-between gap-3 pr-16 sm:pr-0 pb-2">
+        <div className="flex items-center justify-between gap-3 pr-16 lg:pr-0 pb-2">
           <p className="text-xs sm:text-sm text-gray-500 min-w-0">
             Marques — page {folderPage} sur {folderTotalPages} ({brandFolders.length} dossiers)
           </p>
@@ -484,7 +484,7 @@ export default function VehiculesArchivesPage() {
       )}
 
       {isBrandView && vehicleTotalPages > 1 && (
-        <div className="flex items-center justify-between gap-3 pr-16 sm:pr-0 pb-2">
+        <div className="flex items-center justify-between gap-3 pr-16 lg:pr-0 pb-2">
           <p className="text-xs sm:text-sm text-gray-500 min-w-0">
             Véhicules — page {vehiclePage} sur {vehicleTotalPages} ({total} résultats)
           </p>

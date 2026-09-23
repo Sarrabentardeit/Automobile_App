@@ -276,7 +276,7 @@ export default function MarquesPage() {
           </div>
 
           {totalPages > 1 ? (
-            <div className="flex items-center justify-between gap-3 pr-16 sm:pr-0 pb-2">
+            <div className="flex items-center justify-between gap-3 pr-16 lg:pr-0 pb-2">
               <p className="text-xs sm:text-sm text-gray-500 min-w-0">
                 Marques — page {page} sur {totalPages} ({filtered.length} résultat
                 {filtered.length > 1 ? 's' : ''})
