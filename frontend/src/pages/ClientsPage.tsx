@@ -262,7 +262,7 @@ export default function ClientsPage() {
           </div>
 
           {hasPagination && (
-            <div className="mt-6 flex items-center justify-between">
+            <div className="mt-6 flex items-center justify-between gap-3 pr-24">
               <p className="text-sm text-gray-500">
                 {total} client{total !== 1 ? 's' : ''} · page {page} / {totalPages}
               </p>

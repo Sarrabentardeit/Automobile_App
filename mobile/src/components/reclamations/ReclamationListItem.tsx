@@ -4,6 +4,7 @@ import { theme } from '../../theme/appTheme'
 import { formatDateFr, formatReclamationAssignText } from '../../lib/reclamationDisplay'
 import {
   RECLAMATION_STATUT_LABELS,
+  RECLAMATION_TYPE_LABELS,
   STATUT_COLORS,
   type Reclamation,
 } from '../../types/reclamation'
@@ -23,6 +24,9 @@ export default function ReclamationListItem({ reclamation: r, onPress }: Props) 
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
       <View style={styles.top}>
+        <Text style={styles.typeTag}>
+          {RECLAMATION_TYPE_LABELS[r.type || 'externe']}
+        </Text>
         <View style={[styles.badge, { backgroundColor: st.bg, borderColor: st.border }]}>
           <Text style={[styles.badgeText, { color: st.text }]}>
             {RECLAMATION_STATUT_LABELS[r.statut]}
@@ -84,6 +88,7 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.92 },
   top: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' },
+  typeTag: { fontSize: 11, fontWeight: '700', color: '#0369a1' },
   badge: {
     paddingHorizontal: 8,
     paddingVertical: 3,

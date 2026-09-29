@@ -27,7 +27,7 @@ export function normalizeStoredUser(raw: Partial<StoredUser> & {
     email: raw.email,
     fullName: raw.fullName,
     role: raw.role || 'technicien',
-    permissions: raw.permissions ?? mergePermissions(raw.role || 'technicien', undefined),
+    permissions: mergePermissions(raw.role || 'technicien', raw.permissions),
     avatarUrl: raw.avatarUrl ?? null,
     telephone: raw.telephone ?? '',
   }

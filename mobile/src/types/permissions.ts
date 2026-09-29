@@ -12,6 +12,7 @@ export type TogglePermissionKey =
   | 'canViewFinance'
   | 'canViewInventory'
   | 'canViewEquipeOutils'
+  | 'canViewReunion'
 
 export const ALL_ROLES: Role[] = ['admin', 'responsable', 'technicien', 'financier']
 
@@ -32,6 +33,7 @@ export const ALL_TOGGLE_KEYS: TogglePermissionKey[] = [
   'canViewFinance',
   'canViewInventory',
   'canViewEquipeOutils',
+  'canViewReunion',
 ]
 
 export const TOGGLE_PERMISSION_LABELS: Record<
@@ -47,6 +49,7 @@ export const TOGGLE_PERMISSION_LABELS: Record<
   canViewFinance: { label: 'Accès finance', description: 'Données financières' },
   canViewInventory: { label: 'Accès inventaire', description: 'Stock et produits' },
   canViewEquipeOutils: { label: 'Accès outils équipe', description: 'Opération Ahmed' },
+  canViewReunion: { label: 'Accès réunion', description: 'Feuille de réunion de l’atelier' },
 }
 
 export const VISIBILITY_OPTIONS: {
@@ -84,6 +87,7 @@ export type Permissions = {
   canViewFinance: boolean
   canViewInventory: boolean
   canViewEquipeOutils: boolean
+  canViewReunion: boolean
 }
 
 export const ROLE_LABELS: Record<Role, string> = {
@@ -105,6 +109,7 @@ export const ROLE_PRESETS: Record<Role, Permissions> = {
     canViewFinance: true,
     canViewInventory: true,
     canViewEquipeOutils: true,
+    canViewReunion: true,
   },
   responsable: {
     vehiculeVisibility: 'all',
@@ -117,6 +122,7 @@ export const ROLE_PRESETS: Record<Role, Permissions> = {
     canViewFinance: true,
     canViewInventory: true,
     canViewEquipeOutils: true,
+    canViewReunion: true,
   },
   technicien: {
     vehiculeVisibility: 'own',
@@ -129,6 +135,7 @@ export const ROLE_PRESETS: Record<Role, Permissions> = {
     canViewFinance: false,
     canViewInventory: false,
     canViewEquipeOutils: false,
+    canViewReunion: true,
   },
   financier: {
     vehiculeVisibility: 'all',
@@ -141,6 +148,7 @@ export const ROLE_PRESETS: Record<Role, Permissions> = {
     canViewFinance: true,
     canViewInventory: true,
     canViewEquipeOutils: false,
+    canViewReunion: true,
   },
 }
 
@@ -169,5 +177,6 @@ export function mergePermissions(role: string, raw: unknown): Permissions {
     canViewFinance: Boolean(p.canViewFinance ?? base.canViewFinance),
     canViewInventory: Boolean(p.canViewInventory ?? base.canViewInventory),
     canViewEquipeOutils: Boolean(p.canViewEquipeOutils ?? base.canViewEquipeOutils),
+    canViewReunion: Boolean(p.canViewReunion ?? base.canViewReunion),
   }
 }

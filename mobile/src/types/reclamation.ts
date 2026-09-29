@@ -1,5 +1,6 @@
 export type ReclamationStatut = 'ouverte' | 'en_cours' | 'traitee' | 'cloturee'
 export type ReclamationPriorite = 'basse' | 'normale' | 'haute'
+export type ReclamationType = 'externe' | 'interne'
 
 export type Reclamation = {
   id: number
@@ -10,6 +11,7 @@ export type Reclamation = {
   sujet: string
   description: string
   statut: ReclamationStatut
+  type?: ReclamationType
   assigneA?: string
   priorite?: ReclamationPriorite
   techniciens?: string[]
@@ -29,6 +31,11 @@ export const RECLAMATION_STATUT_LABELS: Record<ReclamationStatut, string> = {
   en_cours: 'En cours',
   traitee: 'Traitée',
   cloturee: 'Clôturée',
+}
+
+export const RECLAMATION_TYPE_LABELS: Record<ReclamationType, string> = {
+  externe: 'Externe',
+  interne: 'Interne',
 }
 
 export const RECLAMATION_PRIORITE_LABELS: Record<ReclamationPriorite, string> = {

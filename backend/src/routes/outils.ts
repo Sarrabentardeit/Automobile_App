@@ -1,9 +1,14 @@
 import { Router } from 'express'
 import { prisma } from '../lib/prisma'
 import { authenticate } from '../middleware/auth'
+import { requireOperationCle } from '../lib/operationAccess'
 
 const router = Router()
 const db = prisma as any
+
+router.use('/ahmed', authenticate(), requireOperationCle('ahmed'))
+router.use('/nouri', authenticate(), requireOperationCle('nouri'))
+router.use('/mohamed', authenticate(), requireOperationCle('ahmed'))
 
 type OutilMohamedRow = {
   id: number

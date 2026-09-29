@@ -381,11 +381,15 @@ function buildVehiculesWhere(query: {
   q?: string
   service_type?: string
   vip?: string
+  include_archives?: string
 }, includeEtat: boolean): Record<string, unknown> {
   const where: Record<string, unknown> = {}
-  if (includeEtat && query.etat && ETATS.includes(query.etat as (typeof ETATS)[number])) {
+  const includeArchives = query.include_archives === 'true'
+  const filteringOneEtat = Boolean(includeEtat && query.etat && ETATS.includes(query.etat as (typeof ETATS)[number]))
+
+  if (filteringOneEtat) {
     where.etat_actuel = query.etat
-  } else if (query.exclude_etat && ETATS.includes(query.exclude_etat as (typeof ETATS)[number])) {
+  } else if (!includeArchives && query.exclude_etat && ETATS.includes(query.exclude_etat as (typeof ETATS)[number])) {
     where.etat_actuel = { not: query.exclude_etat }
   }
 
@@ -416,12 +420,25 @@ function buildVehiculesWhere(query: {
     const range: Record<string, string> = {}
     if (query.date_debut) range.gte = query.date_debut
     if (query.date_fin) range.lte = query.date_fin
-    // Archives (validés) : filtrer sur la date de sortie / validation, pas l'entrée atelier
-    if (query.etat === 'vert') {
+    const archivedDate = {
+      etat_actuel: 'vert',
+      OR: [
+        { date_sortie: range },
+        { date_sortie: null, date_entree: range },
+      ],
+    }
+    if (query.etat === 'vert' && (filteringOneEtat || !includeArchives)) {
       andClauses.push({
         OR: [
           { date_sortie: range },
           { date_sortie: null, date_entree: range },
+        ],
+      })
+    } else if (includeArchives && !filteringOneEtat) {
+      andClauses.push({
+        OR: [
+          { etat_actuel: { not: 'vert' }, date_entree: range },
+          archivedDate,
         ],
       })
     } else {
@@ -1148,12 +1165,13 @@ router.get('/', authenticate(), async (req, res) => {
     const q = (req.query.q as string)?.trim()
     const service_type = (req.query.service_type as string)?.trim()
     const vip = (req.query.vip as string)?.trim()
+    const include_archives = req.query.include_archives as string | undefined
     const marque = (req.query.marque as string)?.trim().toLowerCase()
     const page = Math.max(1, parseInt(req.query.page as string, 10) || 1)
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string, 10) || 20))
 
     const baseWhere = buildVehiculesWhere(
-      { etat, exclude_etat, technicien_id, type, date_debut, date_fin, q, service_type, vip },
+      { etat, exclude_etat, technicien_id, type, date_debut, date_fin, q, service_type, vip, include_archives },
       true
     )
 
@@ -1209,9 +1227,10 @@ router.get('/brands', authenticate(), async (req, res) => {
     const q = (req.query.q as string)?.trim()
     const service_type = (req.query.service_type as string)?.trim()
     const vip = (req.query.vip as string)?.trim()
+    const include_archives = req.query.include_archives as string | undefined
 
     const where = buildVehiculesWhere(
-      { etat, exclude_etat, technicien_id, type, date_debut, date_fin, q, service_type, vip },
+      { etat, exclude_etat, technicien_id, type, date_debut, date_fin, q, service_type, vip, include_archives },
       true
     )
 
@@ -1240,10 +1259,11 @@ router.get('/counts', authenticate(), async (req, res) => {
     const q = (req.query.q as string)?.trim()
     const service_type = (req.query.service_type as string)?.trim()
     const vip = (req.query.vip as string)?.trim()
+    const include_archives = req.query.include_archives as string | undefined
     const includeEtat = String(req.query.includeEtat ?? 'false').toLowerCase() === 'true'
 
     const where = buildVehiculesWhere(
-      { etat, exclude_etat, technicien_id, type, date_debut, date_fin, q, service_type, vip },
+      { etat, exclude_etat, technicien_id, type, date_debut, date_fin, q, service_type, vip, include_archives },
       includeEtat
     )
 

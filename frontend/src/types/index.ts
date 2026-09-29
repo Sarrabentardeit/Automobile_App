@@ -24,8 +24,11 @@ export interface Permissions {
   canViewFinance: boolean
   /** Stock général + huiles */
   canViewInventory: boolean
-  /** Opération Ahmed (suivi outillage / travaux) */
   canViewEquipeOutils: boolean
+  /** Feuille de réunion de l'atelier */
+  canViewReunion: boolean
+  /** Opérations d'équipe visibles. null = toutes (anciens comptes). */
+  operationIds: number[] | null
 }
 
 export type TogglePermissionKey =
@@ -38,6 +41,7 @@ export type TogglePermissionKey =
   | 'canViewFinance'
   | 'canViewInventory'
   | 'canViewEquipeOutils'
+  | 'canViewReunion'
 
 export const TOGGLE_PERMISSION_LABELS: Record<TogglePermissionKey, { label: string; description: string; icon: string }> = {
   canViewDashboard: { label: 'Voir le dashboard', description: 'Accès au tableau de bord et statistiques', icon: '📊' },
@@ -48,13 +52,14 @@ export const TOGGLE_PERMISSION_LABELS: Record<TogglePermissionKey, { label: stri
   canManageUsers: { label: 'Gérer les utilisateurs', description: 'Créer, modifier et désactiver des comptes', icon: '🔑' },
   canViewFinance: { label: 'Accès finance', description: 'Consulter les données financières', icon: '💰' },
   canViewInventory: { label: 'Accès inventaire', description: 'Stock général et catalogue produits', icon: '📦' },
-  canViewEquipeOutils: { label: 'Accès outils équipe', description: 'Opération Ahmed', icon: '🔧' },
+  canViewEquipeOutils: { label: 'Accès outils équipe', description: 'Choisir les opérations visibles', icon: '🔧' },
+  canViewReunion: { label: 'Accès réunion', description: 'Voir la feuille de réunion de l’atelier', icon: '📋' },
 }
 
 export const ALL_TOGGLE_KEYS: TogglePermissionKey[] = [
   'canViewDashboard', 'canAddVehicule', 'canEditVehicule',
   'canChangeEtat', 'canAssignTechnicien', 'canManageUsers', 'canViewFinance',
-  'canViewInventory', 'canViewEquipeOutils',
+  'canViewInventory', 'canViewEquipeOutils', 'canViewReunion',
 ]
 
 export const VISIBILITY_OPTIONS: { value: VehiculeVisibility; label: string; description: string; icon: string }[] = [
@@ -67,23 +72,40 @@ export const ROLE_PRESETS: Record<Role, Permissions> = {
   admin: {
     vehiculeVisibility: 'all', canAddVehicule: true, canEditVehicule: true, canChangeEtat: true,
     canAssignTechnicien: true, canManageUsers: true, canViewDashboard: true, canViewFinance: true,
-    canViewInventory: true, canViewEquipeOutils: true,
+    canViewInventory: true, canViewEquipeOutils: true, canViewReunion: true, operationIds: null,
   },
   responsable: {
     vehiculeVisibility: 'all', canAddVehicule: true, canEditVehicule: true, canChangeEtat: true,
     canAssignTechnicien: true, canManageUsers: false, canViewDashboard: true, canViewFinance: true,
-    canViewInventory: true, canViewEquipeOutils: true,
+    canViewInventory: true, canViewEquipeOutils: true, canViewReunion: true, operationIds: null,
   },
   technicien: {
     vehiculeVisibility: 'own', canAddVehicule: false, canEditVehicule: false, canChangeEtat: true,
     canAssignTechnicien: false, canManageUsers: false, canViewDashboard: true, canViewFinance: false,
-    canViewInventory: false, canViewEquipeOutils: false,
+    canViewInventory: false, canViewEquipeOutils: false, canViewReunion: true, operationIds: [],
   },
   financier: {
     vehiculeVisibility: 'all', canAddVehicule: false, canEditVehicule: false, canChangeEtat: false,
     canAssignTechnicien: false, canManageUsers: false, canViewDashboard: true, canViewFinance: true,
-    canViewInventory: true, canViewEquipeOutils: false,
+    canViewInventory: true, canViewEquipeOutils: false, canViewReunion: true, operationIds: [],
   },
+}
+
+export function readOperationIds(raw: Record<string, unknown> | null | undefined): number[] | null {
+  if (!raw || !Object.prototype.hasOwnProperty.call(raw, 'operationIds') || raw.operationIds == null) return null
+  if (!Array.isArray(raw.operationIds)) return null
+  return [...new Set(raw.operationIds.map((n) => Number(n)).filter((n) => Number.isInteger(n)))]
+}
+
+export function canSeeOperation(
+  role: string,
+  permissions: Permissions | null | undefined,
+  operationId: number,
+): boolean {
+  if (role === 'admin') return true
+  if (!permissions?.canViewEquipeOutils) return false
+  if (permissions.operationIds == null) return true
+  return permissions.operationIds.includes(operationId)
 }
 
 export const DEFAULT_PERMISSIONS: Permissions = { ...ROLE_PRESETS.technicien }
@@ -604,6 +626,7 @@ export interface CalendarAssignment {
 
 // ==================== RÉCLAMATIONS ====================
 export type ReclamationStatut = 'ouverte' | 'en_cours' | 'traitee' | 'cloturee'
+export type ReclamationType = 'externe' | 'interne'
 
 export interface Reclamation {
   id: number
@@ -614,6 +637,8 @@ export interface Reclamation {
   sujet: string
   description: string
   statut: ReclamationStatut
+  /** externe = client · interne = atelier */
+  type: ReclamationType
   assigneA?: string // nom du responsable
   priorite?: 'basse' | 'normale' | 'haute'
    /** Autres techniciens assignés (noms complets) */
@@ -626,6 +651,11 @@ export const RECLAMATION_STATUT_LABELS: Record<ReclamationStatut, string> = {
   en_cours: 'En cours',
   traitee: 'Traitée',
   cloturee: 'Clôturée',
+}
+export const RECLAMATION_TYPES: ReclamationType[] = ['externe', 'interne']
+export const RECLAMATION_TYPE_LABELS: Record<ReclamationType, string> = {
+  externe: 'Externe',
+  interne: 'Interne',
 }
 
 // ==================== DEVIS / PRIX MAIN D'OEUVRE ====================
@@ -724,6 +754,8 @@ export interface NotePersonnelle {
   /** ISO datetime ou null */
   rappelAt: string | null
   couleur?: NoteCouleur | string
+  /** Catégorie libre, vide = sans catégorie */
+  categorie?: string
   epinglee: boolean
   faite: boolean
   createdAt: string
@@ -735,6 +767,7 @@ export type NotePersonnelleInput = {
   contenu?: string
   rappelAt?: string | null
   couleur?: NoteCouleur | string
+  categorie?: string
   epinglee?: boolean
   faite?: boolean
 }

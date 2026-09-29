@@ -14,8 +14,9 @@ import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Textarea from '@/components/ui/Textarea'
 import Button from '@/components/ui/Button'
-import { Save, Car, Bike, Camera, ImagePlus, X, Crown, ChevronDown, Tag } from 'lucide-react'
+import { Save, Car, Bike, Camera, ImagePlus, X, Crown, ChevronDown, Tag, Search } from 'lucide-react'
 import { cn, getActiveEquipeUsers } from '@/lib/utils'
+import { apiFetch } from '@/lib/api'
 import { BRAND_OPTIONS as FALLBACK_BRANDS } from '@/lib/vehiculeBrands'
 import { fetchMarques, marqueLogoUrl, type Marque } from '@/lib/marquesApi'
 
@@ -93,6 +94,11 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([])
   const [imageCategory, setImageCategory] = useState<VehiculeImageCategory>('etat_exterieur')
   const [imageNote, setImageNote] = useState('')
+  const [knownQuery, setKnownQuery] = useState('')
+  const [knownResults, setKnownResults] = useState<Vehicule[]>([])
+  const [knownLoading, setKnownLoading] = useState(false)
+  const [pickedFrom, setPickedFrom] = useState<string | null>(null)
+  const [useExisting, setUseExisting] = useState(false)
 
   useEffect(() => {
     const token = getAccessToken()
@@ -124,6 +130,81 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
   }, [marquePickerOpen])
+
+  useEffect(() => {
+    if (isEdit || !useExisting) return
+    const q = knownQuery.trim()
+    if (q.length < 2) {
+      setKnownResults([])
+      setKnownLoading(false)
+      return
+    }
+    const token = getAccessToken()
+    if (!token) return
+    let cancelled = false
+    setKnownLoading(true)
+    const timer = setTimeout(() => {
+      void apiFetch<{ data: Vehicule[] }>('/vehicules', {
+        token,
+        params: { q, include_archives: 'true', limit: 30, page: 1 },
+      })
+        .then((res) => {
+          if (cancelled) return
+          const rows = Array.isArray(res.data) ? res.data : []
+          const unique = new Map<string, Vehicule>()
+          for (const row of [...rows].sort((a, b) => b.id - a.id)) {
+            const plate = row.immatriculation.trim().toLowerCase().replace(/\s+/g, '')
+            const key = plate || `modele:${row.modele.trim().toLowerCase()}`
+            if (!unique.has(key)) unique.set(key, row)
+          }
+          setKnownResults([...unique.values()].slice(0, 8))
+        })
+        .catch(() => {
+          if (!cancelled) setKnownResults([])
+        })
+        .finally(() => {
+          if (!cancelled) setKnownLoading(false)
+        })
+    }, 250)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [knownQuery, getAccessToken, isEdit, useExisting])
+
+  const applyKnownVehicle = (row: Vehicule) => {
+    const parsed = parseMarqueModele(row.modele, brandNames)
+    if (parsed.marque) setSelectedMarque(parsed.marque)
+    setForm((prev) => ({
+      ...prev,
+      modele: parsed.modele || row.modele,
+      immatriculation: row.immatriculation,
+      type: row.type,
+      client_telephone: row.client_telephone ?? '',
+      vip: Boolean(row.vip),
+      technicien_ids: row.technicien_ids?.length
+        ? row.technicien_ids
+        : row.technicien_id
+          ? [row.technicien_id]
+          : [],
+      responsable_ids: row.responsable_ids?.length
+        ? row.responsable_ids
+        : row.responsable_id
+          ? [row.responsable_id]
+          : [],
+      technicien_id: row.technicien_id ?? null,
+      responsable_id: row.responsable_id ?? null,
+      defaut: '',
+      date_entree: today(),
+      etat_initial: 'orange',
+    }))
+    setPickedFrom(
+      [row.modele, row.immatriculation].filter(Boolean).join(' · ')
+    )
+    setKnownQuery('')
+    setKnownResults([])
+    setErrors({})
+  }
 
   const selectedMarqueMeta = marques.find(
     m => m.nom.toLowerCase() === selectedMarque.toLowerCase()
@@ -259,6 +340,95 @@ export default function VehiculeForm({ vehicule, onClose, onSubmit }: Props) {
       }
     >
       <form id="vehicule-form" onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
+        {!isEdit ? (
+          <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
+            <label className="flex items-center gap-3 px-4 py-3.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={useExisting}
+                onChange={(e) => {
+                  const on = e.target.checked
+                  setUseExisting(on)
+                  if (!on) {
+                    setKnownQuery('')
+                    setKnownResults([])
+                    setKnownLoading(false)
+                  }
+                }}
+                className="h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-gray-900">Véhicule existant</span>
+                <span className="block text-xs text-gray-500 mt-0.5">Reprendre une voiture déjà venue au garage</span>
+              </span>
+            </label>
+
+            {useExisting ? (
+              <div className="border-t border-gray-100 bg-gray-50/70 px-4 py-3 space-y-2.5">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    id="known-vehicule"
+                    type="search"
+                    autoFocus
+                    value={knownQuery}
+                    onChange={(e) => {
+                      setKnownQuery(e.target.value)
+                      if (pickedFrom) setPickedFrom(null)
+                    }}
+                    placeholder="Immatriculation ou modèle"
+                    className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-400"
+                  />
+                </div>
+
+                {knownLoading ? (
+                  <p className="text-xs text-gray-400">Recherche…</p>
+                ) : null}
+
+                {!knownLoading && knownQuery.trim().length >= 2 && knownResults.length === 0 ? (
+                  <p className="text-xs text-gray-500">Aucun véhicule correspondant.</p>
+                ) : null}
+
+                {knownResults.length > 0 ? (
+                  <div className="rounded-xl border border-gray-200 bg-white overflow-hidden divide-y divide-gray-100">
+                    {knownResults.map((row) => {
+                      const archived = row.etat_actuel === 'vert'
+                      return (
+                        <button
+                          key={row.id}
+                          type="button"
+                          onClick={() => applyKnownVehicle(row)}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-gray-50"
+                        >
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-medium text-gray-900 truncate">{row.modele}</span>
+                            <span className="block text-xs text-gray-500 font-mono truncate">
+                              {row.immatriculation || 'Sans immatriculation'}
+                              {row.client_telephone ? ` · ${row.client_telephone}` : ''}
+                            </span>
+                          </span>
+                          <span className={cn(
+                            'flex-shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                            archived ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'
+                          )}>
+                            {archived ? 'Ancien' : 'Au garage'}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : null}
+
+                {pickedFrom ? (
+                  <p className="text-xs text-gray-700">
+                    <span className="font-semibold text-gray-900">{pickedFrom}</span>
+                    <span className="text-gray-500"> — indiquez la panne du jour.</span>
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {/* Type toggle */}
         <div className="space-y-1.5">
           <label className="block text-xs sm:text-sm font-medium text-gray-700">Type de véhicule</label>

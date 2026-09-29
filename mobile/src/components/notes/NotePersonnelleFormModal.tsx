@@ -26,6 +26,7 @@ import {
 type Props = {
   visible: boolean
   note: NotePersonnelle | null
+  categories?: string[]
   onClose: () => void
   onSave: (data: NotePersonnelleInput) => Promise<void>
 }
@@ -42,9 +43,16 @@ function todayLabel(d: Date): string {
   return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-export default function NotePersonnelleFormModal({ visible, note, onClose, onSave }: Props) {
+export default function NotePersonnelleFormModal({
+  visible,
+  note,
+  categories = [],
+  onClose,
+  onSave,
+}: Props) {
   const [titre, setTitre] = useState('')
   const [contenu, setContenu] = useState('')
+  const [categorie, setCategorie] = useState('')
   const [rappelDate, setRappelDate] = useState<Date | null>(null)
   const [heure, setHeure] = useState('09')
   const [minute, setMinute] = useState('00')
@@ -64,6 +72,7 @@ export default function NotePersonnelleFormModal({ visible, note, onClose, onSav
     if (!visible) return
     setTitre(note?.titre ?? '')
     setContenu(note?.contenu ?? '')
+    setCategorie(note?.categorie ?? '')
     const d = parseIsoToDate(note?.rappelAt)
     setRappelDate(d)
     setHeure(d ? pad(d.getHours()) : '09')
@@ -108,7 +117,18 @@ export default function NotePersonnelleFormModal({ visible, note, onClose, onSav
     setSaving(true)
     setError(null)
     try {
-      await onSave({ titre: titre.trim(), contenu: contenu.trim(), rappelAt, couleur, epinglee })
+      const typed = categorie.trim().replace(/\s+/g, ' ').slice(0, 60)
+      const existing = categories.find(
+        c => c.toLocaleLowerCase('fr') === typed.toLocaleLowerCase('fr')
+      )
+      await onSave({
+        titre: titre.trim(),
+        contenu: contenu.trim(),
+        categorie: existing ?? typed,
+        rappelAt,
+        couleur,
+        epinglee,
+      })
       onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur')
@@ -144,6 +164,32 @@ export default function NotePersonnelleFormModal({ visible, note, onClose, onSav
             placeholder="Ex. Rappeler le client"
             placeholderTextColor={theme.textSubtle}
           />
+
+          <Text style={styles.label}>Catégorie</Text>
+          <TextInput
+            style={styles.input}
+            value={categorie}
+            onChangeText={setCategorie}
+            placeholder="Ex. Atelier, Client…"
+            placeholderTextColor={theme.textSubtle}
+          />
+          {categories.length > 0 ? (
+            <View style={styles.catList}>
+              {categories
+                .filter(c => {
+                  const q = categorie.trim().toLocaleLowerCase('fr')
+                  return !q || c.toLocaleLowerCase('fr').includes(q)
+                })
+                .slice(0, 8)
+                .map(c => (
+                  <Pressable key={c} onPress={() => setCategorie(c)} style={styles.catChip}>
+                    <Text style={styles.catChipText}>{c}</Text>
+                  </Pressable>
+                ))}
+            </View>
+          ) : (
+            <Text style={styles.catHint}>Saisissez une catégorie : elle sera proposée ensuite.</Text>
+          )}
 
           <Text style={styles.label}>Contenu</Text>
           <TextInput
@@ -320,6 +366,17 @@ const styles = StyleSheet.create({
     backgroundColor: theme.bg,
   },
   textarea: { minHeight: 100 },
+  catHint: { fontSize: 12, color: theme.textSubtle, marginTop: 6 },
+  catList: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  catChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#fff7ed',
+    borderWidth: 1,
+    borderColor: '#fed7aa',
+  },
+  catChipText: { fontSize: 12, fontWeight: '600', color: '#c2410c' },
   dateBtn: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -7,6 +7,7 @@ import { FournisseursProvider } from '@/contexts/FournisseursContext'
 import { TransactionsFournisseursProvider } from '@/contexts/TransactionsFournisseursContext'
 import { StockGeneralProvider } from '@/contexts/StockGeneralContext'
 import { OutilsProvider } from '@/contexts/OutilsContext'
+import { OperationsProvider } from '@/contexts/OperationsContext'
 import { ClientsProvider } from '@/contexts/ClientsContext'
 import { ClientsDettesProvider } from '@/contexts/ClientsDettesContext'
 import { ContactsImportantsProvider } from '@/contexts/ContactsImportantsContext'
@@ -43,8 +44,9 @@ import DemandeDevisPage from '@/pages/DemandeDevisPage'
 import FournisseursPage from '@/pages/FournisseursPage'
 import TransactionsFournisseursPage from '@/pages/TransactionsFournisseursPage'
 import StockGeneralPage from '@/pages/StockGeneralPage'
-import OutilsAhmedPage from '@/pages/OutilsAhmedPage'
-import OutilsNouriPage from '@/pages/OutilsNouriPage'
+import OperationPage from '@/pages/OperationPage'
+import OperationsManagePage from '@/pages/OperationsManagePage'
+import LegacyOperationRedirect from '@/pages/LegacyOperationRedirect'
 import AdminEspacePage from '@/pages/AdminEspacePage'
 import FacturationPage from '@/pages/FacturationPage'
 import FacturationPaiementsPartielsPage from '@/pages/FacturationPaiementsPartielsPage'
@@ -55,6 +57,7 @@ import ChecklistsHistoryPage from '@/pages/ChecklistsHistoryPage'
 import ChecklistTemplatesPage from '@/pages/ChecklistTemplatesPage'
 import DocumentsPage from '@/pages/DocumentsPage'
 import NotesPersonnellesPage from '@/pages/NotesPersonnellesPage'
+import ReunionPage from '@/pages/ReunionPage'
 import MarquesPage from '@/pages/MarquesPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 
@@ -71,6 +74,7 @@ export default function App() {
               <TransactionsFournisseursProvider>
               <StockGeneralProvider>
               <OutilsProvider>
+              <OperationsProvider>
               <ClientsProvider>
               <ClientsDettesProvider>
               <ContactsImportantsProvider>
@@ -117,14 +121,17 @@ export default function App() {
               <Route path="/fournisseurs" element={<FournisseursPage />} />
               <Route path="/fournisseurs/transactions" element={<TransactionsFournisseursPage />} />
               <Route path="/stock-general" element={<StockGeneralPage />} />
-              <Route path="/outils/mohamed" element={<Navigate to="/outils/ahmed" replace />} />
-              <Route path="/outils/ahmed" element={<OutilsAhmedPage />} />
-              <Route path="/outils/nouri" element={<OutilsNouriPage />} />
+              <Route path="/outils/mohamed" element={<LegacyOperationRedirect cle="ahmed" />} />
+              <Route path="/outils/ahmed" element={<LegacyOperationRedirect cle="ahmed" />} />
+              <Route path="/outils/nouri" element={<LegacyOperationRedirect cle="nouri" />} />
+              <Route path="/operations" element={<OperationsManagePage />} />
+              <Route path="/operations/:id" element={<OperationPage />} />
               <Route path="/checklists" element={<ChecklistsPage />} />
               <Route path="/checklists/history" element={<ChecklistsHistoryPage />} />
               <Route path="/checklists/modeles" element={<ChecklistTemplatesPage />} />
               <Route path="/documents" element={<DocumentsPage />} />
               <Route path="/notes" element={<NotesPersonnellesPage />} />
+              <Route path="/reunion" element={<ReunionPage />} />
             </Route>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<NotFoundPage />} />
@@ -141,6 +148,7 @@ export default function App() {
               </ContactsImportantsProvider>
               </ClientsDettesProvider>
               </ClientsProvider>
+              </OperationsProvider>
               </OutilsProvider>
               </StockGeneralProvider>
               </TransactionsFournisseursProvider>

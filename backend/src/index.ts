@@ -32,6 +32,8 @@ import caisseRouter from './routes/caisse'
 import monthlyChargesRouter from './routes/monthlyCharges'
 import moneyRouter from './routes/money'
 import outilsRouter from './routes/outils'
+import operationsRouter from './routes/operations'
+import reunionsRouter from './routes/reunions'
 import checklistsRouter from './routes/checklists'
 import statsRouter from './routes/stats'
 import settingsRouter from './routes/settings'
@@ -113,6 +115,8 @@ app.use('/caisse', caisseRouter)
 app.use('/charges-mensuelles', monthlyChargesRouter)
 app.use('/money', moneyRouter)
 app.use('/outils', outilsRouter)
+app.use('/operations', operationsRouter)
+app.use('/reunions', reunionsRouter)
 app.use('/checklists', checklistsRouter)
 app.use('/stats', statsRouter)
 app.use('/settings', settingsRouter)

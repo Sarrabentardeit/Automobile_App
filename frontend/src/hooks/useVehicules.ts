@@ -26,6 +26,8 @@ export interface VehiculesFilters {
   vip?: boolean
   /** Brand folder slug (e.g. volkswagen, autres) — list vehicles for one brand only */
   marque?: string
+  /** Inclut les véhicules archivés (état validé) dans la liste et les compteurs */
+  include_archives?: boolean
   page?: number
   limit?: number
 }
@@ -103,6 +105,7 @@ export function useVehicules() {
         if (filters?.vip === true) params.vip = 'true'
         else if (filters?.vip === false) params.vip = 'false'
         if (filters?.marque) params.marque = filters.marque
+        if (filters?.include_archives) params.include_archives = 'true'
 
         const res = await apiFetch<{ data: Vehicule[]; total: number; page: number; limit: number }>('/vehicules', {
           token,
@@ -201,6 +204,7 @@ export function useVehicules() {
         if (filters?.service_type) params.service_type = filters.service_type
         if (filters?.vip === true) params.vip = 'true'
         else if (filters?.vip === false) params.vip = 'false'
+        if (filters?.include_archives) params.include_archives = 'true'
         const data = await apiFetch<VehiculeFilteredCounts>('/vehicules/counts', { token, params })
         setFilteredCounts(data)
       } catch {

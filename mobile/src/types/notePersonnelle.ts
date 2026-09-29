@@ -15,6 +15,7 @@ export type NotePersonnelle = {
   contenu: string
   rappelAt: string | null
   couleur?: NoteCouleur | string
+  categorie?: string
   epinglee: boolean
   faite: boolean
   createdAt: string
@@ -26,6 +27,7 @@ export type NotePersonnelleInput = {
   contenu?: string
   rappelAt?: string | null
   couleur?: NoteCouleur | string
+  categorie?: string
   epinglee?: boolean
   faite?: boolean
 }

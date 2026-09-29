@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, useLayoutEffect, type ReactNode } from 'react'
 import type { User, Permissions, Role } from '@/types'
-import { ROLE_PRESETS } from '@/types'
+import { ROLE_PRESETS, readOperationIds } from '@/types'
 import { apiFetch, setAuthBridge, type LoginResponse, type RegisterResponse, type RefreshResponse } from '@/lib/api'
 
 const STORAGE_USER = 'elmecano_user'
@@ -78,6 +78,8 @@ function mergePermissions(role: string, raw: unknown): Permissions {
     canViewFinance: Boolean(p.canViewFinance ?? base.canViewFinance),
     canViewInventory: Boolean(p.canViewInventory ?? base.canViewInventory),
     canViewEquipeOutils: Boolean(p.canViewEquipeOutils ?? base.canViewEquipeOutils),
+    canViewReunion: Boolean(p.canViewReunion ?? base.canViewReunion),
+    operationIds: readOperationIds(p),
   }
 }
 
@@ -102,7 +104,9 @@ function loadStoredUser(): User | null {
   try {
     const raw = localStorage.getItem(STORAGE_USER)
     if (!raw) return null
-    return JSON.parse(raw) as User
+    const parsed = JSON.parse(raw) as User
+    if (!parsed?.role || !parsed.permissions) return parsed
+    return { ...parsed, permissions: mergePermissions(parsed.role, parsed.permissions) }
   } catch {
     return null
   }

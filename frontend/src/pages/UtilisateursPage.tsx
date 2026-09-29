@@ -3,6 +3,7 @@ import { useUsers } from '@/contexts/UsersContext'
 import { useToast } from '@/contexts/ToastContext'
 import { ALL_TOGGLE_KEYS, TOGGLE_PERMISSION_LABELS, VISIBILITY_OPTIONS, ROLE_PRESETS, ROLE_CONFIG, ALL_ROLES,
   type User, type Permissions, type TogglePermissionKey, type VehiculeVisibility, type Role } from '@/types'
+import { useOperations } from '@/contexts/OperationsContext'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -19,9 +20,18 @@ function countPerms(p: Permissions): number {
   return toggles + vis
 }
 
+function sameOperationIds(a: number[] | null, b: number[] | null): boolean {
+  if (a == null && b == null) return true
+  if (a == null || b == null) return false
+  if (a.length !== b.length) return false
+  const set = new Set(a)
+  return b.every((id) => set.has(id))
+}
+
 function isCustomized(role: Role, perms: Permissions): boolean {
   const preset = ROLE_PRESETS[role]
   if (perms.vehiculeVisibility !== preset.vehiculeVisibility) return true
+  if (!sameOperationIds(perms.operationIds, preset.operationIds)) return true
   return ALL_TOGGLE_KEYS.some(k => perms[k] !== preset[k])
 }
 
@@ -29,6 +39,7 @@ const TOTAL_PERMS = ALL_TOGGLE_KEYS.length + 1
 
 export default function UtilisateursPage() {
   const { user } = useAuth()
+  const { operations } = useOperations()
   const { users, loading, error, createUser, updateUser, deleteUser } = useUsers()
   const toast = useToast()
   const [filtreRole, setFiltreRole] = useState<Role | 'tous'>('tous')
@@ -114,6 +125,18 @@ export default function UtilisateursPage() {
     }))
   }
 
+  const setOperationAccess = (operationId: number, checked: boolean) => {
+    setFormData((prev) => {
+      const current = prev.permissions.operationIds
+      const activeIds = operations.map((op) => op.id)
+      const base = current == null ? activeIds : current
+      const next = checked
+        ? [...new Set([...base, operationId])]
+        : base.filter((id) => id !== operationId)
+      return { ...prev, permissions: { ...prev.permissions, operationIds: next, canViewEquipeOutils: true } }
+    })
+  }
+
   const setVisibility = (val: VehiculeVisibility) => {
     setFormData(prev => ({
       ...prev,
@@ -125,6 +148,15 @@ export default function UtilisateursPage() {
     e.preventDefault()
     setSubmitting(true)
     try {
+      if (
+        formData.permissions.canViewEquipeOutils &&
+        formData.permissions.operationIds != null &&
+        formData.permissions.operationIds.length === 0
+      ) {
+        toast.error('Cochez au moins une opération')
+        setSubmitting(false)
+        return
+      }
       if (editingUser) {
         await updateUser(editingUser.id, {
           nom_complet: formData.nom_complet,
@@ -443,10 +475,21 @@ export default function UtilisateursPage() {
             {ALL_TOGGLE_KEYS.map(key => {
               const config = TOGGLE_PERMISSION_LABELS[key]
               const hasIt = showPermsView.permissions[key]
+              const operationNames = key === 'canViewEquipeOutils' && hasIt
+                ? showPermsView.permissions.operationIds == null
+                  ? 'Toutes les opérations'
+                  : operations
+                      .filter((op) => showPermsView.permissions.operationIds?.includes(op.id))
+                      .map((op) => op.nom)
+                      .join(', ') || 'Aucune opération'
+                : null
               return (
                 <div key={key} className={cn('flex items-center gap-2.5 p-2.5 sm:p-3 rounded-xl', hasIt ? 'bg-green-50' : 'bg-gray-50')}>
                   <span className="text-base sm:text-lg">{config.icon}</span>
-                  <p className={cn('text-xs sm:text-sm font-semibold flex-1', hasIt ? 'text-green-800' : 'text-gray-400')}>{config.label}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className={cn('text-xs sm:text-sm font-semibold', hasIt ? 'text-green-800' : 'text-gray-400')}>{config.label}</p>
+                    {operationNames ? <p className="text-[10px] sm:text-xs text-green-700">{operationNames}</p> : null}
+                  </div>
                   <div className={cn('w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center flex-shrink-0', hasIt ? 'bg-green-500' : 'bg-gray-300')}>
                     {hasIt ? <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" /> : <Ban className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />}
                   </div>
@@ -555,26 +598,52 @@ export default function UtilisateursPage() {
               {ALL_TOGGLE_KEYS.map(key => {
                 const config = TOGGLE_PERMISSION_LABELS[key]
                 const isOn = formData.permissions[key]
+                const granted = formData.permissions.operationIds
                 return (
-                  <button key={key} type="button" onClick={() => togglePerm(key)}
-                    className={cn(
-                      'w-full flex items-center gap-2.5 p-2.5 sm:p-3 rounded-xl border-2 transition-all text-left active:scale-[0.98]',
-                      isOn ? 'border-orange-400 bg-orange-50' : 'border-gray-100 bg-white hover:border-gray-200',
-                    )}
-                  >
-                    <span className="text-base sm:text-lg flex-shrink-0">{config.icon}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className={cn('text-xs sm:text-sm font-semibold', isOn ? 'text-orange-800' : 'text-gray-700')}>{config.label}</p>
-                      <p className={cn('text-[10px] sm:text-xs', isOn ? 'text-orange-600' : 'text-gray-400')}>{config.description}</p>
-                    </div>
-                    <div className={cn('w-9 h-5 sm:w-10 sm:h-6 rounded-full flex items-center transition-colors flex-shrink-0 px-0.5',
-                      isOn ? 'bg-orange-500' : 'bg-gray-300',
-                    )}>
-                      <div className={cn('w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-white shadow transition-transform',
-                        isOn ? 'translate-x-4' : 'translate-x-0',
-                      )} />
-                    </div>
-                  </button>
+                  <div key={key}>
+                    <button type="button" onClick={() => togglePerm(key)}
+                      className={cn(
+                        'w-full flex items-center gap-2.5 p-2.5 sm:p-3 rounded-xl border-2 transition-all text-left active:scale-[0.98]',
+                        isOn ? 'border-orange-400 bg-orange-50' : 'border-gray-100 bg-white hover:border-gray-200',
+                        key === 'canViewEquipeOutils' && isOn && 'rounded-b-none',
+                      )}
+                    >
+                      <span className="text-base sm:text-lg flex-shrink-0">{config.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className={cn('text-xs sm:text-sm font-semibold', isOn ? 'text-orange-800' : 'text-gray-700')}>{config.label}</p>
+                        <p className={cn('text-[10px] sm:text-xs', isOn ? 'text-orange-600' : 'text-gray-400')}>{config.description}</p>
+                      </div>
+                      <div className={cn('w-9 h-5 sm:w-10 sm:h-6 rounded-full flex items-center transition-colors flex-shrink-0 px-0.5',
+                        isOn ? 'bg-orange-500' : 'bg-gray-300',
+                      )}>
+                        <div className={cn('w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-white shadow transition-transform',
+                          isOn ? 'translate-x-4' : 'translate-x-0',
+                        )} />
+                      </div>
+                    </button>
+                    {key === 'canViewEquipeOutils' && isOn ? (
+                      <div className="rounded-b-xl border-2 border-t-0 border-orange-200 bg-white px-3 py-2 space-y-1">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 px-1 pt-1">Opérations autorisées</p>
+                        {operations.length === 0 ? (
+                          <p className="text-xs text-gray-400 px-1 py-1">Aucune opération pour le moment.</p>
+                        ) : operations.map((op) => {
+                          const checked = granted == null || granted.includes(op.id)
+                          return (
+                            <label key={op.id} className="flex items-center gap-2.5 px-1 py-1.5 rounded-lg hover:bg-orange-50 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => setOperationAccess(op.id, e.target.checked)}
+                                className="h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-400"
+                              />
+                              <span className="text-sm text-gray-800">{op.nom}</span>
+                              {!op.actif ? <span className="text-[10px] text-gray-400">masquée</span> : null}
+                            </label>
+                          )
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
                 )
               })}
             </div>

@@ -14,6 +14,7 @@ function toNote(n: {
   contenu: string
   rappelAt: Date | null
   couleur?: string | null
+  categorie?: string | null
   epinglee: boolean
   faite: boolean
   createdAt: Date
@@ -26,11 +27,19 @@ function toNote(n: {
     contenu: n.contenu,
     rappelAt: n.rappelAt ? n.rappelAt.toISOString() : null,
     couleur: n.couleur || '',
+    categorie: (n.categorie || '').trim(),
     epinglee: n.epinglee,
     faite: n.faite,
     createdAt: n.createdAt.toISOString(),
     updatedAt: n.updatedAt.toISOString(),
   }
+}
+
+function parseCategorie(raw: unknown): string | undefined {
+  if (raw === undefined) return undefined
+  if (raw === null) return ''
+  if (typeof raw !== 'string') return undefined
+  return raw.trim().replace(/\s+/g, ' ').slice(0, 60)
 }
 
 function parseRappelAt(raw: unknown): Date | null | undefined {
@@ -61,6 +70,7 @@ router.get('/', authenticate(), async (req: AuthRequest, res) => {
       where.OR = [
         { titre: { contains: q, mode: 'insensitive' } },
         { contenu: { contains: q, mode: 'insensitive' } },
+        { categorie: { contains: q, mode: 'insensitive' } },
       ]
     }
 
@@ -87,6 +97,7 @@ router.post('/', authenticate(), async (req: AuthRequest, res) => {
       contenu?: string
       rappelAt?: string | null
       couleur?: string
+      categorie?: string
       epinglee?: boolean
       faite?: boolean
     }
@@ -107,6 +118,11 @@ router.post('/', authenticate(), async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'couleur invalide' })
     }
 
+    const categorie = parseCategorie(body.categorie)
+    if (body.categorie !== undefined && categorie === undefined) {
+      return res.status(400).json({ error: 'categorie invalide' })
+    }
+
     const created = await db.notePersonnelle.create({
       data: {
         userId,
@@ -114,6 +130,7 @@ router.post('/', authenticate(), async (req: AuthRequest, res) => {
         contenu,
         rappelAt: rappelAt === undefined ? null : rappelAt,
         couleur: couleur ?? '',
+        categorie: categorie ?? '',
         epinglee: Boolean(body.epinglee),
         faite: Boolean(body.faite),
         rappelNotifieAt: null,
@@ -146,6 +163,7 @@ router.put('/:id', authenticate(), async (req: AuthRequest, res) => {
       contenu?: string
       rappelAt?: string | null
       couleur?: string
+      categorie?: string
       epinglee?: boolean
       faite?: boolean
     }
@@ -166,6 +184,11 @@ router.put('/:id', authenticate(), async (req: AuthRequest, res) => {
       const couleur = parseCouleur(body.couleur)
       if (couleur === undefined) return res.status(400).json({ error: 'couleur invalide' })
       data.couleur = couleur
+    }
+    if (body.categorie !== undefined) {
+      const categorie = parseCategorie(body.categorie)
+      if (categorie === undefined) return res.status(400).json({ error: 'categorie invalide' })
+      data.categorie = categorie
     }
 
     if (

@@ -4,7 +4,7 @@ import { useUsers } from '@/contexts/UsersContext'
 import EtatBadge from './EtatBadge'
 import VipBadge from './VipBadge'
 import { Phone, Calendar, ArrowRightLeft, Eye, Pencil, Clock, Trash2, Wallet, ClipboardList } from 'lucide-react'
-import { daysSince, getUserDisplayNames, formatDuree, formatDate, stripVehiculeAssigneesMeta, parseVehiculeAssigneesFromText, resolveVehiculeAssigneeIds } from '@/lib/utils'
+import { cn, daysSince, getUserDisplayNames, formatDuree, formatDate, stripVehiculeAssigneesMeta, parseVehiculeAssigneesFromText, resolveVehiculeAssigneeIds } from '@/lib/utils'
 import type { Permissions } from '@/types'
 
 interface Props {
@@ -39,8 +39,15 @@ export default function VehiculeCard({
     (Date.now() - new Date(v.derniere_mise_a_jour).getTime()) / 60000
   )
 
+  const archived = v.etat_actuel === 'vert'
+
   return (
-    <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all group active:shadow-md">
+    <div className="relative bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all group active:shadow-md">
+      {archived ? (
+        <div className="pointer-events-none absolute top-5 -right-11 z-10 w-40 rotate-45 bg-emerald-600 py-1.5 text-center text-xs font-extrabold uppercase tracking-[0.18em] text-white shadow-[0_2px_8px_rgba(0,0,0,0.28)]">
+          Archivé
+        </div>
+      ) : null}
       <div className="flex">
         {/* Color bar */}
         <div className="w-1 sm:w-1.5 flex-shrink-0" style={{ backgroundColor: cfg.color }} />
@@ -60,7 +67,7 @@ export default function VehiculeCard({
             </div>
 
             {/* Actions */}
-            <div className="flex items-center gap-1 flex-shrink-0">
+            <div className={cn('flex items-center gap-1 flex-shrink-0', archived && 'mr-12')}>
               {permissions.canChangeEtat && (v.etat_actuel !== 'vert' || allowChangeEtatWhenValidated) && (
                 <button onClick={onChangeEtat} title="Changer l'état"
                   className="p-1.5 sm:p-2 rounded-lg bg-orange-50 text-orange-600 hover:bg-orange-100 active:bg-orange-200 transition-colors"

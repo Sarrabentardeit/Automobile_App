@@ -2,8 +2,8 @@ import { useState, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useUsers } from '@/contexts/UsersContext'
-import type { Reclamation, ReclamationStatut } from '@/types'
-import { RECLAMATION_STATUTS, RECLAMATION_STATUT_LABELS } from '@/types'
+import type { Reclamation, ReclamationStatut, ReclamationType } from '@/types'
+import { RECLAMATION_STATUTS, RECLAMATION_STATUT_LABELS, RECLAMATION_TYPE_LABELS } from '@/types'
 import { useReclamations } from '@/contexts/ReclamationsContext'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -32,6 +32,7 @@ export default function ReclamationPage() {
   const { reclamations, loading, addReclamation, updateReclamation } = useReclamations()
   const toast = useToast()
   const [filterStatut, setFilterStatut] = useState<ReclamationStatut | 'toutes'>('toutes')
+  const [filterType, setFilterType] = useState<ReclamationType | 'toutes'>('toutes')
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [showForm, setShowForm] = useState(false)
@@ -43,6 +44,7 @@ export default function ReclamationPage() {
     sujet: '',
     description: '',
     statut: 'ouverte',
+    type: 'externe',
     assigneA: '',
     priorite: 'normale',
     techniciens: [],
@@ -56,6 +58,7 @@ export default function ReclamationPage() {
   const filtered = useMemo(() => {
     let list = reclamations
     if (filterStatut !== 'toutes') list = list.filter(r => r.statut === filterStatut)
+    if (filterType !== 'toutes') list = list.filter(r => (r.type || 'externe') === filterType)
     if (search.trim()) {
       const q = search.toLowerCase()
       list = list.filter(
@@ -67,25 +70,39 @@ export default function ReclamationPage() {
       )
     }
     return list.sort((a, b) => b.date.localeCompare(a.date))
-  }, [reclamations, filterStatut, search])
+  }, [reclamations, filterStatut, filterType, search])
 
   const selected = useMemo(() => (selectedId ? reclamations.find(r => r.id === selectedId) : null), [reclamations, selectedId])
 
   const stats = useMemo(() => {
-    const ouvertes = reclamations.filter(r => r.statut === 'ouverte').length
-    const enCours = reclamations.filter(r => r.statut === 'en_cours').length
-    const traitees = reclamations.filter(r => r.statut === 'traitee').length
-    const cloturees = reclamations.filter(r => r.statut === 'cloturee').length
-    const urgentes = reclamations.filter(r => r.priorite === 'haute' && r.statut !== 'cloturee').length
+    const scoped =
+      filterType === 'toutes'
+        ? reclamations
+        : reclamations.filter(r => (r.type || 'externe') === filterType)
     return {
       total: reclamations.length,
-      ouvertes,
-      enCours,
-      traitees,
-      cloturees,
-      urgentes,
+      externes: reclamations.filter(r => (r.type || 'externe') === 'externe').length,
+      internes: reclamations.filter(r => r.type === 'interne').length,
+      scopedTotal: scoped.length,
+      ouvertes: scoped.filter(r => r.statut === 'ouverte').length,
+      enCours: scoped.filter(r => r.statut === 'en_cours').length,
+      traitees: scoped.filter(r => r.statut === 'traitee').length,
+      cloturees: scoped.filter(r => r.statut === 'cloturee').length,
     }
-  }, [reclamations])
+  }, [reclamations, filterType])
+
+  const groups = useMemo(() => {
+    if (filterType !== 'toutes') {
+      return [{ key: filterType, label: RECLAMATION_TYPE_LABELS[filterType], items: filtered }]
+    }
+    return (['externe', 'interne'] as const)
+      .map(key => ({
+        key,
+        label: RECLAMATION_TYPE_LABELS[key],
+        items: filtered.filter(r => (r.type || 'externe') === key),
+      }))
+      .filter(g => g.items.length > 0)
+  }, [filtered, filterType])
 
   const openNew = () => {
     setForm({
@@ -96,6 +113,7 @@ export default function ReclamationPage() {
       sujet: '',
       description: '',
       statut: 'ouverte',
+      type: 'externe',
       assigneA: '',
       priorite: 'normale',
       techniciens: [],
@@ -113,6 +131,7 @@ export default function ReclamationPage() {
       sujet: r.sujet,
       description: r.description,
       statut: r.statut,
+      type: r.type || 'externe',
       assigneA: r.assigneA ?? '',
       priorite: r.priorite ?? 'normale',
       techniciens: r.techniciens ?? [],
@@ -147,7 +166,7 @@ export default function ReclamationPage() {
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto pb-12">
+      <div className="max-w-5xl mx-auto pb-12">
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900 tracking-tight flex items-center gap-2">
@@ -156,7 +175,7 @@ export default function ReclamationPage() {
               </span>
               Réclamations
             </h1>
-            <p className="text-sm text-gray-500 mt-1">Suivi des réclamations clients</p>
+            <p className="text-sm text-gray-500 mt-1">Réclamations externes et internes</p>
           </div>
         </header>
         <div className="flex items-center justify-center py-16">
@@ -167,7 +186,7 @@ export default function ReclamationPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto pb-12">
+    <div className="max-w-5xl mx-auto pb-12">
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900 tracking-tight flex items-center gap-2">
@@ -176,137 +195,173 @@ export default function ReclamationPage() {
             </span>
             Réclamations
           </h1>
-          <p className="text-sm text-gray-500 mt-1">Suivi des réclamations clients</p>
+          <p className="text-sm text-gray-500 mt-1">Réclamations externes (clients) et internes (atelier)</p>
         </div>
         <Button onClick={openNew} icon={<Plus className="w-4 h-4" />}>
           Nouvelle réclamation
         </Button>
       </header>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-        <Card padding="sm" className="border border-gray-100">
-          <p className="text-[11px] text-gray-500 uppercase">Total</p>
-          <p className="text-lg font-bold text-gray-900 tabular-nums">{stats.total}</p>
-        </Card>
-        <Card padding="sm" className="border border-amber-100 bg-amber-50/40">
-          <p className="text-[11px] text-amber-700 uppercase">Ouvertes</p>
-          <p className="text-lg font-bold text-amber-700 tabular-nums">{stats.ouvertes}</p>
-        </Card>
-        <Card padding="sm" className="border border-blue-100 bg-blue-50/40">
-          <p className="text-[11px] text-blue-700 uppercase">En cours</p>
-          <p className="text-lg font-bold text-blue-700 tabular-nums">{stats.enCours}</p>
-        </Card>
-        <Card padding="sm" className="border border-emerald-100 bg-emerald-50/40">
-          <p className="text-[11px] text-emerald-700 uppercase">Traitées</p>
-          <p className="text-lg font-bold text-emerald-700 tabular-nums">{stats.traitees}</p>
-        </Card>
-        <Card padding="sm" className="border border-gray-200 bg-gray-50/60">
-          <p className="text-[11px] text-gray-600 uppercase">Clôturées</p>
-          <p className="text-lg font-bold text-gray-700 tabular-nums">{stats.cloturees}</p>
-        </Card>
-        <Card padding="sm" className="border border-red-100 bg-red-50/40">
-          <p className="text-[11px] text-red-700 uppercase">Urgentes</p>
-          <p className="text-lg font-bold text-red-700 tabular-nums">{stats.urgentes}</p>
-        </Card>
+      <div className="grid grid-cols-3 rounded-2xl border border-black/[0.06] bg-white overflow-hidden mb-4">
+        {(
+          [
+            { id: 'toutes' as const, label: 'Toutes', value: stats.total, hint: 'Réclamations' },
+            { id: 'externe' as const, label: 'Externes', value: stats.externes, hint: 'Clients' },
+            { id: 'interne' as const, label: 'Internes', value: stats.internes, hint: 'Atelier' },
+          ]
+        ).map(kpi => {
+          const active = filterType === kpi.id
+          return (
+            <button
+              key={kpi.id}
+              type="button"
+              onClick={() => setFilterType(kpi.id)}
+              className={cn(
+                'text-left px-4 sm:px-6 py-5 border-r border-black/[0.06] last:border-r-0 transition-colors',
+                active ? 'bg-orange-50/70' : 'hover:bg-gray-50'
+              )}
+            >
+              <p className={cn('text-xs font-medium', active ? 'text-orange-700' : 'text-gray-500')}>
+                {kpi.label}
+              </p>
+              <p className="text-3xl sm:text-4xl font-semibold text-gray-950 tabular-nums tracking-tight mt-2 leading-none">
+                {kpi.value}
+              </p>
+              <p className="text-[11px] text-gray-400 mt-2">{kpi.hint}</p>
+            </button>
+          )
+        })}
       </div>
 
-      <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <input
-            type="search"
-            placeholder="Rechercher (client, véhicule, sujet…)"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm"
-          />
-          <div className="inline-flex p-1 rounded-xl bg-gray-100">
-            {(['toutes', ...RECLAMATION_STATUTS] as const).map(s => (
+      <div className="rounded-2xl border border-black/[0.06] bg-white p-3 sm:p-4 mb-6 space-y-3">
+        <input
+          type="search"
+          placeholder="Rechercher (client, véhicule, sujet…)"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-full px-3.5 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm"
+        />
+        <div className="flex gap-1.5 overflow-x-auto">
+          {(['toutes', ...RECLAMATION_STATUTS] as const).map(s => {
+            const active = filterStatut === s
+            const count =
+              s === 'toutes'
+                ? stats.scopedTotal
+                : s === 'ouverte'
+                  ? stats.ouvertes
+                  : s === 'en_cours'
+                    ? stats.enCours
+                    : s === 'traitee'
+                      ? stats.traitees
+                      : stats.cloturees
+            return (
               <button
                 key={s}
+                type="button"
                 onClick={() => setFilterStatut(s)}
                 className={cn(
-                  'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
-                  filterStatut === s ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  'px-3 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap transition-colors',
+                  active
+                    ? 'bg-gray-900 text-white border-gray-900'
+                    : 'bg-gray-50 text-gray-600 border-transparent hover:bg-gray-100'
                 )}
               >
-                {s === 'toutes' ? 'Toutes' : RECLAMATION_STATUT_LABELS[s]}
+                {s === 'toutes' ? 'Tous les statuts' : RECLAMATION_STATUT_LABELS[s]}
+                <span className={cn('ml-1 tabular-nums', active ? 'opacity-80' : 'text-gray-400')}>
+                  {count}
+                </span>
               </button>
-            ))}
-          </div>
+            )
+          })}
         </div>
+      </div>
 
-        {filtered.length === 0 ? (
-          <Card padding="lg" className="text-center py-14">
-            <AlertCircle className="w-12 h-12 text-gray-200 mx-auto mb-3" />
-            <p className="text-gray-500 font-medium">Aucune réclamation</p>
-            <p className="text-sm text-gray-400 mt-1">
-              {filterStatut !== 'toutes' || search ? 'Modifiez les filtres ou ajoutez une réclamation.' : 'Ajoutez une réclamation pour commencer.'}
-            </p>
+      {filtered.length === 0 ? (
+        <Card padding="lg" className="text-center py-14">
+          <AlertCircle className="w-12 h-12 text-gray-200 mx-auto mb-3" />
+          <p className="text-gray-500 font-medium">Aucune réclamation</p>
+          <p className="text-sm text-gray-400 mt-1">
+            {filterStatut !== 'toutes' || filterType !== 'toutes' || search
+              ? 'Modifiez les filtres ou ajoutez une réclamation.'
+              : 'Ajoutez une réclamation pour commencer.'}
+          </p>
+          {filterStatut === 'toutes' && filterType === 'toutes' && !search ? (
             <Button className="mt-4" onClick={openNew} icon={<Plus className="w-4 h-4" />}>
               Nouvelle réclamation
             </Button>
-          </Card>
-        ) : (
-          <ul className="space-y-3">
-            {filtered.map(r => (
-              <li key={r.id}>
-                <Card
-                  padding="none"
-                  className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
-                  onClick={() => openEdit(r)}
-                >
-                  <div className="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                        <span className={cn('inline-flex px-2 py-0.5 rounded-lg text-xs font-semibold border', STATUT_STYLES[r.statut])}>
-                          {RECLAMATION_STATUT_LABELS[r.statut]}
-                        </span>
-                        {r.priorite && r.priorite !== 'normale' && (
-                          <span className={cn('text-xs uppercase', PRIORITE_STYLES[r.priorite])}>{r.priorite}</span>
-                        )}
-                        <span className="text-xs text-gray-400">{formatDate(r.date)}</span>
-                      </div>
-                      <p className="font-semibold text-gray-900 truncate">{r.sujet}</p>
-                      <p className="text-sm text-gray-600 flex items-center gap-1.5 mt-0.5">
-                        <User className="w-3.5 h-3.5 text-gray-400" />
-                        {r.clientName}
-                        {r.vehicleRef && (
-                          <>
-                            <span className="text-gray-300">·</span>
-                            <Car className="w-3.5 h-3.5 text-gray-400" />
-                            {r.vehicleRef}
-                          </>
-                        )}
-                      </p>
-                      {r.description && (
-                        <p className="text-sm text-gray-500 mt-1 line-clamp-2">{r.description}</p>
-                      )}
-                      {(r.assigneA || (r.techniciens && r.techniciens.length > 0)) && (
-                        <p className="text-xs text-gray-400 mt-1.5">
-                          {r.assigneA && <>Assigné à {r.assigneA}</>}
-                          {r.techniciens && r.techniciens.length > 0 && (
-                            <>
-                              {r.assigneA && ' '}
-                              <span>
-                                (+
-                                {r.assigneA
-                                  ? r.techniciens.length
-                                  : r.techniciens.length - 1}
-                                {' '}pers.)
-                              </span>
-                            </>
+          ) : null}
+        </Card>
+      ) : (
+        <div className="space-y-6">
+          {groups.map(group => (
+            <section key={group.key}>
+              {filterType === 'toutes' ? (
+                <div className="flex items-center gap-3 mb-3">
+                  <h2 className="text-sm font-medium text-gray-800">{group.label}</h2>
+                  <span className="text-[11px] text-gray-400 tabular-nums">{group.items.length}</span>
+                  <span className="h-px flex-1 bg-black/[0.06]" />
+                </div>
+              ) : null}
+              <ul className="space-y-3">
+                {group.items.map(r => (
+                  <li key={r.id}>
+                    <Card
+                      padding="none"
+                      className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
+                      onClick={() => openEdit(r)}
+                    >
+                      <div className="p-4 flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                            <span
+                              className={cn(
+                                'inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium',
+                                (r.type || 'externe') === 'interne'
+                                  ? 'bg-violet-50 text-violet-700'
+                                  : 'bg-sky-50 text-sky-700'
+                              )}
+                            >
+                              {RECLAMATION_TYPE_LABELS[r.type || 'externe']}
+                            </span>
+                            <span className={cn('inline-flex px-2 py-0.5 rounded-lg text-xs font-semibold border', STATUT_STYLES[r.statut])}>
+                              {RECLAMATION_STATUT_LABELS[r.statut]}
+                            </span>
+                            {r.priorite && r.priorite !== 'normale' && (
+                              <span className={cn('text-xs uppercase', PRIORITE_STYLES[r.priorite])}>{r.priorite}</span>
+                            )}
+                            <span className="text-xs text-gray-400">{formatDate(r.date)}</span>
+                          </div>
+                          <p className="font-semibold text-gray-900 truncate">{r.sujet || 'Sans sujet'}</p>
+                          <p className="text-sm text-gray-600 flex items-center gap-1.5 mt-0.5">
+                            <User className="w-3.5 h-3.5 text-gray-400" />
+                            {r.clientName}
+                            {r.vehicleRef && (
+                              <>
+                                <span className="text-gray-300">·</span>
+                                <Car className="w-3.5 h-3.5 text-gray-400" />
+                                {r.vehicleRef}
+                              </>
+                            )}
+                          </p>
+                          {r.description ? (
+                            <p className="text-sm text-gray-500 mt-1 line-clamp-2">{r.description}</p>
+                          ) : null}
+                          {(r.assigneA || (r.techniciens && r.techniciens.length > 0)) && (
+                            <p className="text-xs text-gray-400 mt-1.5">
+                              {r.assigneA && <>Assigné à {r.assigneA}</>}
+                            </p>
                           )}
-                        </p>
-                      )}
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-gray-300 flex-shrink-0" />
-                  </div>
-                </Card>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-gray-300 flex-shrink-0" />
+                      </div>
+                    </Card>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      )}
 
       <Modal
         open={showForm}
@@ -316,6 +371,33 @@ export default function ReclamationPage() {
         maxWidth="md"
       >
         <div className="space-y-4">
+          <div>
+            <p className="text-sm font-medium text-gray-700 mb-2">Type</p>
+            <div className="grid grid-cols-2 gap-2">
+              {(['externe', 'interne'] as const).map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setForm(prev => ({ ...prev, type: t }))}
+                  className={cn(
+                    'h-10 rounded-xl border text-sm font-medium transition-colors',
+                    form.type === t
+                      ? t === 'interne'
+                        ? 'bg-violet-50 border-violet-300 text-violet-800'
+                        : 'bg-sky-50 border-sky-300 text-sky-800'
+                      : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                  )}
+                >
+                  {RECLAMATION_TYPE_LABELS[t]}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1.5">
+              {form.type === 'interne'
+                ? 'Réclamation interne : suivi atelier, sans lien obligatoire avec un client extérieur.'
+                : 'Réclamation externe : signalée par un client.'}
+            </p>
+          </div>
           <Input label="Date" type="date" value={form.date} onChange={e => setForm(prev => ({ ...prev, date: e.target.value }))} />
           <Input label="Client" value={form.clientName} onChange={e => setForm(prev => ({ ...prev, clientName: e.target.value }))} placeholder="Nom du client" />
           <Input label="Téléphone" type="tel" value={form.clientTelephone} onChange={e => setForm(prev => ({ ...prev, clientTelephone: e.target.value }))} placeholder="Optionnel" />

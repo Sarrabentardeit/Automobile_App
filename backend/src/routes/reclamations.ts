@@ -14,6 +14,7 @@ if (typeof (db as any).reclamation === 'undefined') {
 
 const STATUTS = ['ouverte', 'en_cours', 'traitee', 'cloturee'] as const
 const PRIORITES = ['basse', 'normale', 'haute'] as const
+const TYPES = ['externe', 'interne'] as const
 
 type ReclamationRow = {
   id: number
@@ -24,6 +25,7 @@ type ReclamationRow = {
   sujet: string
   description: string
   statut: string
+  typeReclamation?: string | null
   assigne_a: string | null
   priorite: string | null
   techniciens?: { user_full_name: string }[]
@@ -39,6 +41,9 @@ function toReclamation(r: ReclamationRow) {
     sujet: r.sujet,
     description: r.description,
     statut: r.statut as (typeof STATUTS)[number],
+    type: TYPES.includes((r.typeReclamation || 'externe') as (typeof TYPES)[number])
+      ? ((r.typeReclamation || 'externe') as (typeof TYPES)[number])
+      : 'externe',
     assigneA: r.assigne_a ?? undefined,
     priorite: (r.priorite as (typeof PRIORITES)[number]) ?? undefined,
     techniciens: r.techniciens?.map(t => t.user_full_name) ?? [],
@@ -89,6 +94,7 @@ router.get('/', authenticate(), async (req: AuthRequest, res) => {
   try {
     const q = (req.query.q as string)?.trim()
     const statut = (req.query.statut as string)?.trim()
+    const type = (req.query.type as string)?.trim()
 
     const where: Record<string, unknown> = {}
     if (q) {
@@ -102,6 +108,9 @@ router.get('/', authenticate(), async (req: AuthRequest, res) => {
     }
     if (statut && STATUTS.includes(statut as (typeof STATUTS)[number])) {
       where.statut = statut
+    }
+    if (type && TYPES.includes(type as (typeof TYPES)[number])) {
+      where.typeReclamation = type
     }
 
     // Gestion des droits :
@@ -181,6 +190,7 @@ router.post('/', authenticate(), async (req, res) => {
       sujet?: string
       description?: string
       statut?: string
+      type?: string
       assigneA?: string
       priorite?: string
       techniciens?: string[]
@@ -195,6 +205,8 @@ router.post('/', authenticate(), async (req, res) => {
 
     const statut = body.statut && STATUTS.includes(body.statut as (typeof STATUTS)[number]) ? body.statut : 'ouverte'
     const priorite = body.priorite && PRIORITES.includes(body.priorite as (typeof PRIORITES)[number]) ? body.priorite : 'normale'
+    const typeReclamation =
+      body.type && TYPES.includes(body.type as (typeof TYPES)[number]) ? body.type : 'externe'
 
     const created = await prisma.$transaction(async tx => {
       const rec = await tx.reclamation.create({
@@ -206,6 +218,7 @@ router.post('/', authenticate(), async (req, res) => {
           sujet: (body.sujet ?? '').trim(),
           description: (body.description ?? '').trim(),
           statut,
+          typeReclamation,
           assigne_a: (body.assigneA ?? '').trim() || null,
           priorite,
         },
@@ -283,6 +296,7 @@ router.put('/:id', authenticate(), async (req, res) => {
       sujet?: string
       description?: string
       statut?: string
+      type?: string
       assigneA?: string
       priorite?: string
       techniciens?: string[]
@@ -300,6 +314,8 @@ router.put('/:id', authenticate(), async (req, res) => {
 
     const statut = body.statut && STATUTS.includes(body.statut as (typeof STATUTS)[number]) ? body.statut : undefined
     const priorite = body.priorite && PRIORITES.includes(body.priorite as (typeof PRIORITES)[number]) ? body.priorite : undefined
+    const typeReclamation =
+      body.type && TYPES.includes(body.type as (typeof TYPES)[number]) ? body.type : undefined
 
     const updated = await prisma.$transaction(async tx => {
       const rec = await tx.reclamation.update({
@@ -312,6 +328,7 @@ router.put('/:id', authenticate(), async (req, res) => {
           ...(body.sujet !== undefined && { sujet: (body.sujet ?? '').trim() }),
           ...(body.description !== undefined && { description: (body.description ?? '').trim() }),
           ...(statut !== undefined && { statut }),
+          ...(typeReclamation !== undefined && { typeReclamation }),
           ...(body.assigneA !== undefined && { assigne_a: (body.assigneA ?? '').trim() || null }),
           ...(priorite !== undefined && { priorite }),
         },

@@ -522,7 +522,7 @@ export default function StockGeneralPage() {
             </table>
           </div>
         {totalFilteredCount > 0 && rangeLabelStock && (
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 border-t border-gray-100 bg-gray-50/80">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pl-4 pr-24 py-3 border-t border-gray-100 bg-gray-50/80">
             <p className="text-xs text-gray-600">
               Affichage{' '}
               <span className="font-medium tabular-nums">

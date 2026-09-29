@@ -76,10 +76,9 @@ function buildListFilters(opts: {
   limit: number
 }): VehiculesFilters {
   const { date_debut, date_fin } = getDateRange(opts.dateFilterMode, opts.dateFilter, opts.monthFilter)
-  return {
+    return {
     type: opts.tab,
     etat: opts.filtreEtat === 'tous' ? undefined : opts.filtreEtat,
-    exclude_etat: 'vert',
     technicien_id: opts.visibility === 'own' ? opts.userId : opts.technicienId,
     date_debut,
     date_fin,
@@ -87,6 +86,7 @@ function buildListFilters(opts: {
     service_type: opts.serviceType,
     vip: opts.vipFilter === 'vip' ? true : opts.vipFilter === 'normal' ? false : undefined,
     marque: opts.marque,
+    include_archives: true,
     page: opts.page,
     limit: opts.limit,
   }
@@ -187,14 +187,6 @@ export default function VehiculesPage() {
   )
 
   useEffect(() => {
-    if (filtreEtat !== 'vert') return
-    setFiltreEtat('tous')
-    const next = new URLSearchParams(searchParams)
-    next.delete('etat')
-    setSearchParams(next)
-  }, [filtreEtat, searchParams, setSearchParams])
-
-  useEffect(() => {
     const t = setTimeout(() => setRechercheDebounced(recherche), 300)
     return () => clearTimeout(t)
   }, [recherche])
@@ -211,7 +203,7 @@ export default function VehiculesPage() {
       const { date_debut, date_fin } = getDateRange(dateFilterMode, dateFilter, monthFilter)
       const params: Record<string, string | number | undefined> = {
         type: tab,
-        exclude_etat: 'vert',
+        include_archives: 'true',
       }
       if (filtreEtat !== 'tous') params.etat = filtreEtat
       if (permissions.vehiculeVisibility === 'own') params.technicien_id = user.id
@@ -297,7 +289,7 @@ export default function VehiculesPage() {
         )
       : []
 
-  const etats: EtatVehicule[] = ['orange', 'mauve', 'sous_traitance', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'retour']
+  const etats: EtatVehicule[] = ['orange', 'mauve', 'sous_traitance', 'attente_client', 'bleu', 'rouge', 'remise_cle', 'retour', 'vert']
   const countByEtat = (etat: EtatVehicule) => filteredCounts?.byEtat?.[etat] ?? 0
   const totalAll = filteredCounts?.total ?? 0
 
@@ -538,7 +530,7 @@ export default function VehiculesPage() {
       </div>
 
       {!isBrandView && folderTotalPages > 1 && (
-        <div className="flex items-center justify-between gap-3 pr-16 lg:pr-0 pb-2">
+        <div className="flex items-center justify-between gap-3 pr-24 pb-2">
           <p className="text-xs sm:text-sm text-gray-500 min-w-0">
             Marques — page {folderPage} sur {folderTotalPages} ({brandFolders.length} dossier
             {brandFolders.length > 1 ? 's' : ''})
@@ -563,7 +555,7 @@ export default function VehiculesPage() {
       )}
 
       {isBrandView && vehicleTotalPages > 1 && (
-        <div className="flex items-center justify-between gap-3 pr-16 lg:pr-0 pb-2">
+        <div className="flex items-center justify-between gap-3 pr-24 pb-2">
           <p className="text-xs sm:text-sm text-gray-500 min-w-0">
             Véhicules — page {vehiclePage} sur {vehicleTotalPages} ({total} résultat{total > 1 ? 's' : ''})
           </p>

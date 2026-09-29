@@ -18,9 +18,11 @@ import {
   RECLAMATION_PRIORITE_LABELS,
   RECLAMATION_STATUT_LABELS,
   RECLAMATION_STATUTS,
+  RECLAMATION_TYPE_LABELS,
   type Reclamation,
   type ReclamationInput,
   type ReclamationPriorite,
+  type ReclamationType,
 } from '../../types/reclamation'
 
 type Props = {
@@ -43,6 +45,7 @@ function emptyForm(): ReclamationInput {
     sujet: '',
     description: '',
     statut: 'ouverte',
+    type: 'externe',
     assigneA: '',
     priorite: 'normale',
     techniciens: [],
@@ -78,6 +81,7 @@ export default function ReclamationFormModal({
         sujet: reclamation.sujet ?? '',
         description: reclamation.description ?? '',
         statut: reclamation.statut,
+        type: reclamation.type || 'externe',
         assigneA: reclamation.assigneA ?? '',
         priorite: reclamation.priorite ?? 'normale',
         techniciens: reclamation.techniciens ?? [],
@@ -152,6 +156,21 @@ export default function ReclamationFormModal({
           nestedScrollEnabled
         >
           {error ? <Text style={styles.error}>{error}</Text> : null}
+
+          <Text style={styles.label}>Type</Text>
+          <View style={styles.chips}>
+            {(['externe', 'interne'] as ReclamationType[]).map(t => (
+              <Pressable
+                key={t}
+                style={[styles.chip, form.type === t && styles.chipActive]}
+                onPress={() => setForm(f => ({ ...f, type: t }))}
+              >
+                <Text style={[styles.chipText, form.type === t && styles.chipTextActive]}>
+                  {RECLAMATION_TYPE_LABELS[t]}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
 
           <Text style={styles.label}>Date</Text>
           <TextInput

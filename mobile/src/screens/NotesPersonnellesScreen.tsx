@@ -93,6 +93,43 @@ function colorHex(c?: string): string | null {
   return NOTE_COULEURS.find(x => x.value === c)?.hex ?? null
 }
 
+function uniqueCategories(list: NotePersonnelle[]): string[] {
+  const map = new Map<string, string>()
+  for (const n of list) {
+    const raw = (n.categorie || '').trim().replace(/\s+/g, ' ')
+    if (!raw) continue
+    const key = raw.toLocaleLowerCase('fr')
+    if (!map.has(key)) map.set(key, raw)
+  }
+  return [...map.values()].sort((a, b) => a.localeCompare(b, 'fr'))
+}
+
+type NoteRow =
+  | { kind: 'header'; key: string; label: string; count: number }
+  | { kind: 'note'; key: string; note: NotePersonnelle }
+
+function groupNoteRows(list: NotePersonnelle[]): NoteRow[] {
+  const buckets = new Map<string, { label: string; notes: NotePersonnelle[] }>()
+  for (const n of list) {
+    const label = (n.categorie || '').trim().replace(/\s+/g, ' ')
+    const key = label ? label.toLocaleLowerCase('fr') : '__none__'
+    const bucket = buckets.get(key) ?? { label: label || 'Sans catégorie', notes: [] }
+    bucket.notes.push(n)
+    buckets.set(key, bucket)
+  }
+  const groups = [...buckets.entries()].sort((a, b) => {
+    if (a[0] === '__none__') return 1
+    if (b[0] === '__none__') return -1
+    return a[1].label.localeCompare(b[1].label, 'fr')
+  })
+  const rows: NoteRow[] = []
+  for (const [key, group] of groups) {
+    rows.push({ kind: 'header', key: `h-${key}`, label: group.label, count: group.notes.length })
+    for (const note of group.notes) rows.push({ kind: 'note', key: `n-${note.id}`, note })
+  }
+  return rows
+}
+
 function sortNotesSmart(list: NotePersonnelle[]): NotePersonnelle[] {
   const rank = (n: NotePersonnelle) => {
     if (n.epinglee) return 0
@@ -123,6 +160,7 @@ export default function NotesPersonnellesScreen({
   const [refreshing, setRefreshing] = useState(false)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<NoteFilter>('all')
+  const [categorieFilter, setCategorieFilter] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<NotePersonnelle | null>(null)
   const [toast, setToast] = useState<string | null>(null)
@@ -167,7 +205,7 @@ export default function NotesPersonnellesScreen({
     }
   }, [notes])
 
-  const filtered = useMemo(() => {
+  const baseList = useMemo(() => {
     let list = notes
     if (filter === 'done') list = list.filter(n => n.faite)
     else {
@@ -180,13 +218,51 @@ export default function NotesPersonnellesScreen({
     const q = search.trim().toLowerCase()
     if (q) {
       list = list.filter(
-        n => n.titre.toLowerCase().includes(q) || n.contenu.toLowerCase().includes(q)
+        n =>
+          n.titre.toLowerCase().includes(q) ||
+          n.contenu.toLowerCase().includes(q) ||
+          (n.categorie || '').toLowerCase().includes(q)
+      )
+    }
+    return list
+  }, [notes, search, filter])
+
+  const filtered = useMemo(() => {
+    let list = baseList
+    if (categorieFilter === '__none__') {
+      list = list.filter(n => !(n.categorie || '').trim())
+    } else if (categorieFilter) {
+      list = list.filter(
+        n => (n.categorie || '').trim().toLocaleLowerCase('fr') === categorieFilter
       )
     }
     return filter === 'done'
       ? [...list].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       : sortNotesSmart(list)
-  }, [notes, search, filter])
+  }, [baseList, categorieFilter, filter])
+
+  const categories = useMemo(() => uniqueCategories(notes), [notes])
+  const categoryChips = useMemo(() => {
+    const counts = new Map<string, { label: string; count: number }>()
+    let none = 0
+    for (const n of baseList) {
+      const label = (n.categorie || '').trim().replace(/\s+/g, ' ')
+      if (!label) {
+        none += 1
+        continue
+      }
+      const key = label.toLocaleLowerCase('fr')
+      const prev = counts.get(key)
+      counts.set(key, { label: prev?.label ?? label, count: (prev?.count ?? 0) + 1 })
+    }
+    return {
+      none,
+      items: [...counts.entries()]
+        .map(([key, value]) => ({ key, ...value }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'fr')),
+    }
+  }, [baseList])
+  const rows = useMemo(() => groupNoteRows(filtered), [filtered])
 
   const onRefresh = async () => {
     setRefreshing(true)
@@ -335,6 +411,35 @@ export default function NotesPersonnellesScreen({
             )
           }}
         />
+        {categoryChips.items.length > 0 ? (
+          <FlatList
+            horizontal
+            data={[
+              { key: '__all__', label: 'Toutes', count: null as number | null },
+              ...categoryChips.items.map(c => ({ key: c.key, label: c.label, count: c.count as number | null })),
+              ...(categoryChips.none > 0
+                ? [{ key: '__none__', label: 'Sans catégorie', count: categoryChips.none as number | null }]
+                : []),
+            ]}
+            keyExtractor={i => i.key}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chips}
+            renderItem={({ item }) => {
+              const active =
+                item.key === '__all__' ? categorieFilter == null : categorieFilter === item.key
+              return (
+                <Pressable
+                  onPress={() => setCategorieFilter(item.key === '__all__' || active ? null : item.key)}
+                  style={[styles.chip, active && styles.chipCat]}
+                >
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                    {item.count == null ? item.label : `${item.label} (${item.count})`}
+                  </Text>
+                </Pressable>
+              )
+            }}
+          />
+        ) : null}
       </View>
 
       {loading ? (
@@ -343,8 +448,8 @@ export default function NotesPersonnellesScreen({
         </View>
       ) : (
         <FlatList
-          data={filtered}
-          keyExtractor={item => String(item.id)}
+          data={rows}
+          keyExtractor={item => item.key}
           contentContainerStyle={styles.list}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />
@@ -359,29 +464,38 @@ export default function NotesPersonnellesScreen({
             </View>
           }
           renderItem={({ item }) => {
-            const rappel = formatRappelSmart(item.rappelAt)
-            const color = colorHex(item.couleur)
+            if (item.kind === 'header') {
+              return (
+                <View style={styles.groupHead}>
+                  <Text style={styles.groupTitle}>{item.label}</Text>
+                  <Text style={styles.groupCount}>{item.count}</Text>
+                </View>
+              )
+            }
+            const note = item.note
+            const rappel = formatRappelSmart(note.rappelAt)
+            const color = colorHex(note.couleur)
             return (
-              <Pressable style={styles.card} onPress={() => openEdit(item)}>
+              <Pressable style={styles.card} onPress={() => openEdit(note)}>
                 {color ? <View style={[styles.colorBar, { backgroundColor: color }]} /> : null}
                 <View style={styles.cardInner}>
                   <View style={styles.cardTop}>
                     <Text
-                      style={[styles.cardTitle, item.faite && styles.doneText]}
+                      style={[styles.cardTitle, note.faite && styles.doneText]}
                       numberOfLines={2}
                     >
-                      {item.titre || 'Sans titre'}
+                      {note.titre || 'Sans titre'}
                     </Text>
-                    <Pressable onPress={() => confirmDelete(item)} hitSlop={8}>
+                    <Pressable onPress={() => confirmDelete(note)} hitSlop={8}>
                       <Ionicons name="trash-outline" size={18} color={theme.textSubtle} />
                     </Pressable>
                   </View>
-                  {item.contenu ? (
+                  {note.contenu ? (
                     <Text
-                      style={[styles.cardBody, item.faite && styles.doneText]}
+                      style={[styles.cardBody, note.faite && styles.doneText]}
                       numberOfLines={3}
                     >
-                      {item.contenu}
+                      {note.contenu}
                     </Text>
                   ) : null}
                   <View style={styles.cardFooter}>
@@ -425,17 +539,17 @@ export default function NotesPersonnellesScreen({
                       </View>
                     ) : (
                       <Text style={styles.dateText}>
-                        {new Date(item.updatedAt).toLocaleDateString('fr-FR')}
+                        {new Date(note.updatedAt).toLocaleDateString('fr-FR')}
                       </Text>
                     )}
                     <Pressable
-                      onPress={() => toggleDone(item)}
-                      style={[styles.doneBtn, item.faite && styles.doneBtnActive]}
+                      onPress={() => toggleDone(note)}
+                      style={[styles.doneBtn, note.faite && styles.doneBtnActive]}
                     >
                       <Ionicons
-                        name={item.faite ? 'checkmark-circle' : 'ellipse-outline'}
+                        name={note.faite ? 'checkmark-circle' : 'ellipse-outline'}
                         size={16}
-                        color={item.faite ? theme.success : theme.textMuted}
+                        color={note.faite ? theme.success : theme.textMuted}
                       />
                     </Pressable>
                   </View>
@@ -453,6 +567,7 @@ export default function NotesPersonnellesScreen({
       <NotePersonnelleFormModal
         visible={showForm}
         note={editing}
+        categories={categories}
         onClose={() => setShowForm(false)}
         onSave={save}
       />
@@ -506,11 +621,27 @@ const styles = StyleSheet.create({
     backgroundColor: theme.surface,
   },
   chipActive: { backgroundColor: theme.dark, borderColor: theme.dark },
+  chipCat: { backgroundColor: '#f97316', borderColor: '#f97316' },
   chipDanger: { backgroundColor: theme.danger, borderColor: theme.danger },
   chipSky: { backgroundColor: '#0284c7', borderColor: '#0284c7' },
   chipText: { fontSize: 12, fontWeight: '600', color: theme.textMuted },
   chipTextActive: { color: '#fff' },
   list: { paddingHorizontal: 12, paddingBottom: 100, gap: 10, paddingTop: 6 },
+  groupHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+    paddingHorizontal: 4,
+  },
+  groupTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: theme.textSubtle,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  groupCount: { fontSize: 11, color: theme.textSubtle },
   center: { alignItems: 'center', paddingTop: 48, gap: 8 },
   muted: { color: theme.textMuted, fontSize: 14 },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: theme.textSecondary, marginTop: 8 },

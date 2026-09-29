@@ -21,7 +21,6 @@ import {
   Circle,
   Bell,
   AlertTriangle,
-  CalendarClock,
   CalendarDays,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -113,6 +112,46 @@ function couleurHex(c?: string): string | null {
   return NOTE_COULEURS.find(x => x.value === c)?.hex ?? null
 }
 
+function cleanCategorie(raw: string): string {
+  return raw.trim().replace(/\s+/g, ' ').slice(0, 60)
+}
+
+function uniqueCategories(list: NotePersonnelle[]): string[] {
+  const map = new Map<string, string>()
+  for (const n of list) {
+    const raw = cleanCategorie(n.categorie || '')
+    if (!raw) continue
+    const key = raw.toLocaleLowerCase('fr')
+    if (!map.has(key)) map.set(key, raw)
+  }
+  return [...map.values()].sort((a, b) => a.localeCompare(b, 'fr'))
+}
+
+function resolveCategorie(raw: string, existing: string[]): string {
+  const clean = cleanCategorie(raw)
+  if (!clean) return ''
+  const hit = existing.find(c => c.toLocaleLowerCase('fr') === clean.toLocaleLowerCase('fr'))
+  return hit ?? clean
+}
+
+function groupNotes(list: NotePersonnelle[]): { key: string; label: string; notes: NotePersonnelle[] }[] {
+  const buckets = new Map<string, { label: string; notes: NotePersonnelle[] }>()
+  for (const n of list) {
+    const label = cleanCategorie(n.categorie || '')
+    const key = label ? label.toLocaleLowerCase('fr') : '__none__'
+    const bucket = buckets.get(key) ?? { label: label || 'Sans catégorie', notes: [] }
+    bucket.notes.push(n)
+    buckets.set(key, bucket)
+  }
+  return [...buckets.entries()]
+    .sort((a, b) => {
+      if (a[0] === '__none__') return 1
+      if (b[0] === '__none__') return -1
+      return a[1].label.localeCompare(b[1].label, 'fr')
+    })
+    .map(([key, value]) => ({ key, label: value.label, notes: value.notes }))
+}
+
 function sortNotesSmart(list: NotePersonnelle[]): NotePersonnelle[] {
   const rank = (n: NotePersonnelle) => {
     if (n.epinglee) return 0
@@ -140,6 +179,7 @@ function sortNotesSmart(list: NotePersonnelle[]): NotePersonnelle[] {
 type FormState = {
   titre: string
   contenu: string
+  categorie: string
   rappelLocal: string
   couleur: NoteCouleur
   epinglee: boolean
@@ -148,6 +188,7 @@ type FormState = {
 const emptyForm = (): FormState => ({
   titre: '',
   contenu: '',
+  categorie: '',
   rappelLocal: '',
   couleur: '',
   epinglee: false,
@@ -160,11 +201,13 @@ export default function NotesPersonnellesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<NoteFilter>('all')
+  const [categorieFilter, setCategorieFilter] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [form, setForm] = useState<FormState>(emptyForm)
   const [saving, setSaving] = useState(false)
+  const [catOpen, setCatOpen] = useState(false)
 
   // Ouverture depuis notification ?note=
   useEffect(() => {
@@ -177,6 +220,7 @@ export default function NotesPersonnellesPage() {
     setForm({
       titre: n.titre,
       contenu: n.contenu,
+      categorie: n.categorie || '',
       rappelLocal: toDatetimeLocalValue(n.rappelAt),
       couleur: (n.couleur as NoteCouleur) || '',
       epinglee: n.epinglee,
@@ -203,7 +247,7 @@ export default function NotesPersonnellesPage() {
     }
   }, [notes])
 
-  const filtered = useMemo(() => {
+  const baseList = useMemo(() => {
     let list = notes
     if (filter === 'done') list = list.filter(n => n.faite)
     else {
@@ -216,11 +260,28 @@ export default function NotesPersonnellesPage() {
     if (search.trim()) {
       const q = search.toLowerCase()
       list = list.filter(
-        n => n.titre.toLowerCase().includes(q) || n.contenu.toLowerCase().includes(q)
+        n =>
+          n.titre.toLowerCase().includes(q) ||
+          n.contenu.toLowerCase().includes(q) ||
+          (n.categorie || '').toLowerCase().includes(q)
       )
     }
-    return filter === 'done' ? list.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) : sortNotesSmart(list)
+    return list
   }, [notes, search, filter])
+
+  const filtered = useMemo(() => {
+    let list = baseList
+    if (categorieFilter === '__none__') {
+      list = list.filter(n => !cleanCategorie(n.categorie || ''))
+    } else if (categorieFilter) {
+      list = list.filter(
+        n => cleanCategorie(n.categorie || '').toLocaleLowerCase('fr') === categorieFilter
+      )
+    }
+    return filter === 'done'
+      ? [...list].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      : sortNotesSmart(list)
+  }, [baseList, categorieFilter, filter])
 
   const openNew = () => {
     setForm(emptyForm())
@@ -232,6 +293,7 @@ export default function NotesPersonnellesPage() {
     setForm({
       titre: n.titre,
       contenu: n.contenu,
+      categorie: n.categorie || '',
       rappelLocal: toDatetimeLocalValue(n.rappelAt),
       couleur: (n.couleur as NoteCouleur) || '',
       epinglee: n.epinglee,
@@ -244,7 +306,36 @@ export default function NotesPersonnellesPage() {
     setShowAdd(false)
     setEditingId(null)
     setForm(emptyForm())
+    setCatOpen(false)
   }
+
+  const categories = useMemo(() => uniqueCategories(notes), [notes])
+  const categoryChips = useMemo(() => {
+    const counts = new Map<string, { label: string; count: number }>()
+    let none = 0
+    for (const n of baseList) {
+      const label = cleanCategorie(n.categorie || '')
+      if (!label) {
+        none += 1
+        continue
+      }
+      const key = label.toLocaleLowerCase('fr')
+      const prev = counts.get(key)
+      counts.set(key, { label: prev?.label ?? label, count: (prev?.count ?? 0) + 1 })
+    }
+    return {
+      none,
+      items: [...counts.entries()]
+        .map(([key, value]) => ({ key, ...value }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'fr')),
+    }
+  }, [baseList])
+  const categorieSuggestions = useMemo(() => {
+    const q = cleanCategorie(form.categorie).toLocaleLowerCase('fr')
+    if (!q) return categories
+    return categories.filter(c => c.toLocaleLowerCase('fr').includes(q))
+  }, [categories, form.categorie])
+  const grouped = useMemo(() => groupNotes(filtered), [filtered])
 
   const save = async () => {
     if (!form.titre.trim() && !form.contenu.trim()) {
@@ -256,6 +347,7 @@ export default function NotesPersonnellesPage() {
       const payload = {
         titre: form.titre.trim(),
         contenu: form.contenu.trim(),
+        categorie: resolveCategorie(form.categorie, categories),
         rappelAt: fromDatetimeLocalValue(form.rappelLocal),
         couleur: form.couleur,
         epinglee: form.epinglee,
@@ -345,68 +437,15 @@ export default function NotesPersonnellesPage() {
         </Button>
       </header>
 
-      {(counts.overdue > 0 || counts.today > 0 || counts.upcoming > 0) && filter !== 'done' && (
-        <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <button
-            type="button"
-            onClick={() => setFilter(filter === 'overdue' ? 'all' : 'overdue')}
-            className={cn(
-              'flex items-center gap-2.5 rounded-xl border px-3.5 py-3 text-left transition-colors',
-              filter === 'overdue'
-                ? 'border-red-400 bg-red-50 ring-1 ring-red-200'
-                : 'border-red-100 bg-red-50/60 hover:bg-red-50'
-            )}
-          >
-            <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
-            <div>
-              <p className="text-lg font-bold text-red-700 tabular-nums leading-none">{counts.overdue}</p>
-              <p className="text-[11px] font-medium text-red-600/80 mt-0.5">En retard</p>
-            </div>
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilter(filter === 'today' ? 'all' : 'today')}
-            className={cn(
-              'flex items-center gap-2.5 rounded-xl border px-3.5 py-3 text-left transition-colors',
-              filter === 'today'
-                ? 'border-sky-400 bg-sky-50 ring-1 ring-sky-200'
-                : 'border-sky-100 bg-sky-50/60 hover:bg-sky-50'
-            )}
-          >
-            <Bell className="w-4 h-4 text-sky-600 shrink-0" />
-            <div>
-              <p className="text-lg font-bold text-sky-700 tabular-nums leading-none">{counts.today}</p>
-              <p className="text-[11px] font-medium text-sky-600/80 mt-0.5">Aujourd&apos;hui</p>
-            </div>
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilter(filter === 'upcoming' ? 'all' : 'upcoming')}
-            className={cn(
-              'flex items-center gap-2.5 rounded-xl border px-3.5 py-3 text-left transition-colors',
-              filter === 'upcoming'
-                ? 'border-violet-400 bg-violet-50 ring-1 ring-violet-200'
-                : 'border-violet-100 bg-violet-50/50 hover:bg-violet-50'
-            )}
-          >
-            <CalendarClock className="w-4 h-4 text-violet-600 shrink-0" />
-            <div>
-              <p className="text-lg font-bold text-violet-700 tabular-nums leading-none">{counts.upcoming}</p>
-              <p className="text-[11px] font-medium text-violet-600/80 mt-0.5">À venir</p>
-            </div>
-          </button>
-        </div>
-      )}
-
-      <div className="flex flex-col gap-3 mb-6">
+      <div className="rounded-2xl border border-black/[0.06] bg-white p-3 sm:p-4 mb-6 space-y-3">
         <input
           type="search"
-          placeholder="Rechercher…"
+          placeholder="Rechercher une note…"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm"
+          className="w-full px-3.5 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm"
         />
-        <div className="flex gap-1.5 overflow-x-auto pb-0.5 -mx-1 px-1">
+        <div className="flex gap-1.5 overflow-x-auto">
           {filterChips.map(chip => {
             const active = filter === chip.id
             return (
@@ -415,7 +454,7 @@ export default function NotesPersonnellesPage() {
                 type="button"
                 onClick={() => setFilter(chip.id)}
                 className={cn(
-                  'px-3 py-1.5 rounded-full text-xs font-semibold border whitespace-nowrap transition-colors',
+                  'px-3 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap transition-colors',
                   active
                     ? chip.tone === 'danger'
                       ? 'bg-red-600 text-white border-red-600'
@@ -424,14 +463,83 @@ export default function NotesPersonnellesPage() {
                         : chip.tone === 'emerald'
                           ? 'bg-emerald-600 text-white border-emerald-600'
                           : 'bg-gray-900 text-white border-gray-900'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                    : 'bg-gray-50 text-gray-600 border-transparent hover:bg-gray-100'
                 )}
               >
-                {chip.label} ({chip.count})
+                {chip.label}
+                <span className={cn('ml-1 tabular-nums', active ? 'opacity-80' : 'text-gray-400')}>
+                  {chip.count}
+                </span>
               </button>
             )
           })}
         </div>
+        {categoryChips.items.length > 0 ? (
+          <div className="flex items-center gap-2 pt-2 border-t border-black/[0.04]">
+            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wide shrink-0 hidden sm:inline">
+              Catégories
+            </span>
+            <div className="flex gap-1.5 overflow-x-auto min-w-0">
+              <button
+                type="button"
+                onClick={() => setCategorieFilter(null)}
+                className={cn(
+                  'px-3 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap transition-colors',
+                  categorieFilter == null
+                    ? 'bg-amber-500 text-white border-amber-500'
+                    : 'bg-gray-50 text-gray-600 border-transparent hover:bg-gray-100'
+                )}
+              >
+                Toutes
+              </button>
+              {categoryChips.items.map(chip => {
+                const active = categorieFilter === chip.key
+                return (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    onClick={() => setCategorieFilter(active ? null : chip.key)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap transition-colors',
+                      active
+                        ? 'bg-amber-500 text-white border-amber-500'
+                        : 'bg-gray-50 text-gray-600 border-transparent hover:bg-gray-100'
+                    )}
+                  >
+                    {chip.label}
+                    <span className={cn('ml-1 tabular-nums', active ? 'opacity-80' : 'text-gray-400')}>
+                      {chip.count}
+                    </span>
+                  </button>
+                )
+              })}
+              {categoryChips.none > 0 ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCategorieFilter(categorieFilter === '__none__' ? null : '__none__')
+                  }
+                  className={cn(
+                    'px-3 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap transition-colors',
+                    categorieFilter === '__none__'
+                      ? 'bg-amber-500 text-white border-amber-500'
+                      : 'bg-gray-50 text-gray-600 border-transparent hover:bg-gray-100'
+                  )}
+                >
+                  Sans catégorie
+                  <span
+                    className={cn(
+                      'ml-1 tabular-nums',
+                      categorieFilter === '__none__' ? 'opacity-80' : 'text-gray-400'
+                    )}
+                  >
+                    {categoryChips.none}
+                  </span>
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {filtered.length === 0 ? (
@@ -439,19 +547,31 @@ export default function NotesPersonnellesPage() {
           <StickyNote className="w-12 h-12 text-gray-200 mx-auto mb-3" />
           <p className="text-gray-500 font-medium">Aucune note</p>
           <p className="text-sm text-gray-400 mt-1">
-            {search || filter !== 'all'
+            {search || filter !== 'all' || categorieFilter
               ? 'Modifiez les filtres.'
               : 'Ajoutez une note personnelle.'}
           </p>
-          {!search && filter === 'all' && (
+          {!search && filter === 'all' && !categorieFilter && (
             <Button className="mt-4" onClick={openNew} icon={<Plus className="w-4 h-4" />}>
               Nouvelle note
             </Button>
           )}
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map(n => {
+        <div className="space-y-6">
+          {grouped.map(group => {
+            const hideTitle = grouped.length === 1 && group.key === '__none__'
+            return (
+            <section key={group.key}>
+              {hideTitle ? null : (
+                <div className="flex items-center gap-3 mb-3">
+                  <h2 className="text-sm font-medium text-gray-800">{group.label}</h2>
+                  <span className="text-[11px] text-gray-400 tabular-nums">{group.notes.length}</span>
+                  <span className="h-px flex-1 bg-black/[0.06]" />
+                </div>
+              )}
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {group.notes.map(n => {
             const rappel = formatRappelSmart(n.rappelAt)
             const color = couleurHex(n.couleur)
             return (
@@ -459,7 +579,7 @@ export default function NotesPersonnellesPage() {
                 key={n.id}
                 padding="lg"
                 className={cn(
-                  'border border-gray-100 hover:border-amber-200 hover:shadow-md transition-all group flex flex-col relative overflow-hidden',
+                  'border border-gray-100 hover:border-amber-200 hover:shadow-md transition-all flex flex-col relative overflow-hidden',
                   n.epinglee && 'ring-1 ring-amber-300/60',
                   n.faite && 'opacity-75'
                 )}
@@ -479,7 +599,7 @@ export default function NotesPersonnellesPage() {
                   >
                     {n.titre || 'Sans titre'}
                   </h3>
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                  <div className="flex items-center gap-0.5 flex-shrink-0">
                     <button
                       type="button"
                       onClick={() => togglePin(n)}
@@ -566,6 +686,10 @@ export default function NotesPersonnellesPage() {
                 </div>
               </Card>
             )
+                })}
+              </div>
+            </section>
+            )
           })}
         </div>
       )}
@@ -590,6 +714,57 @@ export default function NotesPersonnellesPage() {
             placeholder="Détails…"
             className="min-h-[5rem] sm:min-h-0"
           />
+
+          <div className="relative">
+            <Input
+              label="Catégorie"
+              value={form.categorie}
+              onChange={e => setForm(f => ({ ...f, categorie: e.target.value }))}
+              onFocus={() => setCatOpen(true)}
+              onBlur={() => window.setTimeout(() => setCatOpen(false), 120)}
+              placeholder="Ex. Atelier, Client, Fournisseur…"
+              autoComplete="off"
+            />
+            <p className="text-[11px] text-gray-400 mt-1.5">
+              Choisissez une catégorie existante ou saisissez-en une nouvelle.
+            </p>
+            {catOpen && (categorieSuggestions.length > 0 || cleanCategorie(form.categorie)) ? (
+              <ul className="absolute z-20 left-0 right-0 top-[4.6rem] max-h-44 overflow-y-auto rounded-xl border border-black/[0.08] bg-white shadow-lg py-1">
+                {categorieSuggestions.map(c => (
+                  <li key={c}>
+                    <button
+                      type="button"
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => {
+                        setForm(f => ({ ...f, categorie: c }))
+                        setCatOpen(false)
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm text-gray-800 hover:bg-gray-50"
+                    >
+                      {c}
+                    </button>
+                  </li>
+                ))}
+                {cleanCategorie(form.categorie) &&
+                !categories.some(
+                  c =>
+                    c.toLocaleLowerCase('fr') ===
+                    cleanCategorie(form.categorie).toLocaleLowerCase('fr')
+                ) ? (
+                  <li>
+                    <button
+                      type="button"
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => setCatOpen(false)}
+                      className="w-full text-left px-3 py-2 text-sm text-orange-700 hover:bg-orange-50"
+                    >
+                      Utiliser « {cleanCategorie(form.categorie)} »
+                    </button>
+                  </li>
+                ) : null}
+              </ul>
+            ) : null}
+          </div>
 
           <div>
             <Input

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   ChevronLeft,
@@ -50,6 +50,44 @@ function formatTime(iso: string) {
   return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
 }
 
+const FAB = 56
+const FAB_KEY = 'elmecano-chat-fab'
+
+function clampFab(x: number, y: number) {
+  const maxX = Math.max(8, window.innerWidth - FAB - 8)
+  const maxY = Math.max(8, window.innerHeight - FAB - 8)
+  return {
+    x: Math.min(maxX, Math.max(8, x)),
+    y: Math.min(maxY, Math.max(8, y)),
+  }
+}
+
+function initialFabPos() {
+  try {
+    const raw = localStorage.getItem(FAB_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as { x?: number; y?: number }
+      if (typeof parsed.x === 'number' && typeof parsed.y === 'number') return clampFab(parsed.x, parsed.y)
+    }
+  } catch {
+    /* ignore */
+  }
+  const wide = window.innerWidth >= 1024
+  const margin = wide ? 20 : 16
+  const bottom = wide ? 20 : 96
+  return clampFab(window.innerWidth - margin - FAB, window.innerHeight - bottom - FAB)
+}
+
+function panelBox(fab: { x: number; y: number }) {
+  const width = Math.min(window.innerWidth - 24, 380)
+  const height = Math.min(window.innerHeight * 0.7, 520)
+  let left = fab.x + FAB / 2 - width / 2
+  left = Math.max(12, Math.min(left, window.innerWidth - width - 12))
+  let top = fab.y - height - 12
+  if (top < 12) top = fab.y + FAB + 12
+  if (top + height > window.innerHeight - 12) top = Math.max(12, window.innerHeight - height - 12)
+  return { left, top, width, height }
+}
 type ComposeMode = null | 'dm' | 'group'
 type ListFilter = 'all' | 'unread'
 
@@ -76,8 +114,63 @@ export default function ChatFloatingWidget() {
   const pollRef = useRef<number | null>(null)
   const lastMsgIdRef = useRef(0)
   const threadReadyRef = useRef(false)
+  const [fab, setFab] = useState(initialFabPos)
+  const dragRef = useRef<{
+    pointerId: number
+    originX: number
+    originY: number
+    startX: number
+    startY: number
+    moved: boolean
+  } | null>(null)
+  const suppressClickRef = useRef(false)
 
   const hideOnFullPage = location.pathname === '/chat'
+
+  useEffect(() => {
+    const onResize = () => setFab(prev => clampFab(prev.x, prev.y))
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  const onFabPointerDown = (e: PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0) return
+    dragRef.current = {
+      pointerId: e.pointerId,
+      originX: fab.x,
+      originY: fab.y,
+      startX: e.clientX,
+      startY: e.clientY,
+      moved: false,
+    }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  const onFabPointerMove = (e: PointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== e.pointerId) return
+    const dx = e.clientX - drag.startX
+    const dy = e.clientY - drag.startY
+    if (!drag.moved && Math.hypot(dx, dy) < 6) return
+    drag.moved = true
+    setFab(clampFab(drag.originX + dx, drag.originY + dy))
+  }
+
+  const onFabPointerUp = (e: PointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== e.pointerId) return
+    dragRef.current = null
+    if (drag.moved) {
+      suppressClickRef.current = true
+      const next = clampFab(drag.originX + (e.clientX - drag.startX), drag.originY + (e.clientY - drag.startY))
+      setFab(next)
+      try {
+        localStorage.setItem(FAB_KEY, JSON.stringify(next))
+      } catch {
+        /* ignore */
+      }
+    }
+  }
 
   const unreadTotal = useMemo(
     () => conversations.reduce((s, c) => s + (c.unreadCount || 0), 0),
@@ -278,9 +371,19 @@ export default function ChatFloatingWidget() {
     <>
       <button
         type="button"
-        onClick={() => setOpen(v => !v)}
-        className="fixed bottom-24 right-4 lg:bottom-5 lg:right-5 z-[60] w-14 h-14 rounded-full bg-orange-500 text-white shadow-lg shadow-orange-500/30 hover:bg-orange-600 transition-all flex items-center justify-center"
-        title="Chat équipe"
+        onClick={() => {
+          if (suppressClickRef.current) {
+            suppressClickRef.current = false
+            return
+          }
+          setOpen(v => !v)
+        }}
+        onPointerDown={onFabPointerDown}
+        onPointerMove={onFabPointerMove}
+        onPointerUp={onFabPointerUp}
+        style={{ left: fab.x, top: fab.y }}
+        className="fixed z-[60] w-14 h-14 rounded-full bg-orange-500 text-white shadow-lg shadow-orange-500/30 hover:bg-orange-600 transition-colors cursor-grab active:cursor-grabbing touch-none flex items-center justify-center"
+        title="Chat équipe — glisser pour déplacer"
         aria-label="Ouvrir le chat"
       >
         {open ? <Minus className="w-6 h-6" /> : <MessageSquare className="w-6 h-6" />}
@@ -292,7 +395,10 @@ export default function ChatFloatingWidget() {
       </button>
 
       {open ? (
-        <div className="fixed bottom-[9.5rem] right-4 lg:bottom-[5.5rem] lg:right-5 z-[60] w-[min(100vw-1.5rem,380px)] h-[min(70vh,520px)] flex flex-col rounded-2xl border border-gray-200 bg-white shadow-2xl overflow-hidden">
+        <div
+          style={panelBox(fab)}
+          className="fixed z-[60] flex flex-col rounded-2xl border border-gray-200 bg-white shadow-2xl overflow-hidden"
+        >
           <header className="flex items-center gap-2 px-3 py-2.5 bg-slate-900 text-white">
             {selected ? (
               <button

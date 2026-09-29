@@ -4,11 +4,13 @@ import type { Permissions, Role, TogglePermissionKey } from '@/types'
 import { ROLE_CONFIG } from '@/types'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { LayoutDashboard, Car, Users, Wallet, X, LogOut, Package, Wrench, UsersRound, CalendarDays, AlertCircle, UserCircle, CreditCard, ClipboardList, Layers, Phone, Truck, Receipt, Bell, Shield, FileText, Import, Archive, SlidersHorizontal, FolderOpen, MessageSquare, ChevronDown, Banknote, Boxes, Settings2, Home, StickyNote, Tag } from 'lucide-react'
+import { LayoutDashboard, Car, Users, Wallet, X, LogOut, Package, Wrench, UsersRound, CalendarDays, AlertCircle, UserCircle, CreditCard, ClipboardList, Layers, Phone, Truck, Receipt, Bell, Shield, FileText, Import, Archive, SlidersHorizontal, FolderOpen, MessageSquare, ChevronDown, Banknote, Boxes, Settings2, Home, StickyNote, Tag, Plus } from 'lucide-react'
 import { useNotifications } from '@/contexts/NotificationsContext'
 import ProfileEditModal from '@/components/profile/ProfileEditModal'
 import { resolveUploadUrl } from '@/lib/api'
 import { cn, formatNotificationDisplay } from '@/lib/utils'
+import { useOperations } from '@/contexts/OperationsContext'
+import { canSeeOperation } from '@/types'
 
 interface NavItemConfig {
   name: string
@@ -102,9 +104,11 @@ const NAV_STRUCTURE: NavCategory[] = [
       p.startsWith('/vehicules') ||
       p.startsWith('/marques') ||
       p.startsWith('/reclamation') ||
+      p.startsWith('/reunion') ||
       (p.startsWith('/clients') && !p.startsWith('/clients/dettes')),
     items: [
       { name: 'Véhicules', href: '/vehicules', icon: Car, requireVehiculeAccess: true },
+      { name: 'Réunion', href: '/reunion', icon: ClipboardList, requiredPermission: 'canViewReunion' },
       { name: 'Archives', href: '/vehicules/archives', icon: Archive, requireVehiculeAccess: true },
       { name: 'Marques', href: '/marques', icon: Tag, requireVehiculeAccess: true },
       { name: 'Clients', href: '/clients', icon: UserCircle },
@@ -145,13 +149,12 @@ const NAV_STRUCTURE: NavCategory[] = [
     matchPath: (p) =>
       p.startsWith('/utilisateurs') ||
       p.startsWith('/equipe') ||
+      p.startsWith('/operations') ||
       p.startsWith('/outils/ahmed') ||
       p.startsWith('/outils/nouri'),
     items: [
       { name: 'Membres', href: '/equipe/membres', icon: UsersRound, requiredPermission: 'canManageUsers' },
       { name: 'Comptes', href: '/utilisateurs', icon: Users, requiredPermission: 'canManageUsers' },
-      { name: 'Opération Ahmed', href: '/outils/ahmed', icon: Wrench, requiredPermission: 'canViewEquipeOutils' },
-      { name: 'Opération Nouri', href: '/outils/nouri', icon: Wrench, requiredPermission: 'canViewEquipeOutils' },
     ],
   },
   {
@@ -243,6 +246,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
   const navigate = useNavigate()
   const location = useLocation()
   const { user, permissions, logout, updateProfile } = useAuth()
+  const { operations } = useOperations()
   const { myNotifications, unreadCount, markAsRead, markAllAsRead } = useNotifications()
   const [showNotif, setShowNotif] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
@@ -468,7 +472,34 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
 
         <nav className="flex-1 px-3 py-3 overflow-y-auto space-y-2">
           {NAV_STRUCTURE.map((category) => {
-            const allItems = categoryItems(category)
+            const view: NavCategory =
+              category.id === 'equipe'
+                ? {
+                    ...category,
+                    items: [
+                      ...(category.items ?? []),
+                      ...(permissions?.canViewEquipeOutils
+                        ? operations
+                            .filter((o) => o.actif && canSeeOperation(user.role, permissions, o.id))
+                            .map((o) => ({
+                              name: o.nom,
+                              href: `/operations/${o.id}`,
+                              icon: Wrench,
+                              requiredPermission: 'canViewEquipeOutils' as const,
+                            }))
+                        : []),
+                      ...(permissions?.canManageUsers
+                        ? [{
+                            name: 'Ajouter une opération',
+                            href: '/operations',
+                            icon: Plus,
+                            requiredPermission: 'canManageUsers' as const,
+                          }]
+                        : []),
+                    ],
+                  }
+                : category
+            const allItems = categoryItems(view)
             const visibleFlat = allItems.filter(
               (item) => hasAccess(permissions, item, user.role) || item.disabled
             )

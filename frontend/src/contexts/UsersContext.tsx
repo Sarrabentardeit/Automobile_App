@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import type { User, Permissions } from '@/types'
-import { ROLE_PRESETS } from '@/types'
+import { ROLE_PRESETS, readOperationIds } from '@/types'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -15,6 +15,8 @@ const DEFAULT_PERMISSIONS: Permissions = {
   canViewFinance: false,
   canViewInventory: false,
   canViewEquipeOutils: false,
+  canViewReunion: true,
+  operationIds: [],
 }
 
 function mergePermissions(role: string, raw: unknown): Permissions {
@@ -33,6 +35,8 @@ function mergePermissions(role: string, raw: unknown): Permissions {
     canViewFinance: Boolean(p.canViewFinance ?? base.canViewFinance),
     canViewInventory: Boolean(p.canViewInventory ?? base.canViewInventory),
     canViewEquipeOutils: Boolean(p.canViewEquipeOutils ?? base.canViewEquipeOutils),
+    canViewReunion: Boolean(p.canViewReunion ?? base.canViewReunion),
+    operationIds: readOperationIds(p),
   }
 }
 
