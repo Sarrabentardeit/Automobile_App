@@ -36,7 +36,7 @@ import {
   RotateCcw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { prixUnitaireAchatTTC } from '@/lib/stockUtils'
+import { prixVenteDevis } from '@/lib/stockUtils'
 
 type FormLigne = LigneFacture
 
@@ -51,16 +51,13 @@ const emptyLigneAutreProduit = (): FormLigne => ({ type: 'autre_produit', design
 const emptyLigneDivers = (): FormLigne => ({ type: 'divers', designation: '', qte: 1, mtHT: 0 })
 const emptyLigneDepense = (): FormLigne => ({ type: 'depense', designation: '', montant: 0 })
 function ligneFromProduit(p: ProduitStock): FormLigne {
-  if (p.prixVente != null && p.prixVente > 0) {
-    return { type: 'produit', productId: p.id, designation: p.nom, qte: 1, prixUnitaireHT: p.prixVente }
-  }
-  const unitTTC = prixUnitaireAchatTTC(p)
+  const vente = prixVenteDevis(p)
   return {
     type: 'produit',
     productId: p.id,
     designation: p.nom,
     qte: 1,
-    prixUnitaireHT: unitTTC > 0 ? unitTTC / 1.19 : 0,
+    prixUnitaireHT: vente > 0 ? vente : 0,
   }
 }
 

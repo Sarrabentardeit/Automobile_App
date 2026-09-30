@@ -362,11 +362,11 @@ export const mockCalendarAssignments: CalendarAssignment[] = [
 
 // ==================== RÉCLAMATIONS ====================
 export const mockReclamations: Reclamation[] = [
-  { id: 1, date: '2026-02-03', clientName: 'M. Ben Ali', clientTelephone: '58118291', vehicleRef: 'SEAT IBIZA 127 TU 2987', sujet: 'Bruit frein arrière', description: 'Client signale un grincement au freinage après réparation. À contrôler.', statut: 'ouverte', assigneA: 'Souhail', priorite: 'haute' },
-  { id: 2, date: '2026-02-05', clientName: 'Mme Ferchichi', clientTelephone: '50400451', vehicleRef: '308', sujet: 'Climatisation', description: 'Clim ne refroidit plus après passage. Vérifier recharge.', statut: 'en_cours', assigneA: 'Yassin', priorite: 'normale' },
-  { id: 3, date: '2026-02-07', clientName: 'M. Ghazouani', vehicleRef: 'A3', sujet: 'Vibrations moteur', description: 'Vibrations ressenties à l\'accélération. Contrôle demandé.', statut: 'traitee', assigneA: 'Melek', priorite: 'normale' },
-  { id: 4, date: '2026-02-09', clientName: 'M. Radhouene', clientTelephone: '55617434', vehicleRef: 'GOLF 6', sujet: 'Joint de culasse', description: 'Refait joint il y a 2 semaines. Fuite huile réapparue.', statut: 'ouverte', priorite: 'haute' },
-  { id: 5, date: '2026-02-10', clientName: 'M. Belgacem', vehicleRef: 'PASSAT', sujet: 'Retard livraison', description: 'Client mécontent du délai. S\'excuser et prioriser.', statut: 'cloturee', assigneA: 'Souhail', priorite: 'basse' },
+  { id: 1, date: '2026-02-03', clientName: 'M. Ben Ali', clientTelephone: '58118291', vehicleRef: 'SEAT IBIZA 127 TU 2987', sujet: 'Bruit frein arrière', description: 'Client signale un grincement au freinage après réparation. À contrôler.', statut: 'ouverte', type: 'externe', assigneA: 'Souhail', priorite: 'haute' },
+  { id: 2, date: '2026-02-05', clientName: 'Mme Ferchichi', clientTelephone: '50400451', vehicleRef: '308', sujet: 'Climatisation', description: 'Clim ne refroidit plus après passage. Vérifier recharge.', statut: 'en_cours', type: 'externe', assigneA: 'Yassin', priorite: 'normale' },
+  { id: 3, date: '2026-02-07', clientName: 'M. Ghazouani', vehicleRef: 'A3', sujet: 'Vibrations moteur', description: 'Vibrations ressenties à l\'accélération. Contrôle demandé.', statut: 'traitee', type: 'externe', assigneA: 'Melek', priorite: 'normale' },
+  { id: 4, date: '2026-02-09', clientName: 'M. Radhouene', clientTelephone: '55617434', vehicleRef: 'GOLF 6', sujet: 'Joint de culasse', description: 'Refait joint il y a 2 semaines. Fuite huile réapparue.', statut: 'ouverte', type: 'externe', priorite: 'haute' },
+  { id: 5, date: '2026-02-10', clientName: 'M. Belgacem', vehicleRef: 'PASSAT', sujet: 'Retard livraison', description: 'Client mécontent du délai. S\'excuser et prioriser.', statut: 'cloturee', type: 'externe', assigneA: 'Souhail', priorite: 'basse' },
 ]
 
 // ==================== PRIX MAIN D'OEUVRE (DEVIS) ====================

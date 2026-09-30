@@ -7,6 +7,7 @@ import {
 } from '../lib/vehiculeBrands'
 import { whereUserAssignedToVehicule } from '../lib/vehiculeAssignees'
 import { authenticate, type AuthRequest } from '../middleware/auth'
+import { coutUnitaireHt, prixVenteDepuisMarge } from '../lib/prixVente'
 import { promises as fs } from 'fs'
 import path from 'path'
 
@@ -1365,8 +1366,11 @@ router.post('/:id/depenses/stock', authenticate(), async (req, res) => {
     const valeurUnitaireAchat =
       produit.quantite > 0 ? produit.valeur_achat_ttc / produit.quantite : 0
     const cout_stock_sortie = valeurUnitaireAchat * quantite
+    const coutHt = coutUnitaireHt(produit)
+    const depuisMarge = prixVenteDepuisMarge(coutHt, produit.marge_vente_pct)
     const prixVenteUnit =
-      produit.prix_vente != null && produit.prix_vente > 0 ? produit.prix_vente : valeurUnitaireAchat
+      depuisMarge ??
+      (produit.prix_vente != null && produit.prix_vente > 0 ? produit.prix_vente : coutHt || valeurUnitaireAchat)
     const montantLigne = Math.round(prixVenteUnit * quantite * 100) / 100
 
     const puStr = prixVenteUnit.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
