@@ -57,6 +57,17 @@ function initials(name: string) {
   return (name.trim().slice(0, 2) || '?').toUpperCase()
 }
 
+const ETATS_FILTRE: EtatVehicule[] = [
+  'orange',
+  'mauve',
+  'sous_traitance',
+  'attente_client',
+  'bleu',
+  'rouge',
+  'remise_cle',
+  'retour',
+]
+
 export default function ReunionPage() {
   const { getAccessToken, permissions } = useAuth()
   const { users } = useUsers()
@@ -67,6 +78,7 @@ export default function ReunionPage() {
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState<number | null>(null)
   const [savedFlash, setSavedFlash] = useState<number | null>(null)
+  const [filtreEtat, setFiltreEtat] = useState<EtatVehicule | 'tous'>('tous')
 
   useEffect(() => {
     const token = getAccessToken()
@@ -101,6 +113,14 @@ export default function ReunionPage() {
     () => [...rows].sort((a, b) => stayDays(b) - stayDays(a) || a.id - b.id),
     [rows]
   )
+  const counts = useMemo(() => {
+    const map = Object.fromEntries(ETATS_FILTRE.map((etat) => [etat, 0])) as Record<EtatVehicule, number>
+    for (const row of ordered) {
+      if (row.etat_actuel in map) map[row.etat_actuel] += 1
+    }
+    return map
+  }, [ordered])
+  const visible = filtreEtat === 'tous' ? ordered : ordered.filter((row) => row.etat_actuel === filtreEtat)
   const inShop = ordered.length
   const longest = ordered[0] ? stayDays(ordered[0]) : null
   const isToday = date === today()
@@ -143,7 +163,7 @@ export default function ReunionPage() {
   }
 
   const metrics = [
-    { label: 'Au garage', value: loading ? '—' : String(inShop), hint: 'en cours' },
+    { label: 'Au garage', value: loading ? '—' : String(inShop), hint: inShop === 1 ? 'voiture' : 'voitures' },
     { label: 'Plus ancienne', value: loading || longest == null ? '—' : String(longest), hint: longest === 1 ? 'jour' : 'jours' },
   ]
 
@@ -198,6 +218,43 @@ export default function ReunionPage() {
               </div>
             ))}
           </div>
+
+          <div className="mt-5 flex items-center gap-1.5 overflow-x-auto pb-0.5">
+            <button
+              type="button"
+              onClick={() => setFiltreEtat('tous')}
+              className={cn(
+                'flex-shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors',
+                filtreEtat === 'tous'
+                  ? 'border-gray-900 bg-gray-900 text-white'
+                  : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+              )}
+            >
+              Tous ({loading ? '—' : inShop})
+            </button>
+            {ETATS_FILTRE.map((etat) => {
+              const cfg = ETAT_CONFIG[etat]
+              const active = filtreEtat === etat
+              return (
+                <button
+                  key={etat}
+                  type="button"
+                  onClick={() => setFiltreEtat(active ? 'tous' : etat)}
+                  className={cn(
+                    'flex-shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors',
+                    !active && 'bg-white hover:brightness-95'
+                  )}
+                  style={{
+                    borderColor: cfg.color,
+                    color: active ? '#fff' : cfg.color,
+                    backgroundColor: active ? cfg.color : '#fff',
+                  }}
+                >
+                  {cfg.label} ({loading ? '—' : counts[etat]})
+                </button>
+              )
+            })}
+          </div>
         </header>
 
         <div className="overflow-x-auto">
@@ -222,15 +279,17 @@ export default function ReunionPage() {
                     </td>
                   </tr>
                 ))
-              ) : ordered.length === 0 ? (
+              ) : visible.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-20 text-center">
-                    <p className="text-base font-medium text-gray-900">Aucune voiture au garage</p>
+                    <p className="text-base font-medium text-gray-900">
+                      {filtreEtat === 'tous' ? 'Aucune voiture au garage' : 'Aucune voiture dans cet état'}
+                    </p>
                     <p className="mt-1 text-sm text-gray-500">Les voitures validées ne sont pas dans cette liste.</p>
                   </td>
                 </tr>
               ) : (
-                ordered.map((row, index) => {
+                visible.map((row, index) => {
                   const days = stayDays(row)
                   const problem = parseVehiculeAssigneesFromText(row.defaut).notes.trim()
                   const people = peopleOf(row)
@@ -308,9 +367,10 @@ export default function ReunionPage() {
             </tbody>
           </table>
         </div>
-        {!loading && ordered.length > 0 ? (
+        {!loading && visible.length > 0 ? (
           <p className="border-t border-gray-100 px-5 py-3 text-xs text-gray-400 sm:px-7">
-            {ordered.length} voiture{ordered.length > 1 ? 's' : ''} · les plus anciennes en premier
+            {visible.length} voiture{visible.length > 1 ? 's' : ''}
+            {filtreEtat !== 'tous' ? ` · ${ETAT_CONFIG[filtreEtat].label}` : ''} · les plus anciennes en premier
           </p>
         ) : null}
       </section>

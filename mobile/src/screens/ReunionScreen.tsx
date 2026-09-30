@@ -10,6 +10,7 @@ import {
 } from 'react-native'
 import { apiFetch } from '../lib/api'
 import { theme } from '../theme/appTheme'
+import { ETAT_CONFIG, type EtatVehicule } from '../types/vehicule'
 
 type Row = {
   id: number
@@ -37,6 +38,17 @@ function stayDays(row: Row) {
   return Math.max(0, Math.floor((end - start) / 86400000))
 }
 
+const ETATS_FILTRE: EtatVehicule[] = [
+  'orange',
+  'mauve',
+  'sous_traitance',
+  'attente_client',
+  'bleu',
+  'rouge',
+  'remise_cle',
+  'retour',
+]
+
 type Props = {
   accessToken: string
   onOpenVehicle: (id: number) => void
@@ -48,6 +60,7 @@ export default function ReunionScreen({ accessToken, onOpenVehicle }: Props) {
   const [notes, setNotes] = useState<Record<number, string>>({})
   const [saved, setSaved] = useState<Record<number, string>>({})
   const [loading, setLoading] = useState(true)
+  const [filtre, setFiltre] = useState<EtatVehicule | 'tous'>('tous')
 
   useEffect(() => {
     let cancelled = false
@@ -76,6 +89,12 @@ export default function ReunionScreen({ accessToken, onOpenVehicle }: Props) {
     () => [...rows].sort((a, b) => stayDays(b) - stayDays(a) || a.id - b.id),
     [rows]
   )
+  const counts = useMemo(() => {
+    const map = Object.fromEntries(ETATS_FILTRE.map((etat) => [etat, 0])) as Record<string, number>
+    for (const row of ordered) map[row.etat_actuel] = (map[row.etat_actuel] ?? 0) + 1
+    return map
+  }, [ordered])
+  const visible = filtre === 'tous' ? ordered : ordered.filter((row) => row.etat_actuel === filtre)
   const inShop = ordered.length
 
   const shift = (delta: number) => {
@@ -115,11 +134,36 @@ export default function ReunionScreen({ accessToken, onOpenVehicle }: Props) {
           <Text style={styles.statValue}>{loading ? '—' : inShop}</Text>
         </View>
       </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
+        <Pressable
+          style={[styles.chip, filtre === 'tous' && styles.chipOn]}
+          onPress={() => setFiltre('tous')}
+        >
+          <Text style={[styles.chipText, filtre === 'tous' && styles.chipTextOn]}>Tous ({inShop})</Text>
+        </Pressable>
+        {ETATS_FILTRE.map((etat) => {
+          const active = filtre === etat
+          const color = ETAT_CONFIG[etat].color
+          return (
+            <Pressable
+              key={etat}
+              style={[styles.chip, { borderColor: color }, active && { backgroundColor: color }]}
+              onPress={() => setFiltre(active ? 'tous' : etat)}
+            >
+              <Text style={[styles.chipText, { color: active ? '#fff' : color }]}>
+                {ETAT_CONFIG[etat].label} ({counts[etat] ?? 0})
+              </Text>
+            </Pressable>
+          )
+        })}
+      </ScrollView>
       {loading ? <ActivityIndicator color={theme.primary} /> : null}
-      {!loading && ordered.length === 0 ? (
-        <Text style={styles.muted}>Aucune voiture pour cette réunion.</Text>
+      {!loading && visible.length === 0 ? (
+        <Text style={styles.muted}>
+          {filtre === 'tous' ? 'Aucune voiture au garage.' : 'Aucune voiture dans cet état.'}
+        </Text>
       ) : null}
-      {ordered.map((row, index) => {
+      {visible.map((row, index) => {
         const days = stayDays(row)
         return (
           <View key={row.id} style={styles.card}>
@@ -162,7 +206,19 @@ const styles = StyleSheet.create({
   },
   dateBtnText: { fontWeight: '600', color: theme.text },
   dateLabel: { marginTop: 8, color: theme.textMuted },
-  stats: { flexDirection: 'row', gap: 10, marginVertical: 14 },
+  stats: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  filters: { gap: 8, paddingVertical: 12 },
+  chip: {
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: '#fff',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  chipOn: { backgroundColor: theme.text, borderColor: theme.text },
+  chipText: { fontSize: 11, fontWeight: '700', color: theme.textMuted },
+  chipTextOn: { color: '#fff' },
   stat: { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 12 },
   statLabel: { fontSize: 12, color: theme.textMuted },
   statValue: { fontSize: 22, fontWeight: '700', color: theme.text, marginTop: 2 },
