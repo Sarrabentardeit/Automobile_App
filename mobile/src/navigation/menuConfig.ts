@@ -16,6 +16,7 @@ export type MenuRouteId =
   | 'vehicules_archives'
   | 'marques'
   | 'reunion'
+  | 'suivi'
   | 'facturation_vente'
   | 'paiements_vente'
   | 'facturation_achat'
@@ -104,7 +105,7 @@ export const MENU_STRUCTURE: MenuCategory[] = [
     icon: 'car-outline',
     collapsible: true,
     defaultOpen: true,
-    matchRoutes: ['vehicules', 'vehicules_archives', 'marques', 'clients', 'reclamation', 'reunion'],
+    matchRoutes: ['vehicules', 'vehicules_archives', 'marques', 'clients', 'reclamation', 'reunion', 'suivi'],
     items: [
       {
         id: 'vehicules',
@@ -118,6 +119,13 @@ export const MENU_STRUCTURE: MenuCategory[] = [
         name: 'Réunion',
         icon: 'clipboard-outline',
         requiredPermission: 'canViewReunion',
+        implemented: true,
+      },
+      {
+        id: 'suivi',
+        name: 'Suivi',
+        icon: 'pulse-outline',
+        requiredPermission: 'canViewSuivi',
         implemented: true,
       },
       {

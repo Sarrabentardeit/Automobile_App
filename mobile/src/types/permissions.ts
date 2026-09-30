@@ -13,6 +13,7 @@ export type TogglePermissionKey =
   | 'canViewInventory'
   | 'canViewEquipeOutils'
   | 'canViewReunion'
+  | 'canViewSuivi'
 
 export const ALL_ROLES: Role[] = ['admin', 'responsable', 'technicien', 'financier']
 
@@ -34,6 +35,7 @@ export const ALL_TOGGLE_KEYS: TogglePermissionKey[] = [
   'canViewInventory',
   'canViewEquipeOutils',
   'canViewReunion',
+  'canViewSuivi',
 ]
 
 export const TOGGLE_PERMISSION_LABELS: Record<
@@ -50,6 +52,7 @@ export const TOGGLE_PERMISSION_LABELS: Record<
   canViewInventory: { label: 'Accès inventaire', description: 'Stock et produits' },
   canViewEquipeOutils: { label: 'Accès outils équipe', description: 'Opération Ahmed' },
   canViewReunion: { label: 'Accès réunion', description: 'Feuille de réunion de l’atelier' },
+  canViewSuivi: { label: 'Accès suivi atelier', description: 'Garage, validations et mouvements' },
 }
 
 export const VISIBILITY_OPTIONS: {
@@ -103,6 +106,7 @@ export type Permissions = {
   canViewInventory: boolean
   canViewEquipeOutils: boolean
   canViewReunion: boolean
+  canViewSuivi: boolean
   /** null = toutes les opérations (anciens comptes). */
   operationIds: number[] | null
 }
@@ -127,6 +131,7 @@ export const ROLE_PRESETS: Record<Role, Permissions> = {
     canViewInventory: true,
     canViewEquipeOutils: true,
     canViewReunion: true,
+    canViewSuivi: true,
     operationIds: null,
   },
   responsable: {
@@ -141,6 +146,7 @@ export const ROLE_PRESETS: Record<Role, Permissions> = {
     canViewInventory: true,
     canViewEquipeOutils: true,
     canViewReunion: true,
+    canViewSuivi: true,
     operationIds: null,
   },
   technicien: {
@@ -155,6 +161,7 @@ export const ROLE_PRESETS: Record<Role, Permissions> = {
     canViewInventory: false,
     canViewEquipeOutils: false,
     canViewReunion: true,
+    canViewSuivi: false,
     operationIds: [],
   },
   financier: {
@@ -169,6 +176,7 @@ export const ROLE_PRESETS: Record<Role, Permissions> = {
     canViewInventory: true,
     canViewEquipeOutils: false,
     canViewReunion: true,
+    canViewSuivi: false,
     operationIds: [],
   },
 }
@@ -199,6 +207,7 @@ export function mergePermissions(role: string, raw: unknown): Permissions {
     canViewInventory: Boolean(p.canViewInventory ?? base.canViewInventory),
     canViewEquipeOutils: Boolean(p.canViewEquipeOutils ?? base.canViewEquipeOutils),
     canViewReunion: Boolean(p.canViewReunion ?? base.canViewReunion),
+    canViewSuivi: Boolean(p.canViewSuivi ?? base.canViewSuivi),
     operationIds: readOperationIds(p),
   }
 }

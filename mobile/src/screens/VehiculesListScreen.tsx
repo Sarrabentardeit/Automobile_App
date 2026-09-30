@@ -170,11 +170,6 @@ function VehiculeRow({
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
     >
       <View style={[styles.cardBar, { backgroundColor: cfg.color }]} />
-      {!archives && item.etat_actuel === 'vert' ? (
-        <View style={styles.ribbon} pointerEvents="none">
-          <Text style={styles.ribbonText}>ARCHIVÉ</Text>
-        </View>
-      ) : null}
       <View style={styles.cardBody}>
         <View style={styles.cardTop}>
           <Text style={styles.cardModel} numberOfLines={1}>
@@ -440,7 +435,6 @@ export default function VehiculesListScreen({
         type: q.type,
         etat: q.etat,
         exclude_etat: q.exclude_etat,
-        include_archives: q.include_archives,
         technicien_id: q.technicien_id,
         date_debut: q.date_debut,
         date_fin: q.date_fin,
@@ -1398,23 +1392,6 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
   },
   cardPressed: { opacity: 0.92 },
-  ribbon: {
-    position: 'absolute',
-    top: 16,
-    right: -34,
-    zIndex: 2,
-    width: 120,
-    backgroundColor: '#059669',
-    paddingVertical: 3,
-    transform: [{ rotate: '45deg' }],
-    alignItems: 'center',
-  },
-  ribbonText: {
-    color: '#fff',
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-  },
   cardBar: { width: 4, alignSelf: 'stretch' },
   cardBody: { flex: 1, padding: 14, minWidth: 0 },
   cardTop: {

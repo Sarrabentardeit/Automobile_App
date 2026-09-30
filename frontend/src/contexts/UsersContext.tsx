@@ -16,6 +16,7 @@ const DEFAULT_PERMISSIONS: Permissions = {
   canViewInventory: false,
   canViewEquipeOutils: false,
   canViewReunion: true,
+  canViewSuivi: false,
   operationIds: [],
 }
 
@@ -36,6 +37,7 @@ function mergePermissions(role: string, raw: unknown): Permissions {
     canViewInventory: Boolean(p.canViewInventory ?? base.canViewInventory),
     canViewEquipeOutils: Boolean(p.canViewEquipeOutils ?? base.canViewEquipeOutils),
     canViewReunion: Boolean(p.canViewReunion ?? base.canViewReunion),
+    canViewSuivi: Boolean(p.canViewSuivi ?? base.canViewSuivi),
     operationIds: readOperationIds(p),
   }
 }

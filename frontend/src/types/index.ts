@@ -27,6 +27,8 @@ export interface Permissions {
   canViewEquipeOutils: boolean
   /** Feuille de réunion de l'atelier */
   canViewReunion: boolean
+  /** Suivi atelier pour le gérant */
+  canViewSuivi: boolean
   /** Opérations d'équipe visibles. null = toutes (anciens comptes). */
   operationIds: number[] | null
 }
@@ -42,6 +44,7 @@ export type TogglePermissionKey =
   | 'canViewInventory'
   | 'canViewEquipeOutils'
   | 'canViewReunion'
+  | 'canViewSuivi'
 
 export const TOGGLE_PERMISSION_LABELS: Record<TogglePermissionKey, { label: string; description: string; icon: string }> = {
   canViewDashboard: { label: 'Voir le dashboard', description: 'Accès au tableau de bord et statistiques', icon: '📊' },
@@ -54,12 +57,13 @@ export const TOGGLE_PERMISSION_LABELS: Record<TogglePermissionKey, { label: stri
   canViewInventory: { label: 'Accès inventaire', description: 'Stock général et catalogue produits', icon: '📦' },
   canViewEquipeOutils: { label: 'Accès outils équipe', description: 'Choisir les opérations visibles', icon: '🔧' },
   canViewReunion: { label: 'Accès réunion', description: 'Voir la feuille de réunion de l’atelier', icon: '📋' },
+  canViewSuivi: { label: 'Accès suivi atelier', description: 'Suivre le garage, les validations et les mouvements', icon: '📡' },
 }
 
 export const ALL_TOGGLE_KEYS: TogglePermissionKey[] = [
   'canViewDashboard', 'canAddVehicule', 'canEditVehicule',
   'canChangeEtat', 'canAssignTechnicien', 'canManageUsers', 'canViewFinance',
-  'canViewInventory', 'canViewEquipeOutils', 'canViewReunion',
+  'canViewInventory', 'canViewEquipeOutils', 'canViewReunion', 'canViewSuivi',
 ]
 
 export const VISIBILITY_OPTIONS: { value: VehiculeVisibility; label: string; description: string; icon: string }[] = [
@@ -72,22 +76,22 @@ export const ROLE_PRESETS: Record<Role, Permissions> = {
   admin: {
     vehiculeVisibility: 'all', canAddVehicule: true, canEditVehicule: true, canChangeEtat: true,
     canAssignTechnicien: true, canManageUsers: true, canViewDashboard: true, canViewFinance: true,
-    canViewInventory: true, canViewEquipeOutils: true, canViewReunion: true, operationIds: null,
+    canViewInventory: true, canViewEquipeOutils: true, canViewReunion: true, canViewSuivi: true, operationIds: null,
   },
   responsable: {
     vehiculeVisibility: 'all', canAddVehicule: true, canEditVehicule: true, canChangeEtat: true,
     canAssignTechnicien: true, canManageUsers: false, canViewDashboard: true, canViewFinance: true,
-    canViewInventory: true, canViewEquipeOutils: true, canViewReunion: true, operationIds: null,
+    canViewInventory: true, canViewEquipeOutils: true, canViewReunion: true, canViewSuivi: true, operationIds: null,
   },
   technicien: {
     vehiculeVisibility: 'own', canAddVehicule: false, canEditVehicule: false, canChangeEtat: true,
     canAssignTechnicien: false, canManageUsers: false, canViewDashboard: true, canViewFinance: false,
-    canViewInventory: false, canViewEquipeOutils: false, canViewReunion: true, operationIds: [],
+    canViewInventory: false, canViewEquipeOutils: false, canViewReunion: true, canViewSuivi: false, operationIds: [],
   },
   financier: {
     vehiculeVisibility: 'all', canAddVehicule: false, canEditVehicule: false, canChangeEtat: false,
     canAssignTechnicien: false, canManageUsers: false, canViewDashboard: true, canViewFinance: true,
-    canViewInventory: true, canViewEquipeOutils: false, canViewReunion: true, operationIds: [],
+    canViewInventory: true, canViewEquipeOutils: false, canViewReunion: true, canViewSuivi: false, operationIds: [],
   },
 }
 

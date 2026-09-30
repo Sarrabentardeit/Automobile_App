@@ -58,6 +58,7 @@ import ChecklistTemplatesPage from '@/pages/ChecklistTemplatesPage'
 import DocumentsPage from '@/pages/DocumentsPage'
 import NotesPersonnellesPage from '@/pages/NotesPersonnellesPage'
 import ReunionPage from '@/pages/ReunionPage'
+import SuiviPage from '@/pages/SuiviPage'
 import MarquesPage from '@/pages/MarquesPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 
@@ -132,6 +133,7 @@ export default function App() {
               <Route path="/documents" element={<DocumentsPage />} />
               <Route path="/notes" element={<NotesPersonnellesPage />} />
               <Route path="/reunion" element={<ReunionPage />} />
+              <Route path="/suivi" element={<SuiviPage />} />
             </Route>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<NotFoundPage />} />

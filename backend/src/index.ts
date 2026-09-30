@@ -34,6 +34,7 @@ import moneyRouter from './routes/money'
 import outilsRouter from './routes/outils'
 import operationsRouter from './routes/operations'
 import reunionsRouter from './routes/reunions'
+import suiviRouter from './routes/suivi'
 import checklistsRouter from './routes/checklists'
 import statsRouter from './routes/stats'
 import settingsRouter from './routes/settings'
@@ -117,6 +118,7 @@ app.use('/money', moneyRouter)
 app.use('/outils', outilsRouter)
 app.use('/operations', operationsRouter)
 app.use('/reunions', reunionsRouter)
+app.use('/suivi', suiviRouter)
 app.use('/checklists', checklistsRouter)
 app.use('/stats', statsRouter)
 app.use('/settings', settingsRouter)

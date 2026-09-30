@@ -35,7 +35,6 @@ export const ETATS_FILTRE: EtatVehicule[] = [
   'rouge',
   'remise_cle',
   'retour',
-  'vert',
 ]
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -124,9 +123,8 @@ export function buildFilterQuery(opts: FilterOpts) {
   const p = buildListParams({ ...opts, page: 1, limit: 1 })
   return {
     type: p.type,
-    etat: 'etat' in p ? p.etat : undefined,
-    exclude_etat: undefined,
-    include_archives: p.include_archives,
+    etat: p.etat,
+    exclude_etat: p.exclude_etat,
     technicien_id: p.technicien_id,
     date_debut: p.date_debut,
     date_fin: p.date_fin,
@@ -157,13 +155,8 @@ export function buildListParams(opts: FilterOpts & { page: number; limit: number
     service_type: opts.serviceType || undefined,
     vip:
       opts.vipFilter === 'vip' ? 'true' : opts.vipFilter === 'normal' ? 'false' : undefined,
-    etat: opts.archives
-      ? 'vert'
-      : opts.filtreEtat !== 'tous'
-        ? opts.filtreEtat
-        : undefined,
-    exclude_etat: undefined as string | undefined,
-    include_archives: !opts.archives && opts.filtreEtat === 'tous' ? 'true' : undefined,
+    etat: opts.archives ? 'vert' : opts.filtreEtat !== 'tous' ? opts.filtreEtat : undefined,
+    exclude_etat: !opts.archives && opts.filtreEtat === 'tous' ? 'vert' : undefined,
     ...(opts.marque ? { marque: opts.marque } : {}),
   }
 }

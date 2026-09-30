@@ -79,6 +79,7 @@ function mergePermissions(role: string, raw: unknown): Permissions {
     canViewInventory: Boolean(p.canViewInventory ?? base.canViewInventory),
     canViewEquipeOutils: Boolean(p.canViewEquipeOutils ?? base.canViewEquipeOutils),
     canViewReunion: Boolean(p.canViewReunion ?? base.canViewReunion),
+    canViewSuivi: Boolean(p.canViewSuivi ?? base.canViewSuivi),
     operationIds: readOperationIds(p),
   }
 }

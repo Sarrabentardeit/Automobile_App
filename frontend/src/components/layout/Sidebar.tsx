@@ -4,7 +4,7 @@ import type { Permissions, Role, TogglePermissionKey } from '@/types'
 import { ROLE_CONFIG } from '@/types'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { LayoutDashboard, Car, Users, Wallet, X, LogOut, Package, Wrench, UsersRound, CalendarDays, AlertCircle, UserCircle, CreditCard, ClipboardList, Layers, Phone, Truck, Receipt, Bell, Shield, FileText, Import, Archive, SlidersHorizontal, FolderOpen, MessageSquare, ChevronDown, Banknote, Boxes, Settings2, Home, StickyNote, Tag, Plus } from 'lucide-react'
+import { LayoutDashboard, Car, Users, Wallet, X, LogOut, Package, Wrench, UsersRound, CalendarDays, AlertCircle, UserCircle, CreditCard, ClipboardList, Layers, Phone, Truck, Receipt, Bell, Shield, FileText, Import, Archive, SlidersHorizontal, FolderOpen, MessageSquare, ChevronDown, Banknote, Boxes, Settings2, Home, StickyNote, Tag, Plus, Activity } from 'lucide-react'
 import { useNotifications } from '@/contexts/NotificationsContext'
 import ProfileEditModal from '@/components/profile/ProfileEditModal'
 import { resolveUploadUrl } from '@/lib/api'
@@ -105,10 +105,12 @@ const NAV_STRUCTURE: NavCategory[] = [
       p.startsWith('/marques') ||
       p.startsWith('/reclamation') ||
       p.startsWith('/reunion') ||
+      p.startsWith('/suivi') ||
       (p.startsWith('/clients') && !p.startsWith('/clients/dettes')),
     items: [
       { name: 'Véhicules', href: '/vehicules', icon: Car, requireVehiculeAccess: true },
       { name: 'Réunion', href: '/reunion', icon: ClipboardList, requiredPermission: 'canViewReunion' },
+      { name: 'Suivi', href: '/suivi', icon: Activity, requiredPermission: 'canViewSuivi' },
       { name: 'Archives', href: '/vehicules/archives', icon: Archive, requireVehiculeAccess: true },
       { name: 'Marques', href: '/marques', icon: Tag, requireVehiculeAccess: true },
       { name: 'Clients', href: '/clients', icon: UserCircle },

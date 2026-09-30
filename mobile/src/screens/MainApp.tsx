@@ -63,6 +63,7 @@ import UtilisateursScreen from './UtilisateursScreen'
 import OutilsAhmedScreen from './OutilsAhmedScreen'
 import OperationsScreen from './OperationsScreen'
 import ReunionScreen from './ReunionScreen'
+import SuiviScreen from './SuiviScreen'
 import OutilsNouriScreen from './OutilsNouriScreen'
 import MarquesScreen from './MarquesScreen'
 import ReclamationsScreen from './ReclamationsScreen'
@@ -495,6 +496,15 @@ export default function MainApp({
       case 'reunion':
         return (
           <ReunionScreen
+            accessToken={accessToken}
+            onOpenVehicle={(vehiculeId) =>
+              setNav({ type: 'vehicule_detail', route: 'vehicules', vehiculeId })
+            }
+          />
+        )
+      case 'suivi':
+        return (
+          <SuiviScreen
             accessToken={accessToken}
             onOpenVehicle={(vehiculeId) =>
               setNav({ type: 'vehicule_detail', route: 'vehicules', vehiculeId })
