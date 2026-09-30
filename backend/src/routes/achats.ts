@@ -2,7 +2,6 @@ import { Router } from 'express'
 import { prisma } from '../lib/prisma'
 import { authenticate } from '../middleware/auth'
 import { totalTTCAchat, valeurLigneStockTTC } from '../lib/achatTotals'
-import { coutUnitaireHt, prixVenteDepuisMarge } from '../lib/prixVente'
 
 const router = Router()
 const db = prisma as any
@@ -108,23 +107,13 @@ async function appliquerEntreeStock(
     const valeurAjout = valeurLigneStockTTC(qte, Number(l.prix_unitaire) || 0)
     const newQty = produit.quantite + qte
     const newVal = produit.valeur_achat_ttc + valeurAjout
-    const coutTtc = newQty > 0 ? newVal / newQty : produit.dernier_prix_unitaire_ttc ?? 0
-    const coutHt = coutUnitaireHt({
-      quantite: newQty,
-      valeur_achat_ttc: newVal,
-      dernier_prix_unitaire_ttc: coutTtc,
-      prix_achat_unitaire: produit.prix_achat_unitaire,
-    })
-    const prixVente = prixVenteDepuisMarge(coutHt, produit.marge_vente_pct)
     await db.$transaction([
       db.produitStock.update({
         where: { id: l.productId },
         data: {
           quantite: newQty,
           valeur_achat_ttc: newVal,
-          dernier_prix_unitaire_ttc: coutTtc,
-          prix_achat_unitaire: coutHt > 0 ? coutHt : produit.prix_achat_unitaire,
-          ...(prixVente != null ? { prix_vente: prixVente } : {}),
+          dernier_prix_unitaire_ttc: newQty > 0 ? newVal / newQty : produit.dernier_prix_unitaire_ttc ?? 0,
         },
       }),
       db.mouvementStock.create({

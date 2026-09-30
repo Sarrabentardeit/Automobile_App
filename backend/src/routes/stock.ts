@@ -1,7 +1,6 @@
 import { Router } from 'express'
 import { prisma } from '../lib/prisma'
 import { authenticate } from '../middleware/auth'
-import { coutUnitaireHt, prixVenteDepuisMarge } from '../lib/prixVente'
 
 const router = Router()
 const db = prisma as any
@@ -23,8 +22,6 @@ type ProduitRow = {
 }
 
 function toProduit(p: ProduitRow) {
-  const cout = coutUnitaireHt(p)
-  const vente = prixVenteDepuisMarge(cout, p.marge_vente_pct)
   return {
     id: p.id,
     nom: p.nom,
@@ -32,8 +29,8 @@ function toProduit(p: ProduitRow) {
     valeurAchatTTC: p.valeur_achat_ttc,
     dernierPrixUnitaireTTC: p.dernier_prix_unitaire_ttc ?? 0,
     categorie: p.categorie ?? undefined,
-    prixVente: vente ?? p.prix_vente ?? undefined,
-    prixAchatUnitaire: cout > 0 ? cout : p.prix_achat_unitaire ?? undefined,
+    prixVente: p.prix_vente ?? undefined,
+    prixAchatUnitaire: p.prix_achat_unitaire ?? undefined,
     margeVentePct: p.marge_vente_pct ?? undefined,
     reference: p.reference ?? '',
     unite: p.unite ?? 'unité',

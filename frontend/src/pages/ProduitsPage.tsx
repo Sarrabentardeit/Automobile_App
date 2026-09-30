@@ -641,7 +641,7 @@ export default function ProduitsPage() {
                     })}{' '}
                     DT / {form.unite?.trim() || 'unité'}
                   </p>
-                  <p className="text-xs text-amber-900/75">Coût de l’article × (1 + marge ÷ 100). Mis à jour à la réception de l’achat.</p>
+                  <p className="text-xs text-amber-900/75">Prix d’achat × (1 + marge ÷ 100)</p>
                 </div>
               )}
               {paNum <= 0 ? (
@@ -727,7 +727,7 @@ export default function ProduitsPage() {
                     DT / {form.unite?.trim() || 'unité'}
                   </p>
                   <p className="text-xs text-amber-900/75">
-                    Coût de l’article × (1 + marge ÷ 100). Mis à jour à la réception de l’achat.
+                    Prix d’achat × (1 + marge ÷ 100)
                   </p>
                 </div>
               )}
