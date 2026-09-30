@@ -107,6 +107,8 @@ export async function fetchVehicules(
     date_fin?: string
     marque?: string
     service_type?: string
+    include_archives?: string
+    vip?: string
   }
 ): Promise<VehiculesListResponse> {
   return apiFetch<VehiculesListResponse>('/vehicules', { token, params })
@@ -123,6 +125,7 @@ export async function fetchVehiculeBrands(
     date_fin?: string
     q?: string
     service_type?: string
+    include_archives?: string
   }
 ): Promise<BrandFoldersResponse> {
   return apiFetch<BrandFoldersResponse>('/vehicules/brands', { token, params })
@@ -140,6 +143,7 @@ export async function fetchVehiculeCounts(
     q?: string
     service_type?: string
     includeEtat?: boolean
+    include_archives?: string
   }
 ): Promise<VehiculeFilteredCounts> {
   return apiFetch<VehiculeFilteredCounts>('/vehicules/counts', {

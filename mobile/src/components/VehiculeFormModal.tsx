@@ -28,6 +28,7 @@ import {
   uploadVehiculeImage,
   type AppUser,
 } from '../lib/vehiculeApi'
+import { fetchVehicules } from '../lib/api'
 import {
   ETAT_CONFIG,
   ETATS_ENTREE,
@@ -119,6 +120,10 @@ export default function VehiculeFormModal({
   const [imageCategory, setImageCategory] = useState<VehiculeImageCategory>('etat_exterieur')
   const [imageNote, setImageNote] = useState('')
   const [showMarquePicker, setShowMarquePicker] = useState(false)
+  const [useExisting, setUseExisting] = useState(false)
+  const [knownQuery, setKnownQuery] = useState('')
+  const [knownHits, setKnownHits] = useState<Vehicule[]>([])
+  const [pickedLabel, setPickedLabel] = useState('')
   const statusBarInset = getStatusBarInset()
   const bottomInset = getSheetBottomInset()
   const dialogHeight = Math.min(Dimensions.get('window').height * 0.88, 680)
@@ -159,6 +164,10 @@ export default function VehiculeFormModal({
     })
     setPendingImages([])
     setErrors({})
+    setUseExisting(false)
+    setKnownQuery('')
+    setKnownHits([])
+    setPickedLabel('')
     void fetchAssignableUsers(accessToken).then(setUsers)
     void fetchMarques(accessToken)
       .then((list) => {
@@ -170,6 +179,70 @@ export default function VehiculeFormModal({
       })
       .catch(() => setMarquesList([]))
   }, [visible, vehicule, accessToken])
+
+  useEffect(() => {
+    if (!visible || isEdit || !useExisting) return
+    const q = knownQuery.trim()
+    if (q.length < 2) {
+      setKnownHits([])
+      return
+    }
+    let cancelled = false
+    const timer = setTimeout(() => {
+      void fetchVehicules(accessToken, { q, include_archives: 'true', limit: 20, page: 1 })
+        .then((res) => {
+          if (cancelled) return
+          const seen = new Set<string>()
+          const list: Vehicule[] = []
+          for (const row of res.data ?? []) {
+            const key = (row.immatriculation || row.modele || String(row.id)).trim().toLowerCase()
+            if (seen.has(key)) continue
+            seen.add(key)
+            list.push(row)
+          }
+          setKnownHits(list.slice(0, 8))
+        })
+        .catch(() => {
+          if (!cancelled) setKnownHits([])
+        })
+    }, 250)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [knownQuery, useExisting, visible, isEdit, accessToken])
+
+  const applyKnown = (row: Vehicule) => {
+    const names = marquesList.length ? marquesList.map((m) => m.nom) : [...FALLBACK_BRANDS]
+    const parsedKnown = parseMarqueModele(row.modele, names)
+    setMarque(parsedKnown.marque)
+    setForm((prev) => ({
+      ...prev,
+      modele: parsedKnown.modele,
+      immatriculation: row.immatriculation ?? '',
+      type: row.type,
+      etat_initial: 'orange',
+      date_entree: today(),
+      defaut: '',
+      client_telephone: row.client_telephone ?? '',
+      vip: row.vip ?? false,
+      technicien_id: row.technicien_id ?? null,
+      responsable_id: row.responsable_id ?? null,
+      technicien_ids: row.technicien_ids?.length
+        ? row.technicien_ids
+        : row.technicien_id
+          ? [row.technicien_id]
+          : [],
+      responsable_ids: row.responsable_ids?.length
+        ? row.responsable_ids
+        : row.responsable_id
+          ? [row.responsable_id]
+          : [],
+    }))
+    setPickedLabel(`${row.modele}${row.immatriculation ? ` · ${row.immatriculation}` : ''}`)
+    setKnownHits([])
+    setKnownQuery('')
+  }
 
   const update = <K extends keyof VehiculeFormData>(key: K, value: VehiculeFormData[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -292,6 +365,48 @@ export default function VehiculeFormModal({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator
         >
+          {!isEdit ? (
+            <View style={styles.knownBox}>
+              <View style={styles.knownHead}>
+                <Text style={styles.label}>Véhicule existant</Text>
+                <Switch
+                  value={useExisting}
+                  onValueChange={(on) => {
+                    setUseExisting(on)
+                    if (!on) {
+                      setKnownQuery('')
+                      setKnownHits([])
+                      setPickedLabel('')
+                    }
+                  }}
+                  trackColor={{ false: '#e5e7eb', true: '#fdba74' }}
+                  thumbColor={useExisting ? '#f97316' : '#f4f4f5'}
+                />
+              </View>
+              {useExisting ? (
+                <>
+                  <TextInput
+                    value={knownQuery}
+                    onChangeText={setKnownQuery}
+                    placeholder="Modèle ou immatriculation"
+                    placeholderTextColor="#9ca3af"
+                    style={styles.input}
+                  />
+                  {pickedLabel ? <Text style={styles.knownPicked}>Repris : {pickedLabel}</Text> : null}
+                  {knownHits.map((row) => (
+                    <Pressable key={row.id} style={styles.knownHit} onPress={() => applyKnown(row)}>
+                      <Text style={styles.knownHitTitle}>{row.modele}</Text>
+                      <Text style={styles.knownHitSub}>
+                        {row.immatriculation || 'Sans immatriculation'}
+                        {row.etat_actuel === 'vert' ? ' · Archivé' : ' · Au garage'}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </>
+              ) : null}
+            </View>
+          ) : null}
+
           <Text style={styles.label}>Type</Text>
           <View style={styles.row}>
             {(['voiture', 'moto'] as const).map((t) => (
@@ -641,6 +756,19 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   scroll: { padding: 16, paddingBottom: 24 },
   label: { fontSize: 12, fontWeight: '600', color: '#6b7280', marginBottom: 6, marginTop: 8 },
+  knownBox: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 8,
+    backgroundColor: '#fafafa',
+  },
+  knownHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  knownPicked: { marginTop: 8, fontSize: 12, color: '#047857', fontWeight: '600' },
+  knownHit: { paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
+  knownHitTitle: { fontSize: 14, fontWeight: '600', color: '#111827' },
+  knownHitSub: { fontSize: 12, color: '#6b7280', marginTop: 2 },
   field: { marginBottom: 4 },
   input: {
     borderWidth: 1,

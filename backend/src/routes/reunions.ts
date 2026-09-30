@@ -63,13 +63,10 @@ function toRow(v: {
   }
 }
 
-function presentOnDay(v: { etat_actuel: string; date_entree: string; date_sortie: string | null }, date: string) {
+function presentOnDay(v: { etat_actuel: string; date_entree: string }, date: string) {
+  if (v.etat_actuel === 'vert') return false
   const entry = String(v.date_entree || '').slice(0, 10)
-  if (!entry || entry > date) return false
-  if (v.etat_actuel !== 'vert') return true
-  const sortie = String(v.date_sortie || '').slice(0, 10)
-  if (!sortie) return true
-  return sortie >= date
+  return Boolean(entry) && entry <= date
 }
 
 router.get('/', async (req: AuthRequest, res) => {

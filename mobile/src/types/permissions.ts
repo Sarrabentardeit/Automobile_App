@@ -70,9 +70,24 @@ export function countPermissions(p: Permissions): number {
   return toggles + vis
 }
 
+export function readOperationIds(raw: Record<string, unknown> | null | undefined): number[] | null {
+  if (!raw || !Object.prototype.hasOwnProperty.call(raw, 'operationIds') || raw.operationIds == null) return null
+  if (!Array.isArray(raw.operationIds)) return null
+  return [...new Set(raw.operationIds.map((n) => Number(n)).filter((n) => Number.isInteger(n)))]
+}
+
+function sameOperationIds(a: number[] | null, b: number[] | null) {
+  if (a == null && b == null) return true
+  if (a == null || b == null) return false
+  if (a.length !== b.length) return false
+  const set = new Set(a)
+  return b.every((id) => set.has(id))
+}
+
 export function isPermissionsCustomized(role: Role, perms: Permissions): boolean {
   const preset = ROLE_PRESETS[role]
   if (perms.vehiculeVisibility !== preset.vehiculeVisibility) return true
+  if (!sameOperationIds(perms.operationIds, preset.operationIds)) return true
   return ALL_TOGGLE_KEYS.some((k) => perms[k] !== preset[k])
 }
 
@@ -88,6 +103,8 @@ export type Permissions = {
   canViewInventory: boolean
   canViewEquipeOutils: boolean
   canViewReunion: boolean
+  /** null = toutes les opérations (anciens comptes). */
+  operationIds: number[] | null
 }
 
 export const ROLE_LABELS: Record<Role, string> = {
@@ -110,6 +127,7 @@ export const ROLE_PRESETS: Record<Role, Permissions> = {
     canViewInventory: true,
     canViewEquipeOutils: true,
     canViewReunion: true,
+    operationIds: null,
   },
   responsable: {
     vehiculeVisibility: 'all',
@@ -123,6 +141,7 @@ export const ROLE_PRESETS: Record<Role, Permissions> = {
     canViewInventory: true,
     canViewEquipeOutils: true,
     canViewReunion: true,
+    operationIds: null,
   },
   technicien: {
     vehiculeVisibility: 'own',
@@ -136,6 +155,7 @@ export const ROLE_PRESETS: Record<Role, Permissions> = {
     canViewInventory: false,
     canViewEquipeOutils: false,
     canViewReunion: true,
+    operationIds: [],
   },
   financier: {
     vehiculeVisibility: 'all',
@@ -149,6 +169,7 @@ export const ROLE_PRESETS: Record<Role, Permissions> = {
     canViewInventory: true,
     canViewEquipeOutils: false,
     canViewReunion: true,
+    operationIds: [],
   },
 }
 
@@ -178,5 +199,6 @@ export function mergePermissions(role: string, raw: unknown): Permissions {
     canViewInventory: Boolean(p.canViewInventory ?? base.canViewInventory),
     canViewEquipeOutils: Boolean(p.canViewEquipeOutils ?? base.canViewEquipeOutils),
     canViewReunion: Boolean(p.canViewReunion ?? base.canViewReunion),
+    operationIds: readOperationIds(p),
   }
 }

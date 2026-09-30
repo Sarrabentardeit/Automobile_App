@@ -16,6 +16,7 @@ import {
   createAppAccount,
   updateAppAccount,
 } from '../../lib/userApi'
+import { fetchOperations, type GarageOperation } from '../../lib/operationApi'
 import { getModalLayout } from '../../lib/modalLayout'
 import { theme } from '../../theme/appTheme'
 import type { AppAccount } from '../../types/appUser'
@@ -71,6 +72,7 @@ export default function UserFormModal({
   const [form, setForm] = useState<FormState>(emptyForm)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [operations, setOperations] = useState<GarageOperation[]>([])
   const { cardMaxHeight, scrollMaxHeight, footerPaddingBottom } = getModalLayout({
     maxCard: 680,
     chrome: 150,
@@ -92,6 +94,13 @@ export default function UserFormModal({
       setForm(emptyForm())
     }
   }, [visible, user])
+
+  useEffect(() => {
+    if (!visible || !form.permissions.canViewEquipeOutils) return
+    void fetchOperations(accessToken)
+      .then((rows) => setOperations((Array.isArray(rows) ? rows : []).filter((row) => row.actif)))
+      .catch(() => setOperations([]))
+  }, [visible, accessToken, form.permissions.canViewEquipeOutils])
 
   const hasCustom = isPermissionsCustomized(form.role, form.permissions)
 
@@ -124,7 +133,20 @@ export default function UserFormModal({
   const canSave =
     form.nom_complet.trim().length > 0 &&
     form.email.trim().length > 0 &&
-    (isEdit || form.password.trim().length >= 6)
+    (isEdit || form.password.trim().length >= 6) &&
+    !(form.permissions.canViewEquipeOutils && form.permissions.operationIds?.length === 0)
+
+  const toggleOperation = (id: number) => {
+    setForm((f) => {
+      const all = operations.map((row) => row.id)
+      const current = f.permissions.operationIds == null ? all : f.permissions.operationIds
+      const next = current.includes(id) ? current.filter((n) => n !== id) : [...current, id]
+      return {
+        ...f,
+        permissions: { ...f.permissions, operationIds: next, canViewEquipeOutils: true },
+      }
+    })
+  }
 
   const submit = async () => {
     if (!canSave) return
@@ -280,7 +302,8 @@ export default function UserFormModal({
             const config = TOGGLE_PERMISSION_LABELS[key]
             const isOn = form.permissions[key]
             return (
-              <View key={key} style={styles.toggleRow}>
+              <View key={key}>
+              <View style={styles.toggleRow}>
                 <View style={styles.toggleText}>
                   <Text style={styles.toggleLabel}>{config.label}</Text>
                   <Text style={styles.toggleDesc}>{config.description}</Text>
@@ -291,6 +314,33 @@ export default function UserFormModal({
                   trackColor={{ false: theme.border, true: '#fdba74' }}
                   thumbColor={isOn ? theme.primary : '#f4f4f5'}
                 />
+              </View>
+              {key === 'canViewEquipeOutils' && isOn ? (
+                <View style={styles.opBox}>
+                  {operations.map((operation) => {
+                    const checked =
+                      form.permissions.operationIds == null ||
+                      form.permissions.operationIds.includes(operation.id)
+                    return (
+                      <Pressable
+                        key={operation.id}
+                        style={styles.opRow}
+                        onPress={() => toggleOperation(operation.id)}
+                      >
+                        <Ionicons
+                          name={checked ? 'checkbox' : 'square-outline'}
+                          size={20}
+                          color={checked ? theme.primary : '#9ca3af'}
+                        />
+                        <Text style={styles.opName}>{operation.nom}</Text>
+                      </Pressable>
+                    )
+                  })}
+                  {form.permissions.operationIds?.length === 0 ? (
+                    <Text style={styles.opHint}>Choisissez au moins une opération.</Text>
+                  ) : null}
+                </View>
+              ) : null}
               </View>
             )
           })}
@@ -485,6 +535,10 @@ const styles = StyleSheet.create({
   toggleText: { flex: 1 },
   toggleLabel: { fontSize: 14, fontWeight: '700', color: theme.text },
   toggleDesc: { fontSize: 12, color: theme.textMuted, marginTop: 2 },
+  opBox: { paddingLeft: 4, paddingBottom: 8, gap: 6 },
+  opRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+  opName: { fontSize: 14, color: theme.text, fontWeight: '600' },
+  opHint: { fontSize: 12, color: '#b91c1c' },
   footer: {
     flexDirection: 'row',
     gap: 10,

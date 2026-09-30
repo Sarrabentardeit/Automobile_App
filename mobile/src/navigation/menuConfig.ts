@@ -15,6 +15,7 @@ export type MenuRouteId =
   | 'vehicules'
   | 'vehicules_archives'
   | 'marques'
+  | 'reunion'
   | 'facturation_vente'
   | 'paiements_vente'
   | 'facturation_achat'
@@ -31,6 +32,7 @@ export type MenuRouteId =
   | 'notes'
   | 'outils_ahmed'
   | 'outils_nouri'
+  | 'operations'
   | 'checklists'
   | 'checklists_modeles'
   | 'documents'
@@ -102,13 +104,20 @@ export const MENU_STRUCTURE: MenuCategory[] = [
     icon: 'car-outline',
     collapsible: true,
     defaultOpen: true,
-    matchRoutes: ['vehicules', 'vehicules_archives', 'marques', 'clients', 'reclamation'],
+    matchRoutes: ['vehicules', 'vehicules_archives', 'marques', 'clients', 'reclamation', 'reunion'],
     items: [
       {
         id: 'vehicules',
         name: 'Véhicules',
         icon: 'car-outline',
         requireVehiculeAccess: true,
+        implemented: true,
+      },
+      {
+        id: 'reunion',
+        name: 'Réunion',
+        icon: 'clipboard-outline',
+        requiredPermission: 'canViewReunion',
         implemented: true,
       },
       {
@@ -272,7 +281,7 @@ export const MENU_STRUCTURE: MenuCategory[] = [
     label: 'Équipe',
     icon: 'people-outline',
     collapsible: true,
-    matchRoutes: ['equipe_membres', 'utilisateurs', 'outils_ahmed', 'outils_nouri'],
+    matchRoutes: ['equipe_membres', 'utilisateurs', 'operations', 'outils_ahmed', 'outils_nouri'],
     items: [
       {
         id: 'equipe_membres',
@@ -289,15 +298,8 @@ export const MENU_STRUCTURE: MenuCategory[] = [
         implemented: true,
       },
       {
-        id: 'outils_ahmed',
-        name: 'Opération Ahmed',
-        icon: 'construct-outline',
-        requiredPermission: 'canViewEquipeOutils',
-        implemented: true,
-      },
-      {
-        id: 'outils_nouri',
-        name: 'Opération Nouri',
+        id: 'operations',
+        name: 'Opérations',
         icon: 'construct-outline',
         requiredPermission: 'canViewEquipeOutils',
         implemented: true,

@@ -101,8 +101,7 @@ export default function ReunionPage() {
     () => [...rows].sort((a, b) => stayDays(b) - stayDays(a) || a.id - b.id),
     [rows]
   )
-  const inShop = ordered.filter((row) => row.etat_actuel !== 'vert').length
-  const validatedToday = ordered.length - inShop
+  const inShop = ordered.length
   const longest = ordered[0] ? stayDays(ordered[0]) : null
   const isToday = date === today()
 
@@ -144,8 +143,7 @@ export default function ReunionPage() {
   }
 
   const metrics = [
-    { label: 'À l’atelier', value: loading ? '—' : String(inShop), hint: 'encore ouvertes' },
-    { label: 'Validées', value: loading ? '—' : String(validatedToday), hint: 'sorties ce jour' },
+    { label: 'Au garage', value: loading ? '—' : String(inShop), hint: 'en cours' },
     { label: 'Plus ancienne', value: loading || longest == null ? '—' : String(longest), hint: longest === 1 ? 'jour' : 'jours' },
   ]
 
@@ -189,7 +187,7 @@ export default function ReunionPage() {
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-3 divide-x divide-gray-100 border-t border-gray-100 pt-5">
+          <div className="mt-6 grid grid-cols-2 divide-x divide-gray-100 border-t border-gray-100 pt-5">
             {metrics.map((item) => (
               <div key={item.label} className="px-1 sm:px-4 first:pl-0">
                 <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{item.label}</p>
@@ -227,8 +225,8 @@ export default function ReunionPage() {
               ) : ordered.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-20 text-center">
-                    <p className="text-base font-medium text-gray-900">Aucune voiture ce jour</p>
-                    <p className="mt-1 text-sm text-gray-500">L’atelier est vide, ou aucune sortie n’a été validée.</p>
+                    <p className="text-base font-medium text-gray-900">Aucune voiture au garage</p>
+                    <p className="mt-1 text-sm text-gray-500">Les voitures validées ne sont pas dans cette liste.</p>
                   </td>
                 </tr>
               ) : (
