@@ -13,7 +13,18 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import AppToast from '../components/ui/AppToast'
 import CenteredBlurModal from '../components/ui/CenteredBlurModal'
-import { addMoneyIn, addMoneyOut, fetchMoneyIn, fetchMoneyOut } from '../lib/moneyApi'
+import {
+  addMoneyIn,
+  addMoneyOut,
+  fetchMoneyIn,
+  fetchMoneyOut,
+  loadInTypes,
+  loadOutCategories,
+  saveInTypes,
+  saveOutCategories,
+  updateMoneyIn,
+  updateMoneyOut,
+} from '../lib/moneyApi'
 import { getModalLayout } from '../lib/modalLayout'
 import { theme } from '../theme/appTheme'
 import type { MoneyIn, MoneyOut } from '../types/money'
@@ -67,6 +78,16 @@ export default function MoneyScreen({ accessToken, canViewFinance, drawerOpen = 
   const [saving, setSaving] = useState(false)
   const [newIn, setNewIn] = useState<Omit<MoneyIn, 'id'>>({ date: todayISO(), amount: 0, type: 'MECA', description: '', paymentMethod: 'ESPECE' })
   const [newOut, setNewOut] = useState<Omit<MoneyOut, 'id' | 'sourceRef'>>({ date: todayISO(), amount: 0, category: 'GARAGE', description: '', beneficiary: '' })
+  const [inTypes, setInTypes] = useState<string[]>([...MONEY_IN_TYPES])
+  const [outCategories, setOutCategories] = useState<string[]>([...MONEY_OUT_CATEGORIES])
+  const [showTypes, setShowTypes] = useState(false)
+  const [newTypeLabel, setNewTypeLabel] = useState('')
+  const [newCategoryLabel, setNewCategoryLabel] = useState('')
+  const [editingType, setEditingType] = useState<string | null>(null)
+  const [editingTypeValue, setEditingTypeValue] = useState('')
+  const [editingCategory, setEditingCategory] = useState<string | null>(null)
+  const [editingCategoryValue, setEditingCategoryValue] = useState('')
+  const [savingTypes, setSavingTypes] = useState(false)
 
   const showMsg = (msg: string, err = false) => { setToastError(err); setToast(msg) }
   const { cardMaxHeight, scrollMaxHeight, footerPaddingBottom } = getModalLayout({
@@ -93,6 +114,27 @@ export default function MoneyScreen({ accessToken, canViewFinance, drawerOpen = 
     setLoading(true)
     void load().finally(() => setLoading(false))
   }, [load, canViewFinance])
+
+  useEffect(() => {
+    if (!canViewFinance) return
+    void (async () => {
+      try {
+        const [types, categories] = await Promise.all([
+          loadInTypes(accessToken),
+          loadOutCategories(accessToken),
+        ])
+        setInTypes(types)
+        setOutCategories(categories)
+        setNewIn(prev => ({ ...prev, type: types.includes(prev.type) ? prev.type : (types[0] ?? prev.type) }))
+        setNewOut(prev => ({ ...prev, category: categories.includes(prev.category) ? prev.category : (categories[0] ?? prev.category) }))
+      } catch {
+        /* garder la liste initiale */
+      }
+    })()
+  }, [accessToken, canViewFinance])
+
+  const defaultInType = inTypes.includes('MECA') ? 'MECA' : (inTypes[0] ?? 'MECA')
+  const defaultOutCategory = outCategories.includes('GARAGE') ? 'GARAGE' : (outCategories[0] ?? 'GARAGE')
 
   const prevMonth = () => setPeriod(p => p.month === 1 ? { year: p.year - 1, month: 12 } : { ...p, month: p.month - 1 })
   const nextMonth = () => setPeriod(p => p.month === 12 ? { year: p.year + 1, month: 1 } : { ...p, month: p.month + 1 })
@@ -136,7 +178,7 @@ export default function MoneyScreen({ accessToken, canViewFinance, drawerOpen = 
       const created = await addMoneyIn(accessToken, newIn)
       setIns(prev => [created, ...prev])
       setAddingIn(false)
-      setNewIn({ date: todayISO(), amount: 0, type: 'MECA', description: '', paymentMethod: 'ESPECE' })
+      setNewIn({ date: todayISO(), amount: 0, type: defaultInType, description: '', paymentMethod: 'ESPECE' })
       showMsg('Entrée ajoutée')
     } catch (e) {
       showMsg(e instanceof Error ? e.message : 'Erreur', true)
@@ -152,13 +194,171 @@ export default function MoneyScreen({ accessToken, canViewFinance, drawerOpen = 
       const created = await addMoneyOut(accessToken, newOut)
       setOuts(prev => [created, ...prev])
       setAddingOut(false)
-      setNewOut({ date: todayISO(), amount: 0, category: 'GARAGE', description: '', beneficiary: '' })
+      setNewOut({ date: todayISO(), amount: 0, category: defaultOutCategory, description: '', beneficiary: '' })
       showMsg('Sortie ajoutée')
     } catch (e) {
       showMsg(e instanceof Error ? e.message : 'Erreur', true)
     } finally {
       setSaving(false)
     }
+  }
+
+  const addType = async () => {
+    const label = newTypeLabel.trim()
+    if (!label || savingTypes) return
+    if (inTypes.some(t => t.toLowerCase() === label.toLowerCase())) {
+      showMsg('Ce type existe déjà.', true)
+      return
+    }
+    const previous = inTypes
+    const next = [...inTypes, label]
+    setSavingTypes(true)
+    setInTypes(next)
+    try {
+      await saveInTypes(accessToken, next)
+      setNewIn(prev => ({ ...prev, type: label }))
+      setNewTypeLabel('')
+      showMsg('Type enregistré. Il reste dans la liste.')
+    } catch {
+      setInTypes(previous)
+      showMsg('Le type n’a pas pu être enregistré.', true)
+    } finally {
+      setSavingTypes(false)
+    }
+  }
+
+  const renameType = async (previousLabel: string, draft: string) => {
+    const label = draft.trim()
+    if (!label || savingTypes) return
+    if (label === previousLabel) {
+      setEditingType(null)
+      return
+    }
+    if (inTypes.some(t => t !== previousLabel && t.toLowerCase() === label.toLowerCase())) {
+      showMsg('Ce type existe déjà.', true)
+      return
+    }
+    const previous = inTypes
+    const next = inTypes.map(t => (t === previousLabel ? label : t))
+    setSavingTypes(true)
+    setInTypes(next)
+    try {
+      await saveInTypes(accessToken, next)
+      const all = await fetchMoneyIn(accessToken)
+      await Promise.all(all.filter(row => row.type === previousLabel).map(row => updateMoneyIn(accessToken, row.id, { type: label })))
+      setIns(rows => rows.map(row => (row.type === previousLabel ? { ...row, type: label } : row)))
+      setNewIn(form => (form.type === previousLabel ? { ...form, type: label } : form))
+      setEditingType(null)
+      showMsg('Type modifié.')
+    } catch {
+      setInTypes(previous)
+      showMsg('Le type n’a pas pu être modifié.', true)
+    } finally {
+      setSavingTypes(false)
+    }
+  }
+
+  const removeType = async (label: string) => {
+    const previous = inTypes
+    const next = inTypes.filter(t => t !== label)
+    setSavingTypes(true)
+    setInTypes(next)
+    try {
+      await saveInTypes(accessToken, next)
+      if (newIn.type === label) setNewIn(prev => ({ ...prev, type: next.includes('MECA') ? 'MECA' : (next[0] ?? '') }))
+      showMsg('Type retiré de la liste.')
+    } catch {
+      setInTypes(previous)
+      showMsg('Le type n’a pas pu être supprimé.', true)
+    } finally {
+      setSavingTypes(false)
+    }
+  }
+
+  const addCategory = async () => {
+    const label = newCategoryLabel.trim()
+    if (!label || savingTypes) return
+    if (outCategories.some(c => c.toLowerCase() === label.toLowerCase())) {
+      showMsg('Cette catégorie existe déjà.', true)
+      return
+    }
+    const previous = outCategories
+    const next = [...outCategories, label]
+    setSavingTypes(true)
+    setOutCategories(next)
+    try {
+      await saveOutCategories(accessToken, next)
+      setNewOut(prev => ({ ...prev, category: label }))
+      setNewCategoryLabel('')
+      showMsg('Catégorie enregistrée. Elle reste dans la liste.')
+    } catch {
+      setOutCategories(previous)
+      showMsg('La catégorie n’a pas pu être enregistrée.', true)
+    } finally {
+      setSavingTypes(false)
+    }
+  }
+
+  const renameCategory = async (previousLabel: string, draft: string) => {
+    const label = draft.trim()
+    if (!label || savingTypes) return
+    if (label === previousLabel) {
+      setEditingCategory(null)
+      return
+    }
+    if (outCategories.some(c => c !== previousLabel && c.toLowerCase() === label.toLowerCase())) {
+      showMsg('Cette catégorie existe déjà.', true)
+      return
+    }
+    const previous = outCategories
+    const next = outCategories.map(c => (c === previousLabel ? label : c))
+    setSavingTypes(true)
+    setOutCategories(next)
+    try {
+      await saveOutCategories(accessToken, next)
+      const all = await fetchMoneyOut(accessToken)
+      await Promise.all(all.filter(row => row.category === previousLabel).map(row => updateMoneyOut(accessToken, row.id, { category: label })))
+      setOuts(rows => rows.map(row => (row.category === previousLabel ? { ...row, category: label } : row)))
+      setNewOut(form => (form.category === previousLabel ? { ...form, category: label } : form))
+      setEditingCategory(null)
+      showMsg('Catégorie modifiée.')
+    } catch {
+      setOutCategories(previous)
+      showMsg('La catégorie n’a pas pu être modifiée.', true)
+    } finally {
+      setSavingTypes(false)
+    }
+  }
+
+  const removeCategory = async (label: string) => {
+    const previous = outCategories
+    const next = outCategories.filter(c => c !== label)
+    setSavingTypes(true)
+    setOutCategories(next)
+    try {
+      await saveOutCategories(accessToken, next)
+      if (newOut.category === label) setNewOut(prev => ({ ...prev, category: next.includes('GARAGE') ? 'GARAGE' : (next[0] ?? '') }))
+      showMsg('Catégorie retirée de la liste.')
+    } catch {
+      setOutCategories(previous)
+      showMsg('La catégorie n’a pas pu être supprimée.', true)
+    } finally {
+      setSavingTypes(false)
+    }
+  }
+
+  const confirmRemoveType = (label: string) => {
+    Alert.alert('Retirer ce type', `${label} ne sera plus proposé pour les nouvelles entrées.`, [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Supprimer', style: 'destructive', onPress: () => void removeType(label) },
+    ])
+  }
+
+  const confirmRemoveCategory = (label: string) => {
+    Alert.alert('Retirer cette catégorie', `${label} ne sera plus proposée pour les nouvelles sorties.`, [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Supprimer', style: 'destructive', onPress: () => void removeCategory(label) },
+    ])
   }
 
   if (!canViewFinance) {
@@ -245,6 +445,11 @@ export default function MoneyScreen({ accessToken, canViewFinance, drawerOpen = 
         </View>
       </View>
 
+      <Pressable style={styles.typesLink} onPress={() => setShowTypes(true)}>
+        <Ionicons name="options-outline" size={16} color={theme.primaryDark} />
+        <Text style={styles.typesLinkText}>Types et catégories</Text>
+      </Pressable>
+
       {/* Recherche */}
       <View style={styles.searchRow}>
         <View style={styles.searchBox}>
@@ -330,7 +535,7 @@ export default function MoneyScreen({ accessToken, canViewFinance, drawerOpen = 
 
             <Text style={styles.formLabel}>Type</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
-              {MONEY_IN_TYPES.map(t => (
+              {inTypes.map(t => (
                 <Pressable key={t}
                   style={[styles.selectChip, newIn.type === t && styles.selectChipActive]}
                   onPress={() => setNewIn(f => ({ ...f, type: t }))}>
@@ -392,7 +597,7 @@ export default function MoneyScreen({ accessToken, canViewFinance, drawerOpen = 
 
             <Text style={styles.formLabel}>Catégorie</Text>
             <View style={styles.chipsRowFixed}>
-              {MONEY_OUT_CATEGORIES.map(c => (
+              {outCategories.map(c => (
                 <Pressable key={c}
                   style={[styles.selectChip, newOut.category === c && styles.selectChipActiveDanger]}
                   onPress={() => setNewOut(f => ({ ...f, category: c }))}>
@@ -417,6 +622,120 @@ export default function MoneyScreen({ accessToken, canViewFinance, drawerOpen = 
             </Pressable>
             <Pressable style={[styles.formBtn, { backgroundColor: theme.danger }]} onPress={() => void handleAddOut()} disabled={saving}>
               {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.formBtnSaveText}>Ajouter</Text>}
+            </Pressable>
+          </View>
+        </View>
+      </CenteredBlurModal>
+
+      <CenteredBlurModal visible={showTypes} onClose={() => setShowTypes(false)} maxWidth={440}>
+        <View style={[styles.modalCard, { maxHeight: cardMaxHeight }]}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Types et catégories</Text>
+            <Pressable onPress={() => setShowTypes(false)} style={styles.modalClose} hitSlop={10}>
+              <Ionicons name="close" size={22} color={theme.textMuted} />
+            </Pressable>
+          </View>
+          <ScrollView
+            style={{ maxHeight: scrollMaxHeight }}
+            contentContainerStyle={styles.formScroll}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <Text style={styles.sectionTitle}>Types d'entrée (IN)</Text>
+            <Text style={styles.sectionHint}>Tous les types peuvent être modifiés ou supprimés.</Text>
+            {inTypes.map(label => (
+              <View key={label} style={styles.labelRow}>
+                {editingType === label ? (
+                  <TextInput
+                    style={styles.labelInput}
+                    value={editingTypeValue}
+                    onChangeText={setEditingTypeValue}
+                    autoFocus
+                    onSubmitEditing={() => void renameType(label, editingTypeValue)}
+                  />
+                ) : (
+                  <Text style={styles.labelText} numberOfLines={1}>{label}</Text>
+                )}
+                <Pressable
+                  hitSlop={6}
+                  onPress={() => {
+                    if (editingType === label) void renameType(label, editingTypeValue)
+                    else {
+                      setEditingType(label)
+                      setEditingTypeValue(label)
+                    }
+                  }}
+                >
+                  <Ionicons name={editingType === label ? 'checkmark' : 'pencil'} size={18} color={theme.primaryDark} />
+                </Pressable>
+                <Pressable hitSlop={6} onPress={() => confirmRemoveType(label)}>
+                  <Ionicons name="trash-outline" size={18} color={theme.danger} />
+                </Pressable>
+              </View>
+            ))}
+            <View style={styles.addRow}>
+              <TextInput
+                style={[styles.formInput, styles.addInput]}
+                value={newTypeLabel}
+                onChangeText={setNewTypeLabel}
+                placeholder="Nouveau type"
+                placeholderTextColor={theme.textSubtle}
+                onSubmitEditing={() => void addType()}
+              />
+              <Pressable style={styles.addBtn} onPress={() => void addType()} disabled={savingTypes || !newTypeLabel.trim()}>
+                <Text style={styles.addBtnText}>Ajouter</Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.sectionTitle}>Catégories de sortie (OUT)</Text>
+            <Text style={styles.sectionHint}>Toutes les catégories peuvent être modifiées ou supprimées.</Text>
+            {outCategories.map(label => (
+              <View key={label} style={styles.labelRow}>
+                {editingCategory === label ? (
+                  <TextInput
+                    style={styles.labelInput}
+                    value={editingCategoryValue}
+                    onChangeText={setEditingCategoryValue}
+                    autoFocus
+                    onSubmitEditing={() => void renameCategory(label, editingCategoryValue)}
+                  />
+                ) : (
+                  <Text style={styles.labelText} numberOfLines={1}>{label}</Text>
+                )}
+                <Pressable
+                  hitSlop={6}
+                  onPress={() => {
+                    if (editingCategory === label) void renameCategory(label, editingCategoryValue)
+                    else {
+                      setEditingCategory(label)
+                      setEditingCategoryValue(label)
+                    }
+                  }}
+                >
+                  <Ionicons name={editingCategory === label ? 'checkmark' : 'pencil'} size={18} color={theme.primaryDark} />
+                </Pressable>
+                <Pressable hitSlop={6} onPress={() => confirmRemoveCategory(label)}>
+                  <Ionicons name="trash-outline" size={18} color={theme.danger} />
+                </Pressable>
+              </View>
+            ))}
+            <View style={styles.addRow}>
+              <TextInput
+                style={[styles.formInput, styles.addInput]}
+                value={newCategoryLabel}
+                onChangeText={setNewCategoryLabel}
+                placeholder="Nouvelle catégorie"
+                placeholderTextColor={theme.textSubtle}
+                onSubmitEditing={() => void addCategory()}
+              />
+              <Pressable style={styles.addBtn} onPress={() => void addCategory()} disabled={savingTypes || !newCategoryLabel.trim()}>
+                <Text style={styles.addBtnText}>Ajouter</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+          <View style={[styles.formFooter, { paddingBottom: footerPaddingBottom }]}>
+            <Pressable style={[styles.formBtn, styles.formBtnCancel]} onPress={() => setShowTypes(false)}>
+              <Text style={styles.formBtnCancelText}>Fermer</Text>
             </Pressable>
           </View>
         </View>
@@ -463,7 +782,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
   },
   actionBtnText: { fontSize: 13, fontWeight: '700' },
+  typesLink: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginHorizontal: 16, marginTop: 8, alignSelf: 'flex-start',
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
+    backgroundColor: theme.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border,
+  },
+  typesLinkText: { fontSize: 13, fontWeight: '700', color: theme.primaryDark },
   searchRow: { paddingHorizontal: 16, paddingVertical: 8 },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: theme.text, marginTop: 8 },
+  sectionHint: { fontSize: 12, color: theme.textSubtle, marginTop: 4, marginBottom: 8 },
+  labelRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: theme.surfaceMuted, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, marginBottom: 6,
+  },
+  labelText: { flex: 1, fontSize: 14, fontWeight: '600', color: theme.text },
+  labelInput: {
+    flex: 1, fontSize: 14, color: theme.text,
+    backgroundColor: theme.surface, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6,
+  },
+  addRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, marginBottom: 16 },
+  addInput: { flex: 1, marginTop: 0 },
+  addBtn: { backgroundColor: theme.primary, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12 },
+  addBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   searchBox: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: theme.surfaceMuted, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10,

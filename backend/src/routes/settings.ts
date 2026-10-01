@@ -9,6 +9,8 @@ const ALLOWED_KEYS = new Set([
   'admin_corrections',
   'money_custom_in_types',
   'money_custom_out_categories',
+  'money_in_types',
+  'money_out_categories',
 ])
 
 router.get('/:key', authenticate(), async (req, res) => {

@@ -18,7 +18,6 @@ import {
   ArrowUpRight,
   ChevronDown,
   Sparkles,
-  PlusCircle,
   Settings2,
   Pencil,
   Trash2,
@@ -36,6 +35,18 @@ const MONTH_NAMES = [
 
 function formatAmount(n: number, decimals = 2): string {
   return n.toLocaleString('fr-FR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+}
+
+function mergeLabels(base: string[], extras: string[]): string[] {
+  const seen = new Set(base.map(label => label.toLowerCase()))
+  const merged = [...base]
+  for (const label of extras) {
+    const key = label.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    merged.push(label)
+  }
+  return merged
 }
 
 function roundMoney(n: number): number {
@@ -90,13 +101,17 @@ export default function MoneyPage() {
     description: '',
     beneficiary: '',
   })
-  const [customInTypes, setCustomInTypes] = useState<string[]>([])
+  const [inTypes, setInTypes] = useState<string[]>([...MONEY_IN_TYPES])
   const [showAddInType, setShowAddInType] = useState(false)
   const [newInTypeLabel, setNewInTypeLabel] = useState('')
-  const [customOutCategories, setCustomOutCategories] = useState<string[]>([])
+  const [outCategories, setOutCategories] = useState<string[]>([...MONEY_OUT_CATEGORIES])
   const [showAddOutCategory, setShowAddOutCategory] = useState(false)
   const [newOutCategoryLabel, setNewOutCategoryLabel] = useState('')
   const [showParamsModal, setShowParamsModal] = useState(false)
+  const [editingCustomIn, setEditingCustomIn] = useState<string | null>(null)
+  const [editingCustomInValue, setEditingCustomInValue] = useState('')
+  const [editingCustomOut, setEditingCustomOut] = useState<string | null>(null)
+  const [editingCustomOutValue, setEditingCustomOutValue] = useState('')
   const [savingIn, setSavingIn] = useState(false)
   const [savingOut, setSavingOut] = useState(false)
   const [editingInId, setEditingInId] = useState<number | null>(null)
@@ -124,22 +139,25 @@ export default function MoneyPage() {
 
   useEffect(() => {
     const token = getAccessToken()
-    if (!token) {
-      setCustomInTypes([])
-      setCustomOutCategories([])
-      return
-    }
+    if (!token) return
+    const asLabels = (value: unknown) =>
+      Array.isArray(value) ? value.filter((x): x is string => typeof x === 'string' && x.trim() !== '').map(x => x.trim()) : null
     void (async () => {
       try {
-        const [inTypesRes, outCatsRes] = await Promise.all([
+        const [managedIn, extraIn, managedOut, extraOut] = await Promise.all([
+          apiFetch<{ value: unknown }>('/settings/money_in_types', { token }),
           apiFetch<{ value: unknown }>('/settings/money_custom_in_types', { token }),
+          apiFetch<{ value: unknown }>('/settings/money_out_categories', { token }),
           apiFetch<{ value: unknown }>('/settings/money_custom_out_categories', { token }),
         ])
-        setCustomInTypes(Array.isArray(inTypesRes.value) ? inTypesRes.value.filter((x): x is string => typeof x === 'string') : [])
-        setCustomOutCategories(Array.isArray(outCatsRes.value) ? outCatsRes.value.filter((x): x is string => typeof x === 'string') : [])
+        const savedIn = asLabels(managedIn.value)
+        const savedOut = asLabels(managedOut.value)
+        const extrasIn = asLabels(extraIn.value) ?? []
+        const extrasOut = asLabels(extraOut.value) ?? []
+        setInTypes(savedIn ?? mergeLabels([...MONEY_IN_TYPES], extrasIn))
+        setOutCategories(savedOut ?? mergeLabels([...MONEY_OUT_CATEGORIES], extrasOut))
       } catch {
-        setCustomInTypes([])
-        setCustomOutCategories([])
+        /* garder la liste initiale */
       }
     })()
   }, [getAccessToken])
@@ -152,63 +170,145 @@ export default function MoneyPage() {
     if (movementView !== 'jour') setDayPanelDate(null)
   }, [movementView])
 
-  const persistCustomInTypes = async (types: string[]) => {
+  const persistInTypes = async (types: string[]) => {
     const token = getAccessToken()
-    if (!token) return
-    await apiFetch('/settings/money_custom_in_types', {
+    if (!token) throw new Error('Non connecté')
+    await apiFetch('/settings/money_in_types', {
       method: 'PUT',
       token,
       body: JSON.stringify({ value: types }),
     })
   }
 
-  const persistCustomOutCategories = async (categories: string[]) => {
+  const persistOutCategories = async (categories: string[]) => {
     const token = getAccessToken()
-    if (!token) return
-    await apiFetch('/settings/money_custom_out_categories', {
+    if (!token) throw new Error('Non connecté')
+    await apiFetch('/settings/money_out_categories', {
       method: 'PUT',
       token,
       body: JSON.stringify({ value: categories }),
     })
   }
 
-  const allInTypes = useMemo(() => [...MONEY_IN_TYPES, ...customInTypes], [customInTypes])
-  const allOutCategories = useMemo(() => [...MONEY_OUT_CATEGORIES, ...customOutCategories], [customOutCategories])
+  const allInTypes = inTypes
+  const allOutCategories = outCategories
   const memberNames = useMemo(() => members.map(m => m.name), [members])
 
   const addCustomInType = async () => {
     const label = newInTypeLabel.trim()
     if (!label || allInTypes.some(t => t.toLowerCase() === label.toLowerCase())) return
-    const next = [...customInTypes, label]
-    setCustomInTypes(next)
-    await persistCustomInTypes(next).catch(() => {})
-    setNewIn(prev => ({ ...prev, type: label }))
-    setNewInTypeLabel('')
-    setShowAddInType(false)
+    const previous = inTypes
+    const next = [...inTypes, label]
+    setInTypes(next)
+    try {
+      await persistInTypes(next)
+      setNewIn(prev => ({ ...prev, type: label }))
+      setNewInTypeLabel('')
+      setShowAddInType(false)
+      toast.success('Type enregistré. Il reste dans la liste.')
+    } catch {
+      setInTypes(previous)
+      toast.error('Le type n’a pas pu être enregistré.')
+    }
   }
 
   const addCustomOutCategory = async () => {
     const label = newOutCategoryLabel.trim()
     if (!label || allOutCategories.some(c => c.toLowerCase() === label.toLowerCase())) return
-    const next = [...customOutCategories, label]
-    setCustomOutCategories(next)
-    await persistCustomOutCategories(next).catch(() => {})
-    setNewOut(prev => ({ ...prev, category: label }))
-    setNewOutCategoryLabel('')
-    setShowAddOutCategory(false)
+    const previous = outCategories
+    const next = [...outCategories, label]
+    setOutCategories(next)
+    try {
+      await persistOutCategories(next)
+      setNewOut(prev => ({ ...prev, category: label }))
+      setNewOutCategoryLabel('')
+      setShowAddOutCategory(false)
+      toast.success('Catégorie enregistrée. Elle reste dans la liste.')
+    } catch {
+      setOutCategories(previous)
+      toast.error('La catégorie n’a pas pu être enregistrée.')
+    }
+  }
+
+  const renameCustomInType = async (previousLabel: string, draft: string) => {
+    const label = draft.trim()
+    if (!label) return
+    if (label === previousLabel) {
+      setEditingCustomIn(null)
+      return
+    }
+    if (allInTypes.some(t => t !== previousLabel && t.toLowerCase() === label.toLowerCase())) {
+      toast.error('Ce type existe déjà.')
+      return
+    }
+    const previous = inTypes
+    const next = inTypes.map(t => (t === previousLabel ? label : t))
+    setInTypes(next)
+    try {
+      await persistInTypes(next)
+      await Promise.all(ins.filter(row => row.type === previousLabel).map(row => updateIn(row.id, { type: label })))
+      if (newIn.type === previousLabel) setNewIn(prev => ({ ...prev, type: label }))
+      if (editIn.type === previousLabel) setEditIn(prev => ({ ...prev, type: label }))
+      setEditingCustomIn(null)
+      toast.success('Type modifié.')
+    } catch {
+      setInTypes(previous)
+      toast.error('Le type n’a pas pu être modifié.')
+    }
+  }
+
+  const renameCustomOutCategory = async (previousLabel: string, draft: string) => {
+    const label = draft.trim()
+    if (!label) return
+    if (label === previousLabel) {
+      setEditingCustomOut(null)
+      return
+    }
+    if (allOutCategories.some(c => c !== previousLabel && c.toLowerCase() === label.toLowerCase())) {
+      toast.error('Cette catégorie existe déjà.')
+      return
+    }
+    const previous = outCategories
+    const next = outCategories.map(c => (c === previousLabel ? label : c))
+    setOutCategories(next)
+    try {
+      await persistOutCategories(next)
+      await Promise.all(outs.filter(row => row.category === previousLabel).map(row => updateOut(row.id, { category: label })))
+      if (newOut.category === previousLabel) setNewOut(prev => ({ ...prev, category: label }))
+      if (editOut.category === previousLabel) setEditOut(prev => ({ ...prev, category: label }))
+      setEditingCustomOut(null)
+      toast.success('Catégorie modifiée.')
+    } catch {
+      setOutCategories(previous)
+      toast.error('La catégorie n’a pas pu être modifiée.')
+    }
   }
 
   const removeCustomInType = async (label: string) => {
-    const next = customInTypes.filter(t => t !== label)
-    setCustomInTypes(next)
-    await persistCustomInTypes(next).catch(() => {})
-    if (newIn.type === label) setNewIn(prev => ({ ...prev, type: 'MECA' }))
+    const previous = inTypes
+    const next = inTypes.filter(t => t !== label)
+    setInTypes(next)
+    try {
+      await persistInTypes(next)
+      if (newIn.type === label) setNewIn(prev => ({ ...prev, type: next[0] ?? '' }))
+      toast.success('Type retiré de la liste.')
+    } catch {
+      setInTypes(previous)
+      toast.error('Le type n’a pas pu être supprimé.')
+    }
   }
   const removeCustomOutCategory = async (label: string) => {
-    const next = customOutCategories.filter(c => c !== label)
-    setCustomOutCategories(next)
-    await persistCustomOutCategories(next).catch(() => {})
-    if (newOut.category === label) setNewOut(prev => ({ ...prev, category: 'GARAGE' }))
+    const previous = outCategories
+    const next = outCategories.filter(c => c !== label)
+    setOutCategories(next)
+    try {
+      await persistOutCategories(next)
+      if (newOut.category === label) setNewOut(prev => ({ ...prev, category: next[0] ?? '' }))
+      toast.success('Catégorie retirée de la liste.')
+    } catch {
+      setOutCategories(previous)
+      toast.error('La catégorie n’a pas pu être supprimée.')
+    }
   }
 
   if (!permissions?.canViewFinance) {
@@ -555,10 +655,11 @@ export default function MoneyPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowParamsModal(true)}
-            className="p-2.5 rounded-xl hover:bg-gray-100 text-gray-500 hover:text-gray-800 transition-colors"
-            title="Types et catégories"
+            className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+            title="Ajouter, modifier ou supprimer un type ou une catégorie"
           >
-            <Settings2 className="w-5 h-5" />
+            <Settings2 className="w-4 h-4" />
+            Types
           </button>
           <div className="flex items-center rounded-xl border border-gray-200 bg-white overflow-hidden">
             <button
@@ -1061,12 +1162,7 @@ export default function MoneyPage() {
                   ))}
                   <option value="__add__">—— Ajouter un type ——</option>
                 </select>
-                {customInTypes.length > 0 && (
-                  <p className="text-xs text-gray-500 flex items-center gap-1">
-                    <PlusCircle className="w-3.5 h-3.5" />
-                    {customInTypes.length} type{customInTypes.length > 1 ? 's' : ''} personnalisé{customInTypes.length > 1 ? 's' : ''}
-                  </p>
-                )}
+                <p className="text-xs text-gray-500">Un type ajouté reste dans cette liste pour les prochaines entrées.</p>
               </div>
             )}
           </div>
@@ -1101,7 +1197,17 @@ export default function MoneyPage() {
             value={editIn.amount || ''}
             onChange={e => setEditIn(prev => ({ ...prev, amount: e.target.value === '' ? 0 : Number(e.target.value) }))}
           />
-          <Input label="Type" value={editIn.type} onChange={e => setEditIn(prev => ({ ...prev, type: e.target.value }))} />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+            <select
+              value={editIn.type}
+              onChange={e => setEditIn(prev => ({ ...prev, type: e.target.value }))}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-gray-900 bg-white"
+            >
+              {!allInTypes.includes(editIn.type) && editIn.type ? <option value={editIn.type}>{editIn.type}</option> : null}
+              {allInTypes.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
           <Input label="Description" value={editIn.description} onChange={e => setEditIn(prev => ({ ...prev, description: e.target.value }))} />
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Paiement</label>
@@ -1133,7 +1239,17 @@ export default function MoneyPage() {
             value={editOut.amount || ''}
             onChange={e => setEditOut(prev => ({ ...prev, amount: e.target.value === '' ? 0 : Number(e.target.value) }))}
           />
-          <Input label="Catégorie" value={editOut.category} onChange={e => setEditOut(prev => ({ ...prev, category: e.target.value }))} />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Catégorie</label>
+            <select
+              value={editOut.category}
+              onChange={e => setEditOut(prev => ({ ...prev, category: e.target.value }))}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-gray-900 bg-white"
+            >
+              {!allOutCategories.includes(editOut.category) && editOut.category ? <option value={editOut.category}>{editOut.category}</option> : null}
+              {allOutCategories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
           <Input label="Description" value={editOut.description} onChange={e => setEditOut(prev => ({ ...prev, description: e.target.value }))} />
           <Input label="Bénéficiaire" value={editOut.beneficiary ?? ''} onChange={e => setEditOut(prev => ({ ...prev, beneficiary: e.target.value }))} />
           <div className="flex gap-3 pt-2">
@@ -1191,12 +1307,7 @@ export default function MoneyPage() {
                   ))}
                   <option value="__add__">—— Ajouter une catégorie ——</option>
                 </select>
-                {customOutCategories.length > 0 && (
-                  <p className="text-xs text-gray-500 flex items-center gap-1">
-                    <PlusCircle className="w-3.5 h-3.5" />
-                    {customOutCategories.length} catégorie{customOutCategories.length > 1 ? 's' : ''} personnalisée{customOutCategories.length > 1 ? 's' : ''}
-                  </p>
-                )}
+                <p className="text-xs text-gray-500">Une catégorie ajoutée reste dans cette liste pour les prochaines sorties.</p>
               </div>
             )}
           </div>
@@ -1226,31 +1337,51 @@ export default function MoneyPage() {
         open={showParamsModal}
         onClose={() => { setShowParamsModal(false); setNewInTypeLabel(''); setNewOutCategoryLabel(''); }}
         title="Types et catégories"
-        subtitle="Gérer les types d'entrée et catégories de sortie personnalisés"
+        subtitle="Ajouter, modifier ou supprimer un type d'entrée ou une catégorie de sortie"
         maxWidth="md"
       >
         <div className="space-y-8">
           <div>
             <h4 className="text-sm font-bold text-gray-900 mb-2">Types d'entrée (IN)</h4>
-            <p className="text-xs text-gray-500 mb-3">Types par défaut + vos types personnalisés. Les personnalisés peuvent être supprimés.</p>
-            <ul className="space-y-1.5 mb-3 max-h-40 overflow-y-auto">
-              {MONEY_IN_TYPES.map(t => (
-                <li key={t} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-gray-50 text-sm text-gray-600">
-                  {t}
-                  <span className="text-[10px] font-medium text-gray-400 uppercase">Par défaut</span>
-                </li>
-              ))}
-              {customInTypes.map(t => (
-                <li key={t} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-emerald-50 text-sm text-gray-800">
-                  {t}
-                  <button
-                    type="button"
-                    onClick={() => removeCustomInType(t)}
-                    className="p-1.5 rounded-lg text-gray-400 hover:bg-red-100 hover:text-red-600 transition-colors"
-                    title="Supprimer ce type"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+            <p className="text-xs text-gray-500 mb-3">Tous les types peuvent être modifiés ou supprimés, y compris ceux déjà présents.</p>
+            <ul className="space-y-1.5 mb-3 max-h-64 overflow-y-auto">
+              {inTypes.map(t => (
+                <li key={t} className="flex items-center justify-between gap-2 py-1.5 px-3 rounded-lg bg-emerald-50 text-sm text-gray-800">
+                  {editingCustomIn === t ? (
+                    <input
+                      value={editingCustomInValue}
+                      onChange={e => setEditingCustomInValue(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), void renameCustomInType(t, editingCustomInValue))}
+                      className="flex-1 px-2 py-1 rounded-lg border border-gray-200 text-sm"
+                      autoFocus
+                    />
+                  ) : (
+                    <span className="truncate">{t}</span>
+                  )}
+                  <span className="flex items-center shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (editingCustomIn === t) void renameCustomInType(t, editingCustomInValue)
+                        else {
+                          setEditingCustomIn(t)
+                          setEditingCustomInValue(t)
+                        }
+                      }}
+                      className="p-1.5 rounded-lg text-gray-400 hover:bg-white hover:text-gray-800"
+                      title="Modifier ce type"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeCustomInType(t)}
+                      className="p-1.5 rounded-lg text-gray-400 hover:bg-red-100 hover:text-red-600"
+                      title="Supprimer ce type"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </span>
                 </li>
               ))}
             </ul>
@@ -1268,25 +1399,45 @@ export default function MoneyPage() {
 
           <div>
             <h4 className="text-sm font-bold text-gray-900 mb-2">Catégories de sortie (OUT)</h4>
-            <p className="text-xs text-gray-500 mb-3">Catégories par défaut + vos catégories personnalisées.</p>
-            <ul className="space-y-1.5 mb-3 max-h-40 overflow-y-auto">
-              {MONEY_OUT_CATEGORIES.map(c => (
-                <li key={c} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-gray-50 text-sm text-gray-600">
-                  {c}
-                  <span className="text-[10px] font-medium text-gray-400 uppercase">Par défaut</span>
-                </li>
-              ))}
-              {customOutCategories.map(c => (
-                <li key={c} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-orange-50 text-sm text-gray-800">
-                  {c}
-                  <button
-                    type="button"
-                    onClick={() => removeCustomOutCategory(c)}
-                    className="p-1.5 rounded-lg text-gray-400 hover:bg-red-100 hover:text-red-600 transition-colors"
-                    title="Supprimer cette catégorie"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+            <p className="text-xs text-gray-500 mb-3">Toutes les catégories peuvent être modifiées ou supprimées, y compris celles déjà présentes.</p>
+            <ul className="space-y-1.5 mb-3 max-h-64 overflow-y-auto">
+              {outCategories.map(c => (
+                <li key={c} className="flex items-center justify-between gap-2 py-1.5 px-3 rounded-lg bg-orange-50 text-sm text-gray-800">
+                  {editingCustomOut === c ? (
+                    <input
+                      value={editingCustomOutValue}
+                      onChange={e => setEditingCustomOutValue(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), void renameCustomOutCategory(c, editingCustomOutValue))}
+                      className="flex-1 px-2 py-1 rounded-lg border border-gray-200 text-sm"
+                      autoFocus
+                    />
+                  ) : (
+                    <span className="truncate">{c}</span>
+                  )}
+                  <span className="flex items-center shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (editingCustomOut === c) void renameCustomOutCategory(c, editingCustomOutValue)
+                        else {
+                          setEditingCustomOut(c)
+                          setEditingCustomOutValue(c)
+                        }
+                      }}
+                      className="p-1.5 rounded-lg text-gray-400 hover:bg-white hover:text-gray-800"
+                      title="Modifier cette catégorie"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeCustomOutCategory(c)}
+                      className="p-1.5 rounded-lg text-gray-400 hover:bg-red-100 hover:text-red-600"
+                      title="Supprimer cette catégorie"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </span>
                 </li>
               ))}
             </ul>
