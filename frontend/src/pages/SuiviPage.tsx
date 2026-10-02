@@ -322,8 +322,8 @@ export default function SuiviPage() {
         })}
       </div>
 
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <section id="suivi-garage" className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-200">
+      <div className="grid items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
+        <section id="suivi-garage" className="min-w-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-200">
           <div className="flex flex-col gap-3 border-b border-gray-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
             <div>
               <h2 className="text-base font-semibold text-gray-950">{garageTitle}</h2>
@@ -417,12 +417,9 @@ export default function SuiviPage() {
           </div>
         </section>
 
-        <div className="space-y-4">
-          <section id="suivi-validees" className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-200">
-            <div className="border-b border-gray-100 px-4 py-4">
-              <h2 className="text-base font-semibold text-gray-950">{validatedTitle}</h2>
-              <p className="text-xs text-gray-400">Voitures sorties de l’atelier</p>
-            </div>
+        <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-1">
+          <section id="suivi-validees" className="min-w-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-200">
+            <PanelHead title={validatedTitle} hint="Voitures sorties de l’atelier" color="#047857" />
             <div className="max-h-[320px] overflow-y-auto">
               {loading ? (
                 <Skeleton rows={3} />
@@ -445,11 +442,8 @@ export default function SuiviPage() {
             </div>
           </section>
 
-          <section className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-200">
-            <div className="border-b border-gray-100 px-4 py-4">
-              <h2 className="text-base font-semibold text-gray-950">Mouvements</h2>
-              <p className="text-xs text-gray-400">États changés et notes de réunion</p>
-            </div>
+          <section className="min-w-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-200">
+            <PanelHead title="Mouvements" hint="États changés et notes de réunion" color="#ea580c" />
             <div className="max-h-[420px] overflow-y-auto px-4 py-3">
               {loading ? (
                 <Skeleton rows={4} />
@@ -486,6 +480,16 @@ export default function SuiviPage() {
           </section>
         </div>
       </div>
+    </div>
+  )
+}
+
+function PanelHead({ title, hint, color }: { title: string; hint: string; color: string }) {
+  return (
+    <div className="border-b border-gray-100 px-4 py-4">
+      <h2 className="text-base font-extrabold tracking-tight" style={{ color }}>{title}</h2>
+      <span className="mt-1.5 block h-1 w-9 rounded-full" style={{ backgroundColor: color }} />
+      <p className="mt-1.5 text-xs font-semibold" style={{ color }}>{hint}</p>
     </div>
   )
 }

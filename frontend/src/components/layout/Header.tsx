@@ -26,7 +26,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
   }, [])
 
   return (
-    <header className="lg:hidden bg-white border-b border-gray-200 px-3 py-2.5 flex items-center justify-between flex-shrink-0">
+    <header className="xl:hidden bg-white border-b border-gray-200 px-3 py-2.5 flex items-center justify-between flex-shrink-0">
       <div className="flex items-center gap-2">
         <button onClick={onMenuClick} className="p-2 hover:bg-gray-100 rounded-xl transition-colors active:bg-gray-200">
           <Menu className="w-5 h-5 text-gray-700" />

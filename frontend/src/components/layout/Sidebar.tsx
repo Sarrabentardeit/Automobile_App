@@ -332,10 +332,10 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
 
   return (
     <>
-      {open && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={onClose} />}
+      {open && <div className="fixed inset-0 bg-black/50 z-40 xl:hidden" onClick={onClose} />}
       <aside
         className={cn(
-          'fixed top-0 left-0 z-50 h-full w-[260px] bg-gray-950 text-white flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:z-auto',
+          'fixed top-0 left-0 z-50 h-full w-[260px] bg-gray-950 text-white flex flex-col transition-transform duration-300 ease-in-out xl:translate-x-0 xl:static xl:z-auto',
           open ? 'translate-x-0' : '-translate-x-full'
         )}
       >
@@ -344,7 +344,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
             <img src="/logo.jpg" alt="El Mecano" className="w-10 h-10 rounded-lg object-contain" />
             <span className="font-extrabold text-lg tracking-tight">EL MECANO</span>
           </div>
-          <button onClick={onClose} className="lg:hidden p-1.5 hover:bg-white/10 rounded-lg">
+          <button onClick={onClose} className="xl:hidden p-1.5 hover:bg-white/10 rounded-lg">
             <X className="w-5 h-5" />
           </button>
         </div>
