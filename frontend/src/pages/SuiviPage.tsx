@@ -391,12 +391,20 @@ export default function SuiviPage() {
                           <td className="px-3 py-3 align-middle">
                             <span className={cn('font-semibold tabular-nums', stuck ? 'text-orange-600' : 'text-gray-900')}>{row.stayDays} j</span>
                           </td>
-                          <td className="max-w-[140px] truncate px-3 py-3 align-middle text-gray-600">
-                            {people.join(', ') || '—'}
+                          <td className="min-w-[160px] px-3 py-3 align-middle text-gray-700">
+                            {people.length === 0 ? (
+                              <span className="text-gray-300">—</span>
+                            ) : (
+                              <div className="flex flex-col gap-0.5">
+                                {people.map((name, personIndex) => (
+                                  <span key={`${name}-${personIndex}`}>{name}</span>
+                                ))}
+                              </div>
+                            )}
                           </td>
-                          <td className="max-w-[280px] px-4 py-3 align-middle sm:px-5">
-                            <p className="truncate text-gray-600" title={problemOf(row.defaut)}>
-                              {problemOf(row.defaut) || '—'}
+                          <td className="min-w-[220px] px-4 py-3 align-middle sm:px-5">
+                            <p className="max-w-md whitespace-pre-line leading-5 text-gray-700">
+                              {problemOf(row.defaut) || <span className="text-gray-300">—</span>}
                             </p>
                           </td>
                         </tr>
