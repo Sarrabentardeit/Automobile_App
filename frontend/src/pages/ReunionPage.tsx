@@ -327,19 +327,17 @@ export default function ReunionPage() {
                       <td className="max-w-[240px] px-3 py-4 leading-5 text-gray-700">
                         {problem || <span className="text-gray-300">Non renseigné</span>}
                       </td>
-                      <td className="px-3 py-4">
+                      <td className="min-w-[180px] px-3 py-4">
                         {people.length === 0 ? (
                           <span className="text-gray-300">Non assigné</span>
                         ) : (
-                          <div className="flex items-center gap-2">
-                            <div className="flex -space-x-1.5">
-                              {people.slice(0, 3).map((name) => (
-                                <span key={name} title={name}>
-                                  <UserAvatar name={initials(name)} size="sm" className="ring-2 ring-white" />
-                                </span>
-                              ))}
-                            </div>
-                            <p className="max-w-[140px] truncate text-sm text-gray-700">{people.join(', ')}</p>
+                          <div className="flex flex-col gap-1.5">
+                            {people.map((name, personIndex) => (
+                              <div key={`${name}-${personIndex}`} className="flex items-center gap-2">
+                                <UserAvatar name={initials(name)} size="sm" />
+                                <span className="text-sm text-gray-800">{name}</span>
+                              </div>
+                            ))}
                           </div>
                         )}
                       </td>
