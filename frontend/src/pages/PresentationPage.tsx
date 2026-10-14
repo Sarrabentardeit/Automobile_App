@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react'
+﻿import { useEffect, useRef, useState, type FormEvent, type MouseEvent, type ReactNode, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight,
@@ -293,7 +293,7 @@ export default function PresentationPage() {
   const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
-    document.title = 'EL MECANO · Gestion d’atelier'
+    document.title = 'ATELIO · Gestion d’atelier'
     const onScroll = () => setScrolled(window.scrollY > 8)
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
@@ -315,9 +315,8 @@ export default function PresentationPage() {
         }`}
       >
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-5">
-          <a href="#haut" className="flex items-center gap-2.5">
-            <img src="/logo.jpg" alt="EL MECANO" className="h-9 w-9 rounded-xl object-cover ring-1 ring-black/10" />
-            <span className="text-[15px] font-bold tracking-tight">EL MECANO</span>
+          <a href="#haut" className="flex items-center">
+            <AtelioLogo size={38} word={0.5} />
           </a>
           <nav className="hidden items-center gap-1 md:flex">
             {NAV.map((item) => (
@@ -473,7 +472,7 @@ export default function PresentationPage() {
           <Reveal>
             <SectionTitle
               center
-              kicker="Pourquoi EL MECANO"
+              kicker="Pourquoi ATELIO"
               title="Ce qui se perd aujourd’hui, devient visible."
               text="Dans beaucoup de garages, l’information circule entre un cahier, un tableur et des messages. Ici, elle suit la voiture."
             />
@@ -499,7 +498,7 @@ export default function PresentationPage() {
             </Reveal>
             <Reveal delay={120} from="right">
               <div className="h-full rounded-3xl bg-white p-8 shadow-[0_18px_44px_rgba(249,115,22,0.10)] ring-1 ring-orange-200">
-                <p className="text-sm font-semibold text-orange-600">Avec EL MECANO</p>
+                <p className="text-sm font-semibold text-orange-600">Avec ATELIO</p>
                 <ul className="mt-5 space-y-4">
                   {[
                     'Chaque voiture a un état, une équipe, un problème et un historique.',
@@ -632,11 +631,7 @@ export default function PresentationPage() {
 
       <footer className="border-t border-black/[0.06] bg-white">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-10 text-sm text-gray-500 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2.5">
-            <img src="/logo.jpg" alt="" className="h-8 w-8 rounded-lg object-cover" />
-            <span className="font-semibold text-gray-900">EL MECANO</span>
-            <span>· Gestion d’atelier automobile</span>
-          </div>
+          <AtelioLogo size={38} />
           <div className="flex items-center gap-5">
             <a href="#demo" className="hover:text-gray-900">Demander une démo</a>
             <Link to={appHref} className="font-semibold text-gray-900">{appLabel}</Link>
@@ -656,7 +651,34 @@ export const ROWS: Array<{ car: string; etat: string; tone: string; jours: strin
   { car: 'Opel Astra', etat: 'À résoudre', tone: 'bg-red-100 text-red-700', jours: '9 j', equipe: 'Meher B.' },
 ]
 
-export function Browser({ children, url = 'mecano.nav.ovh' }: { children: ReactNode; url?: string }) {
+/** Logo ATELIO : carré orange #F47216, « A » blanc. */
+export function AtelioMark({ className = '', style }: { className?: string; style?: CSSProperties }) {
+  return (
+    <svg viewBox="0 0 72 72" className={`shrink-0 ${className}`} style={style} role="img" aria-label="ATELIO">
+      <rect width="72" height="72" rx="16" fill="#F47216" />
+      <path d="M20 52 36 18l16 34M27.5 42h17" fill="none" stroke="#ffffff" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** Logo complet : symbole + ATELIO + « Powered by Mecano ». */
+export function AtelioLogo({ dark = false, size = 40, word = 0.8, className = '' }: { dark?: boolean; size?: number; word?: number; className?: string }) {
+  return (
+    <span className={`inline-flex items-center gap-3 ${className}`}>
+      <AtelioMark style={{ width: size, height: size }} />
+      <span className="flex flex-col items-start text-left leading-none">
+        <span className={`font-bold tracking-[0.18em] ${dark ? 'text-white' : 'text-[#1C120C]'}`} style={{ fontSize: size * word, marginLeft: -1 }}>
+          ATELIO
+        </span>
+        <span className={`mt-1.5 font-medium uppercase tracking-[0.28em] ${dark ? 'text-[#F47216]' : 'text-[#8A7F77]'}`} style={{ fontSize: Math.max(8, size * 0.22) }}>
+          Powered by Mecano
+        </span>
+      </span>
+    </span>
+  )
+}
+
+export function Browser({ children, url = 'atelio.app' }: { children: ReactNode; url?: string }) {
   return (
     <div className="overflow-hidden rounded-2xl bg-white shadow-[0_30px_80px_rgba(15,23,42,0.16)] ring-1 ring-black/[0.08]">
       <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50 px-4 py-2.5">
@@ -863,7 +885,7 @@ export function MiniVip() {
       <div className="relative px-4 pb-4 pt-3">
         <div className="pointer-events-none absolute -right-5 -top-7 h-20 w-20 rounded-full bg-orange-100" />
         <div className="relative flex items-center justify-between">
-          <p className="text-[10px] font-bold tracking-[0.2em] text-orange-600">EL MECANO</p>
+          <p className="text-[10px] font-bold tracking-[0.2em] text-orange-600">ATELIO</p>
           <span className="rounded bg-orange-500 px-1.5 py-0.5 text-[10px] font-bold text-white">ADVANCED</span>
         </div>
         <p className="relative mt-4 text-base font-semibold">Ahmed Benali</p>
@@ -1102,7 +1124,7 @@ function HeroShowcase() {
         className="relative transition-transform duration-300 ease-out [transform-style:preserve-3d]"
         style={{ transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)` }}
       >
-        <Browser url="mecano.nav.ovh/suivi">
+        <Browser url="atelio.app/suivi">
           <SuiviMock />
         </Browser>
 
@@ -1219,7 +1241,7 @@ export function ModulePreview({ id }: { id: string }) {
           <div className="relative px-5 pb-5 pt-4">
             <div className="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-orange-100" />
             <div className="relative flex items-center justify-between">
-              <p className="text-[11px] font-bold tracking-[0.2em] text-orange-600">EL MECANO</p>
+              <p className="text-[11px] font-bold tracking-[0.2em] text-orange-600">ATELIO</p>
               <span className="rounded-md bg-orange-500 px-2 py-1 text-[11px] font-bold text-white">ADVANCED</span>
             </div>
             <p className="relative mt-6 text-[11px] font-medium uppercase tracking-wide text-gray-400">Titulaire</p>
@@ -1343,7 +1365,7 @@ function DemoForm() {
         <div className="relative grid items-center gap-10 lg:grid-cols-[0.9fr_1.1fr]">
           <div className="text-white">
             <p className="text-sm font-semibold text-orange-100">Démo</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl sm:leading-[1.1]">Voyez EL MECANO sur votre garage.</h2>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl sm:leading-[1.1]">Voyez ATELIO sur votre garage.</h2>
             <p className="mt-4 text-sm leading-relaxed text-orange-50">
               Laissez un nom, le garage et un téléphone. Nous vous rappelons pour une démonstration. Le tarif se discute à ce moment-là.
             </p>

@@ -21,7 +21,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { apiFetch } from '@/lib/api'
-import { Browser, CountUp, DesignSwitcher, FEED_LEFT, FEED_RIGHT, FeedCard, MiniAcces, MiniChat, MiniFacture, MiniMoney, MiniReunion, MiniSuivi, PhoneMock, STYLES, SuiviMock } from './PresentationPage'
+import { AtelioLogo, AtelioMark, Browser, CountUp, DesignSwitcher, FEED_LEFT, FEED_RIGHT, FeedCard, MiniAcces, MiniChat, MiniFacture, MiniMoney, MiniReunion, MiniSuivi, PhoneMock, STYLES, SuiviMock } from './PresentationPage'
 
 /**
  * Design 2 — « Atelier en direct »
@@ -509,9 +509,9 @@ function VipCard() {
         <div className="absolute -right-12 -top-12 h-44 w-44 rounded-full bg-orange-500" />
         <div className="relative flex items-start justify-between">
           <div className="flex items-center gap-2.5">
-            <img src="/logo.jpg" alt="" className="h-9 w-9 rounded-xl object-cover" />
+            <AtelioMark className="h-9 w-9 rounded-xl object-cover" />
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-widest">EL MECANO</p>
+              <p className="text-[11px] font-bold uppercase tracking-widest">ATELIO</p>
               <p className={`text-[11px] ${adv ? 'text-gray-400' : 'text-gray-500'}`}>Carte privilège</p>
             </div>
           </div>
@@ -700,7 +700,7 @@ export default function PresentationSombrePage() {
   }
 
   useEffect(() => {
-    document.title = 'EL MECANO · Atelier en direct'
+    document.title = 'ATELIO · Atelier en direct'
     scroller.current?.focus({ preventScroll: true })
   }, [])
 
@@ -765,9 +765,8 @@ export default function PresentationSombrePage() {
             onDark ? 'bg-white/[0.06] ring-1 ring-white/10' : 'bg-white/75 shadow-[0_8px_30px_rgba(15,23,42,0.06)] ring-1 ring-black/[0.06]'
           } ${ink}`}
         >
-          <button type="button" onClick={() => goTo(0)} className="flex items-center gap-2.5">
-            <img src="/logo.jpg" alt="EL MECANO" className="h-8 w-8 rounded-lg object-cover" />
-            <span className="text-sm font-semibold tracking-tight">EL MECANO</span>
+          <button type="button" onClick={() => goTo(0)} className="flex items-center">
+            <AtelioLogo dark={onDark} size={36} word={0.5} />
           </button>
           <nav className="hidden items-center gap-1 md:flex">
             {MENU.map((m) => (
@@ -813,7 +812,7 @@ export default function PresentationSombrePage() {
             <span className="text-orange-500">.</span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-gray-400 sm:text-xl">
-            EL MECANO réunit le suivi des véhicules, la gestion des équipes, la relation client et la trésorerie dans une plateforme unique, accessible sur ordinateur comme sur mobile.
+            ATELIO réunit le suivi des véhicules, la gestion des équipes, la relation client et la trésorerie dans une plateforme unique, accessible sur ordinateur comme sur mobile.
           </p>
           <div className="mt-9 flex flex-wrap items-center justify-center gap-4">
             <button type="button" onClick={() => goTo(SLIDES.length - 1)} className="dk-btn group inline-flex items-center gap-2 rounded-xl bg-orange-500 px-6 py-3.5 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(249,115,22,0.35)] transition hover:bg-orange-600">
@@ -845,7 +844,7 @@ export default function PresentationSombrePage() {
             <div className="relative">
               <div style={{ transform: 'translateY(calc(var(--sy, 0) * -0.035px))' }}>
                 <div className="overflow-hidden rounded-2xl shadow-[0_50px_120px_rgba(0,0,0,0.6)] ring-1 ring-white/10">
-                  <Browser url="mecano.nav.ovh/suivi"><SuiviMock /></Browser>
+                  <Browser url="atelio.app/suivi"><SuiviMock /></Browser>
                 </div>
               </div>
               <div className="absolute -top-7 right-6 hidden md:block" style={{ transform: 'translateY(calc(var(--sy, 0) * -0.09px))' }}><FeedCard items={FEED_LEFT} interval={3800} offset={600} className="em-float" /></div>
@@ -959,13 +958,16 @@ export default function PresentationSombrePage() {
             <H2 dark>Planifiez une démonstration adaptée à votre atelier.</H2>
             <Lead dark>Indiquez vos coordonnées : nous vous recontactons pour présenter la solution à partir de votre organisation. Les conditions tarifaires sont abordées lors de cet échange.</Lead>
             <Points dark items={['Démonstration adaptée à votre organisation', 'Version web et application mobile', 'Prise de contact par téléphone']} />
-            <div className="mt-10 flex items-center gap-6 border-t border-white/10 pt-6 text-sm text-gray-400">
-              <Link to={appHref} className="font-semibold text-white hover:underline">{appLabel}</Link>
-              <button type="button" onClick={() => goTo(0)} className="hover:text-white">Revenir en haut</button>
-            </div>
           </div>
           <DemoForm />
         </div>
+        <footer className="mt-16 flex flex-col items-start justify-between gap-5 border-t border-white/10 pt-7 sm:flex-row sm:items-center">
+          <AtelioLogo dark size={38} word={0.5} />
+          <div className="flex items-center gap-6 text-sm text-gray-400">
+            <Link to={appHref} className="font-semibold text-white hover:underline">{appLabel}</Link>
+            <button type="button" onClick={() => goTo(0)} className="hover:text-white">Revenir en haut</button>
+          </div>
+        </footer>
       </Slide>
     </div>
   )
