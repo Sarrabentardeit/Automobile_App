@@ -24,6 +24,8 @@ import { ToastProvider } from '@/contexts/ToastContext'
 import { NotificationsProvider } from '@/contexts/NotificationsContext'
 import AppLayout from '@/components/layout/AppLayout'
 import LoginPage from '@/pages/LoginPage'
+import PresentationPage from '@/pages/PresentationPage'
+import PresentationSombrePage from '@/pages/PresentationSombrePage'
 import RegisterPage from '@/pages/RegisterPage'
 import DashboardPage from '@/pages/DashboardPage'
 import VehiculesPage from '@/pages/VehiculesPage'
@@ -89,6 +91,9 @@ export default function App() {
               <FacturationProvider>
               <AchatsProvider>
             <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/vitrine-1" element={<PresentationPage />} />
+            <Route path="/vitrine-2" element={<PresentationSombrePage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route element={<AppLayout />}>
@@ -135,7 +140,6 @@ export default function App() {
               <Route path="/reunion" element={<ReunionPage />} />
               <Route path="/suivi" element={<SuiviPage />} />
             </Route>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
               </AchatsProvider>

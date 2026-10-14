@@ -360,6 +360,16 @@ model Client {
   updatedAt         DateTime @updatedAt
 }
 
+model DemandeDemo {
+  id         Int      @id @default(autoincrement())
+  nom        String
+  garage     String
+  telephone  String
+  ponts      Int?
+  message    String?  @default("")
+  createdAt  DateTime @default(now())
+}
+
 model Facture {
   id                     Int             @id @default(autoincrement())
   numero                 String

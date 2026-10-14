@@ -23,6 +23,7 @@ import contactsImportantsRouter from './routes/contactsImportants'
 import fournisseursRouter from './routes/fournisseurs'
 import fournisseurTransactionsRouter from './routes/fournisseurTransactions'
 import demandesDevisRouter from './routes/demandesDevis'
+import demandesDemoRouter from './routes/demandesDemo'
 import clientsDettesRouter from './routes/clientsDettes'
 import reclamationsRouter from './routes/reclamations'
 import notificationsRouter from './routes/notifications'
@@ -107,6 +108,7 @@ app.use('/contacts-importants', contactsImportantsRouter)
 app.use('/fournisseurs', fournisseursRouter)
 app.use('/fournisseur-transactions', fournisseurTransactionsRouter)
 app.use('/demandes-devis', demandesDevisRouter)
+app.use('/demandes-demo', demandesDemoRouter)
 app.use('/clients-dettes', clientsDettesRouter)
 app.use('/reclamations', reclamationsRouter)
 app.use('/notifications', notificationsRouter)
