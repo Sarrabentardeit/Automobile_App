@@ -170,6 +170,20 @@ export default function ClientDetailSheet({
         </View>
       </View>
 
+      {client.carteVip ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Carte VIP</Text>
+          <View style={styles.vipCard}>
+            <Text style={styles.vipKicker}>EL MECANO</Text>
+            <Text style={styles.vipName}>{client.nom}</Text>
+            <Text style={styles.vipNumero}>{client.carteVip.numero}</Text>
+            <Text style={styles.vipMeta}>
+              {client.carteVip.acces === 'advanced' ? 'Advanced' : 'Standard'} · {client.carteVip.debut} — {client.carteVip.fin}
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
       {client.notes ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Notes</Text>
@@ -281,6 +295,11 @@ const styles = StyleSheet.create({
   infoValue: { fontSize: 15, fontWeight: '600', color: theme.text },
   infoValueAccent: { color: theme.primary },
   divider: { height: 1, backgroundColor: theme.borderLight, marginLeft: 62 },
+  vipCard: { backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: theme.border, overflow: 'hidden' },
+  vipKicker: { color: theme.primaryDark, fontSize: 11, fontWeight: '800', letterSpacing: 1.4, marginTop: 14, marginHorizontal: 16 },
+  vipName: { color: theme.text, fontSize: 20, fontWeight: '700', marginTop: 12, marginHorizontal: 16 },
+  vipNumero: { color: theme.textSecondary, fontSize: 13, marginTop: 8, marginHorizontal: 16, letterSpacing: 1 },
+  vipMeta: { color: theme.textMuted, fontSize: 12, marginTop: 14, marginHorizontal: 16, marginBottom: 14 },
   notesCard: {
     flexDirection: 'row',
     gap: 10,

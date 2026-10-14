@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { theme } from '../../theme/appTheme'
-import type { Client } from '../../types/client'
+import type { CarteVip, Client } from '../../types/client'
 
 const GRADIENTS: [string, string][] = [
   ['#f97316', '#fb923c'],
@@ -19,6 +19,28 @@ function avatarGradient(nom: string): [string, string] {
 function initial(nom: string): string {
   const t = nom.trim()
   return t ? t.charAt(0).toUpperCase() : '?'
+}
+
+function todayIso() {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+function CarteBadge({ carte }: { carte?: CarteVip | null }) {
+  if (!carte?.numero) return null
+  const today = todayIso()
+  const expired = carte.fin < today
+  const upcoming = carte.debut > today
+  const label = expired ? 'VIP expirée' : upcoming ? 'VIP à venir' : carte.acces === 'advanced' ? 'VIP Advanced' : 'VIP Standard'
+  const color = expired ? '#6b7280' : upcoming ? '#0369a1' : carte.acces === 'advanced' ? '#92400e' : '#111827'
+  const bg = expired ? '#f3f4f6' : upcoming ? '#e0f2fe' : carte.acces === 'advanced' ? '#fef3c7' : '#111827'
+  const fg = expired || upcoming || carte.acces === 'advanced' ? color : '#fff'
+  return (
+    <View style={[styles.vip, { backgroundColor: bg }]}>
+      <Text style={[styles.vipText, { color: fg }]}>{label}</Text>
+    </View>
+  )
 }
 
 type Props = {
@@ -50,6 +72,7 @@ export default function ClientListItem({ client, onPress }: Props) {
           <Text style={styles.name} numberOfLines={1}>
             {client.nom}
           </Text>
+          <CarteBadge carte={client.carteVip} />
           <Text style={styles.phone} numberOfLines={1}>
             {client.telephone}
           </Text>
@@ -126,6 +149,8 @@ const styles = StyleSheet.create({
     color: theme.text,
     letterSpacing: -0.2,
   },
+  vip: { alignSelf: 'flex-start', marginTop: 4, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
+  vipText: { fontSize: 10, fontWeight: '800' },
   phone: {
     fontSize: 14,
     fontWeight: '600',

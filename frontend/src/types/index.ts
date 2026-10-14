@@ -710,6 +710,15 @@ export const HUILE_TYPES: Record<HuileType, { label: string; color: string }> = 
 }
 
 // ==================== CLIENTS ====================
+export type CarteVipAcces = 'standard' | 'advanced'
+
+export interface CarteVip {
+  numero: string
+  debut: string
+  fin: string
+  acces: CarteVipAcces
+}
+
 export interface Client {
   id: number
   nom: string
@@ -718,6 +727,7 @@ export interface Client {
   adresse?: string
   notes?: string
   matriculeFiscale?: string
+  carteVip?: CarteVip | null
 }
 
 // ==================== CLIENTS AVEC DETTES ====================

@@ -5,6 +5,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -12,10 +13,20 @@ import {
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import CenteredBlurModal from './ui/CenteredBlurModal'
-import { createClient, updateClient } from '../lib/clientApi'
+import { createClient, fetchNextCarte, updateClient } from '../lib/clientApi'
 import { getModalLayout } from '../lib/modalLayout'
 import { theme } from '../theme/appTheme'
-import type { Client, ClientInput } from '../types/client'
+import type { CarteVip, CarteVipAcces, Client, ClientInput } from '../types/client'
+
+function todayIso() {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+function emptyCarte(): CarteVip {
+  return { numero: '', debut: todayIso(), fin: '', acces: 'standard' }
+}
 
 function emptyForm(): ClientInput {
   return {
@@ -93,6 +104,8 @@ export default function ClientFormModal({
 }: Props) {
   const isEdit = !!client
   const [form, setForm] = useState<ClientInput>(emptyForm())
+  const [carteOn, setCarteOn] = useState(false)
+  const [carte, setCarte] = useState<CarteVip>(emptyCarte())
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const { cardMaxHeight, scrollMaxHeight, footerPaddingBottom } = getModalLayout({
@@ -112,8 +125,12 @@ export default function ClientFormModal({
         notes: client.notes ?? '',
         matriculeFiscale: client.matriculeFiscale ?? '',
       })
+      setCarteOn(Boolean(client.carteVip))
+      setCarte(client.carteVip ?? emptyCarte())
     } else {
       setForm(emptyForm())
+      setCarteOn(false)
+      setCarte(emptyCarte())
     }
   }, [visible, client])
 
@@ -134,6 +151,14 @@ export default function ClientFormModal({
       setError('Adresse email invalide.')
       return
     }
+    if (carteOn && (!carte.debut || !carte.fin)) {
+      setError('Les dates de la carte VIP sont requises.')
+      return
+    }
+    if (carteOn && carte.fin < carte.debut) {
+      setError('La date de fin doit être après la date de début.')
+      return
+    }
     const payload: ClientInput = {
       nom: form.nom.trim(),
       telephone: form.telephone.trim(),
@@ -141,6 +166,9 @@ export default function ClientFormModal({
       adresse: form.adresse?.trim() || undefined,
       notes: form.notes?.trim() || undefined,
       matriculeFiscale: form.matriculeFiscale?.trim() || undefined,
+      carteVip: carteOn
+        ? { numero: carte.numero.trim(), debut: carte.debut, fin: carte.fin, acces: carte.acces }
+        : null,
     }
     setSaving(true)
     try {
@@ -256,6 +284,89 @@ export default function ClientFormModal({
                 onChangeText={(v) => set('matriculeFiscale', v)}
                 placeholder="optionnel"
               />
+            </View>
+
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHead}>
+                <Ionicons name="card-outline" size={16} color="#92400e" />
+                <Text style={styles.section}>Carte VIP</Text>
+                <Switch
+                  value={carteOn}
+                  onValueChange={(on) => {
+                    setCarteOn(on)
+                    if (on && !carte.numero) {
+                      void fetchNextCarte(accessToken)
+                        .then((numero) => setCarte((prev) => ({ ...prev, numero: prev.numero || numero })))
+                        .catch(() => undefined)
+                    }
+                  }}
+                  trackColor={{ false: '#e5e7eb', true: '#f59e0b' }}
+                  thumbColor="#fff"
+                />
+              </View>
+              {carteOn ? (
+                <View>
+                  <View style={styles.preview}>
+                    <View style={styles.previewTop}>
+                      <Text style={styles.previewKicker}>EL MECANO</Text>
+                      <Text style={[styles.previewPill, carte.acces === 'advanced' && styles.previewPillAdvanced]}>
+                        {carte.acces === 'advanced' ? 'Advanced' : 'Standard'}
+                      </Text>
+                    </View>
+                    <Text style={styles.previewName}>{form.nom || 'Nom du client'}</Text>
+                    <Text style={styles.previewNumero}>{carte.numero || 'VIP-····'}</Text>
+                    <View style={styles.previewDates}>
+                      <View style={styles.previewDateCell}>
+                        <Text style={styles.previewLabel}>Valable du</Text>
+                        <Text style={styles.previewDate}>{carte.debut || '—'}</Text>
+                      </View>
+                      <View style={[styles.previewDateCell, styles.previewDateSplit]}>
+                        <Text style={styles.previewLabel}>Jusqu'au</Text>
+                        <Text style={styles.previewDate}>{carte.fin || '—'}</Text>
+                      </View>
+                    </View>
+                  </View>
+                  <Text style={styles.label}>N° de carte</Text>
+                  <TextInput
+                    style={styles.carteInput}
+                    value={carte.numero}
+                    onChangeText={(numero) => setCarte((prev) => ({ ...prev, numero }))}
+                    placeholder="VIP-0001"
+                    placeholderTextColor={theme.textSubtle}
+                    autoCapitalize="characters"
+                  />
+                  <Text style={styles.label}>Accès</Text>
+                  <View style={styles.accesRow}>
+                    {(['standard', 'advanced'] as CarteVipAcces[]).map((acces) => (
+                      <Pressable
+                        key={acces}
+                        onPress={() => setCarte((prev) => ({ ...prev, acces }))}
+                        style={[styles.accesBtn, carte.acces === acces && (acces === 'advanced' ? styles.accesAdvanced : styles.accesOn)]}
+                      >
+                        <Text style={[styles.accesText, carte.acces === acces && styles.accesTextOn]}>
+                          {acces === 'advanced' ? 'Advanced' : 'Standard'}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Text style={styles.label}>Début (AAAA-MM-JJ)</Text>
+                  <TextInput
+                    style={styles.carteInput}
+                    value={carte.debut}
+                    onChangeText={(debut) => setCarte((prev) => ({ ...prev, debut }))}
+                    placeholder="2026-10-14"
+                    placeholderTextColor={theme.textSubtle}
+                  />
+                  <Text style={styles.label}>Fin (AAAA-MM-JJ)</Text>
+                  <TextInput
+                    style={styles.carteInput}
+                    value={carte.fin}
+                    onChangeText={(fin) => setCarte((prev) => ({ ...prev, fin }))}
+                    placeholder="2027-10-14"
+                    placeholderTextColor={theme.textSubtle}
+                  />
+                </View>
+              ) : null}
             </View>
 
             <View style={[styles.sectionCard, styles.sectionCardLast]}>
@@ -375,6 +486,34 @@ const styles = StyleSheet.create({
     borderColor: theme.borderLight,
   },
   sectionCardLast: { marginBottom: 4 },
+  preview: {
+    backgroundColor: '#fff', borderRadius: 16, marginBottom: 12, overflow: 'hidden',
+    borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)',
+  },
+  previewTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 14 },
+  previewKicker: { color: theme.primaryDark, fontSize: 11, fontWeight: '800', letterSpacing: 1.6 },
+  previewPill: { color: theme.textMuted, fontSize: 11, fontWeight: '800', backgroundColor: theme.surfaceMuted, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, overflow: 'hidden' },
+  previewPillAdvanced: { color: '#fff', backgroundColor: theme.primary },
+  previewLabel: { color: theme.textSubtle, fontSize: 10, fontWeight: '700', letterSpacing: 0.4 },
+  previewName: { color: theme.text, fontSize: 22, fontWeight: '700', marginTop: 16, paddingHorizontal: 16 },
+  previewNumero: {
+    color: theme.textSecondary, marginTop: 10, marginHorizontal: 16, alignSelf: 'flex-start',
+    fontSize: 13, letterSpacing: 1.4, backgroundColor: theme.surfaceMuted, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, overflow: 'hidden',
+  },
+  previewDates: { flexDirection: 'row', marginTop: 16, backgroundColor: theme.surfaceMuted, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border },
+  previewDate: { color: theme.text, fontSize: 14, fontWeight: '700', marginTop: 2 },
+  previewDateCell: { flex: 1, paddingHorizontal: 16, paddingVertical: 12 },
+  previewDateSplit: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: theme.border },
+  carteInput: {
+    borderWidth: 1, borderColor: theme.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10,
+    color: theme.text, backgroundColor: '#fff', marginTop: 4, marginBottom: 8,
+  },
+  accesRow: { flexDirection: 'row', gap: 8, marginTop: 6, marginBottom: 8 },
+  accesBtn: { flex: 1, alignItems: 'center', borderWidth: 1, borderColor: theme.border, borderRadius: 10, paddingVertical: 10, backgroundColor: '#fff' },
+  accesOn: { backgroundColor: '#111827', borderColor: '#111827' },
+  accesAdvanced: { backgroundColor: '#78350f', borderColor: '#78350f' },
+  accesText: { fontWeight: '700', color: theme.textMuted },
+  accesTextOn: { color: '#fff' },
   sectionHead: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -382,6 +521,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   section: {
+    flex: 1,
     fontSize: 12,
     fontWeight: '800',
     color: theme.textSecondary,

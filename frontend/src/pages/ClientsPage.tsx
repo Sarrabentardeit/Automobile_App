@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useClients } from '@/contexts/ClientsContext'
 import { useToast } from '@/contexts/ToastContext'
-import type { Client } from '@/types'
+import type { CarteVip, CarteVipAcces, Client } from '@/types'
+import { apiFetch } from '@/lib/api'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
@@ -12,6 +13,27 @@ import { cn } from '@/lib/utils'
 
 const DEBOUNCE_MS = 400
 const PAGE_SIZE = 12
+type CarteFiltre = 'tous' | 'standard' | 'advanced' | 'expiree'
+
+function todayIso() {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+function carteEtat(carte: CarteVip | null | undefined): 'none' | 'standard' | 'advanced' | 'avenir' | 'expiree' {
+  if (!carte?.numero) return 'none'
+  const today = todayIso()
+  if (carte.fin < today) return 'expiree'
+  if (carte.debut > today) return 'avenir'
+  return carte.acces
+}
+
+function formatFr(iso: string) {
+  if (!iso) return '—'
+  const [y, m, d] = iso.split('-')
+  return d && m && y ? `${d}/${m}/${y}` : iso
+}
 
 function ClientsSkeleton() {
   return (
@@ -33,11 +55,14 @@ function isValidEmail(value: string): boolean {
 }
 
 export default function ClientsPage() {
-  const { user } = useAuth()
+  const { user, getAccessToken } = useAuth()
   const { clients, loading, total, page, limit, fetchClients, addClient, updateClient, removeClient } = useClients()
   const toast = useToast()
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
+  const [carteFiltre, setCarteFiltre] = useState<CarteFiltre>('tous')
+  const [carteOn, setCarteOn] = useState(false)
+  const [carte, setCarte] = useState<CarteVip>({ numero: '', debut: todayIso(), fin: '', acces: 'standard' })
   const [currentPage, setCurrentPage] = useState(1)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [showAdd, setShowAdd] = useState(false)
@@ -65,14 +90,19 @@ export default function ClientsPage() {
   const loadPage = useCallback(
     (p: number) => {
       setCurrentPage(p)
-      fetchClients({ q: search.trim() || undefined, page: p, limit: PAGE_SIZE })
+      fetchClients({
+        q: search.trim() || undefined,
+        page: p,
+        limit: PAGE_SIZE,
+        carte: carteFiltre === 'tous' ? undefined : carteFiltre,
+      })
     },
-    [search, fetchClients]
+    [search, carteFiltre, fetchClients]
   )
 
   useEffect(() => {
     loadPage(currentPage)
-  }, [search, currentPage])
+  }, [search, currentPage, carteFiltre])
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const hasPagination = total > PAGE_SIZE
@@ -87,14 +117,31 @@ export default function ClientsPage() {
       matriculeFiscale: c.matriculeFiscale ?? '',
     })
     setFormError(null)
+    setCarteOn(Boolean(c.carteVip))
+    setCarte(c.carteVip ?? { numero: '', debut: todayIso(), fin: '', acces: 'standard' })
     setEditingId(c.id)
   }
 
   const openNew = () => {
     setForm({ nom: '', telephone: '', email: '', adresse: '', notes: '', matriculeFiscale: '' })
     setFormError(null)
+    setCarteOn(false)
+    setCarte({ numero: '', debut: todayIso(), fin: '', acces: 'standard' })
     setEditingId(null)
     setShowAdd(true)
+  }
+
+  const enableCarte = async () => {
+    setCarteOn(true)
+    if (carte.numero) return
+    const token = getAccessToken()
+    if (!token) return
+    try {
+      const res = await apiFetch<{ numero: string }>('/clients/next-carte', { token })
+      setCarte(prev => ({ ...prev, numero: prev.numero || res.numero }))
+    } catch {
+      /* le numéro sera attribué à l'enregistrement */
+    }
   }
 
   const save = async () => {
@@ -111,12 +158,23 @@ export default function ClientsPage() {
       setFormError('Adresse email invalide.')
       return
     }
+    if (carteOn && (!carte.debut || !carte.fin)) {
+      setFormError('Les dates de la carte VIP sont requises.')
+      return
+    }
+    if (carteOn && carte.fin < carte.debut) {
+      setFormError('La date de fin doit être après la date de début.')
+      return
+    }
     const payload = {
       ...form,
       email: form.email?.trim() || undefined,
       adresse: form.adresse?.trim() || undefined,
       notes: form.notes?.trim() || undefined,
       matriculeFiscale: form.matriculeFiscale?.trim() || undefined,
+      carteVip: carteOn
+        ? { numero: carte.numero.trim(), debut: carte.debut, fin: carte.fin, acces: carte.acces }
+        : null,
     }
     setSaving(true)
     try {
@@ -172,14 +230,34 @@ export default function ClientsPage() {
         </Button>
       </header>
 
-      <div className="mb-6">
+      <div className="mb-4">
         <input
           type="search"
-          placeholder="Rechercher par nom, téléphone, email…"
+          placeholder="Rechercher par nom, téléphone, email, n° de carte…"
           value={searchInput}
           onChange={e => setSearchInput(e.target.value)}
           className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
         />
+      </div>
+      <div className="mb-6 flex flex-wrap gap-2">
+        {([
+          ['tous', 'Tous'],
+          ['standard', 'Standard'],
+          ['advanced', 'Advanced'],
+          ['expiree', 'Expirées'],
+        ] as const).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => { setCarteFiltre(id); setCurrentPage(1) }}
+            className={cn(
+              'rounded-full border px-3 py-1.5 text-xs font-semibold',
+              carteFiltre === id ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200 bg-white text-gray-600'
+            )}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {loading ? (
@@ -189,7 +267,7 @@ export default function ClientsPage() {
           <UserCircle className="w-12 h-12 text-gray-200 mx-auto mb-3" />
           <p className="text-gray-500 font-medium">Aucun client</p>
           <p className="text-sm text-gray-400 mt-1">
-            {search ? 'Modifiez la recherche ou ajoutez un client.' : 'Ajoutez vos clients pour les retrouver rapidement.'}
+            {search || carteFiltre !== 'tous' ? 'Modifiez la recherche ou le filtre.' : 'Ajoutez vos clients pour les retrouver rapidement.'}
           </p>
           <Button className="mt-4" onClick={openNew} icon={<Plus className="w-4 h-4" />}>
             Ajouter un client
@@ -208,7 +286,10 @@ export default function ClientsPage() {
                 )}
               >
                 <div className="flex items-start justify-between gap-2 mb-3">
-                  <h3 className="font-semibold text-gray-900 truncate flex-1">{c.nom}</h3>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-semibold text-gray-900 truncate">{c.nom}</h3>
+                    <CarteBadge carte={c.carteVip} />
+                  </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={e => { e.stopPropagation(); openEdit(c) }}
@@ -296,7 +377,7 @@ export default function ClientsPage() {
         onClose={() => { setShowAdd(false); setEditingId(null); setFormError(null) }}
         title={editingId ? 'Modifier le client' : 'Nouveau client'}
         subtitle={editingId ? undefined : 'Ajouter un client au carnet'}
-        maxWidth="sm"
+        maxWidth="md"
       >
         <div className="space-y-4">
           {formError && (
@@ -344,6 +425,60 @@ export default function ClientsPage() {
               className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none text-sm"
             />
           </div>
+          <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+            <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3">
+              <div>
+                <p className="text-sm font-semibold text-gray-950">Carte VIP</p>
+                <p className="text-xs text-gray-500">Accès et validité du client</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => (carteOn ? setCarteOn(false) : void enableCarte())}
+                className={cn(
+                  'relative h-6 w-11 shrink-0 rounded-full transition',
+                  carteOn ? 'bg-gray-950' : 'bg-gray-200'
+                )}
+                aria-pressed={carteOn}
+              >
+                <span className={cn('absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition', carteOn ? 'left-5' : 'left-0.5')} />
+              </button>
+            </div>
+            {carteOn ? (
+              <div className="space-y-4 p-4">
+                <CartePreview nom={form.nom || 'Nom du client'} carte={carte} />
+                <Input
+                  label="N° de carte"
+                  value={carte.numero}
+                  onChange={e => setCarte(prev => ({ ...prev, numero: e.target.value }))}
+                  placeholder="VIP-0001"
+                />
+                <div>
+                  <p className="mb-1.5 text-sm font-medium text-gray-700">Accès</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['standard', 'advanced'] as CarteVipAcces[]).map(acces => (
+                      <button
+                        key={acces}
+                        type="button"
+                        onClick={() => setCarte(prev => ({ ...prev, acces }))}
+                        className={cn(
+                          'rounded-xl border px-3 py-2.5 text-sm font-semibold transition',
+                          carte.acces === acces
+                            ? 'border-orange-500 bg-orange-500 text-white'
+                            : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                        )}
+                      >
+                        {acces === 'advanced' ? 'Advanced' : 'Standard'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Input label="Début" type="date" value={carte.debut} onChange={e => setCarte(prev => ({ ...prev, debut: e.target.value }))} />
+                  <Input label="Fin" type="date" value={carte.fin} onChange={e => setCarte(prev => ({ ...prev, fin: e.target.value }))} />
+                </div>
+              </div>
+            ) : null}
+          </div>
           <div className="flex gap-3 pt-2">
             <Button variant="outline" onClick={() => { setShowAdd(false); setEditingId(null); setFormError(null) }} className="flex-1">
               Annuler
@@ -367,6 +502,56 @@ export default function ClientsPage() {
           <Button variant="danger" onClick={confirmDelete} className="flex-1">Supprimer</Button>
         </div>
       </Modal>
+    </div>
+  )
+}
+
+function CarteBadge({ carte }: { carte?: CarteVip | null }) {
+  const etat = carteEtat(carte)
+  if (etat === 'none' || !carte) return null
+  const label = etat === 'expiree' ? 'VIP expirée' : etat === 'avenir' ? 'VIP à venir' : etat === 'advanced' ? 'VIP Advanced' : 'VIP Standard'
+  const tone =
+    etat === 'expiree'
+      ? 'bg-gray-100 text-gray-500 ring-gray-200'
+      : etat === 'advanced'
+        ? 'bg-amber-50 text-amber-800 ring-amber-200'
+        : etat === 'avenir'
+          ? 'bg-sky-50 text-sky-800 ring-sky-200'
+          : 'bg-gray-950 text-white ring-gray-950'
+  return <span className={cn('mt-1.5 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1', tone)}>{label}</span>
+}
+
+function CartePreview({ nom, carte }: { nom: string; carte: CarteVip }) {
+  const advanced = carte.acces === 'advanced'
+  return (
+    <div className="overflow-hidden rounded-2xl bg-white shadow-[0_10px_28px_rgba(15,23,42,0.08)] ring-1 ring-black/[0.06]">
+      <div className="relative px-5 pb-5 pt-4">
+        <div className="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-orange-100" />
+        <div className="relative flex items-center justify-between gap-3">
+          <p className="text-[11px] font-bold tracking-[0.2em] text-orange-600">EL MECANO</p>
+          <span className={cn(
+            'rounded-md px-2 py-1 text-[11px] font-bold',
+            advanced ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600'
+          )}>
+            {advanced ? 'ADVANCED' : 'STANDARD'}
+          </span>
+        </div>
+        <p className="relative mt-6 text-[11px] font-medium uppercase tracking-wide text-gray-400">Titulaire</p>
+        <p className="relative text-[22px] font-semibold leading-tight tracking-tight text-gray-950">{nom}</p>
+        <p className="relative mt-3 inline-flex rounded-lg bg-gray-50 px-2.5 py-1 font-mono text-sm tracking-[0.16em] text-gray-700 ring-1 ring-gray-200">
+          {carte.numero || 'VIP-····'}
+        </p>
+      </div>
+      <div className="grid grid-cols-2 border-t border-gray-100 bg-gray-50">
+        <div className="px-5 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Valable du</p>
+          <p className="mt-0.5 text-sm font-semibold text-gray-900">{formatFr(carte.debut)}</p>
+        </div>
+        <div className="border-l border-gray-200 px-5 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Jusqu'au</p>
+          <p className="mt-0.5 text-sm font-semibold text-gray-900">{carte.fin ? formatFr(carte.fin) : '—'}</p>
+        </div>
+      </div>
     </div>
   )
 }

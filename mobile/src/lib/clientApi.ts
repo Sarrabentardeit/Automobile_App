@@ -10,13 +10,18 @@ export type ClientsListResponse = {
 
 export async function fetchClients(
   token: string,
-  params?: { q?: string; page?: number; limit?: number }
+  params?: { q?: string; page?: number; limit?: number; carte?: 'standard' | 'advanced' | 'expiree' }
 ): Promise<ClientsListResponse> {
   return apiFetch<ClientsListResponse>('/clients', { token, params })
 }
 
 export async function fetchClientStats(token: string): Promise<{ total: number }> {
   return apiFetch<{ total: number }>('/clients/stats', { token })
+}
+
+export async function fetchNextCarte(token: string): Promise<string> {
+  const res = await apiFetch<{ numero: string }>('/clients/next-carte', { token })
+  return res.numero
 }
 
 export async function fetchClient(token: string, id: number): Promise<Client> {

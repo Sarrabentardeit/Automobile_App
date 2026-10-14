@@ -352,6 +352,10 @@ model Client {
   adresse            String?  @default("")
   notes              String?  @default("")
   matricule_fiscale  String?  @default("")
+  carte_vip_numero   String?  @unique
+  carte_vip_debut    String?
+  carte_vip_fin      String?
+  carte_vip_acces    String?
   createdAt          DateTime @default(now())
   updatedAt         DateTime @updatedAt
 }

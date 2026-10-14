@@ -8,6 +8,7 @@ export interface ClientsFilters {
   q?: string
   page?: number
   limit?: number
+  carte?: 'standard' | 'advanced' | 'expiree'
 }
 
 export interface ClientStats {
@@ -38,6 +39,7 @@ export function useClients() {
           limit: filters?.limit ?? 50,
         }
         if (filters?.q) params.q = filters.q
+        if (filters?.carte) params.carte = filters.carte
 
         const res = await apiFetch<{ data: Client[]; total: number; page: number; limit: number }>('/clients', {
           token,
@@ -89,6 +91,7 @@ export function useClients() {
           adresse: c.adresse,
           notes: c.notes,
           matriculeFiscale: c.matriculeFiscale,
+          carteVip: c.carteVip ?? null,
         }),
       })
       setClients(prev => [created, ...prev])

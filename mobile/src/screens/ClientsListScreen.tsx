@@ -38,6 +38,7 @@ export default function ClientsListScreen({
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [searchDebounced, setSearchDebounced] = useState('')
+  const [carte, setCarte] = useState<'tous' | 'standard' | 'advanced' | 'expiree'>('tous')
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -63,6 +64,7 @@ export default function ClientsListScreen({
           q: searchDebounced || undefined,
           page: pageNum,
           limit: PAGE_SIZE,
+          carte: carte === 'tous' ? undefined : carte,
         })
         setClients(res.data ?? [])
         setTotal(res.total ?? 0)
@@ -72,7 +74,7 @@ export default function ClientsListScreen({
         setError(e instanceof Error ? e.message : 'Erreur chargement')
       }
     },
-    [accessToken, searchDebounced]
+    [accessToken, searchDebounced, carte]
   )
 
   useEffect(() => {
@@ -146,9 +148,28 @@ export default function ClientsListScreen({
             </Pressable>
           ) : null}
         </View>
+        <View style={styles.filters}>
+          {([
+            ['tous', 'Tous'],
+            ['standard', 'Standard'],
+            ['advanced', 'Advanced'],
+            ['expiree', 'Expirées'],
+          ] as const).map(([id, label]) => (
+            <Pressable
+              key={id}
+              onPress={() => {
+                setCarte(id)
+                setPage(1)
+              }}
+              style={[styles.filterChip, carte === id && styles.filterChipOn]}
+            >
+              <Text style={[styles.filterText, carte === id && styles.filterTextOn]}>{label}</Text>
+            </Pressable>
+          ))}
+        </View>
       </View>
 
-      {!loading && (clients.length > 0 || searchDebounced) ? (
+      {!loading && (clients.length > 0 || searchDebounced || carte !== 'tous') ? (
         <View style={styles.resultsRow}>
           <Text style={styles.resultsLabel}>
             {searchDebounced ? `${total} résultat${total !== 1 ? 's' : ''}` : `${total} contact${total !== 1 ? 's' : ''}`}
@@ -331,6 +352,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   countBadgeText: { fontSize: 14, fontWeight: '800', color: theme.primaryDark },
+  filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+  filterChip: { borderWidth: 1, borderColor: theme.border, backgroundColor: '#fff', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+  filterChipOn: { backgroundColor: theme.text, borderColor: theme.text },
+  filterText: { fontSize: 12, fontWeight: '700', color: theme.textMuted },
+  filterTextOn: { color: '#fff' },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
